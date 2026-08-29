@@ -237,11 +237,11 @@
             </div>
             <div class="card" style="padding:15px 17px;">
               <div class="kicker" style="margin-bottom:11px;">Engine for this session</div>
-              <div style="display:flex;flex-direction:column;gap:9px;">
-                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span style="width:78px;color:var(--ink2);font-size:13px;">Provider</span><span class="chip" style="border-color:var(--accent);background:var(--tint);color:var(--accent-ink);font-weight:600;">Claude Code</span><span class="chip">Codex</span><span class="chip">Kimi</span><span class="chip">Ollama</span></div>
-                <div style="display:flex;align-items:center;gap:10px;"><span style="width:78px;color:var(--ink2);font-size:13px;">Model</span><span class="mono chip" style="flex-grow:1;">claude-opus-4-8</span></div>
-                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span style="width:78px;color:var(--ink2);font-size:13px;">Effort</span><span class="chip">low</span><span class="chip">medium</span><span class="chip" style="border-color:var(--accent);background:var(--tint);color:var(--accent-ink);font-weight:600;">high</span><span class="chip">max</span></div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <span style="width:78px;color:var(--ink2);font-size:13px;">Provider</span>
+                <select id="engineSelectLauncher" class="mono" onchange="onEngineChange(this)" style="height:30px;border:1px solid var(--border);border-radius:6px;background:var(--panel);font-size:12.5px;color:var(--ink);font-family:inherit;padding:0 8px;"><option>Loading…</option></select>
               </div>
+              <div class="muted" style="font-size:11.5px;margin-top:8px;line-height:1.5;">Pick any provider you have signed in. SecForge checks the connection and only runs a model you're connected to; the deterministic rules engine needs no sign-in.</div>
             </div>
           </div>
 
@@ -473,6 +473,12 @@
 
         <div style="padding:14px 18px;margin-top:auto;border-top:1px solid var(--border2);position:sticky;bottom:0;background:var(--panel);">
           <button class="btn-primary" style="width:100%;padding:11px;" onclick="runAssess()">▶ Run assessment</button>
+          <div style="display:flex;gap:6px;margin-top:8px;">
+            <button id="sessPause" class="btn" style="flex:1;padding:7px;font-size:12px;" onclick="sessionAction('pause')">Pause</button>
+            <button id="sessResume" class="btn" style="flex:1;padding:7px;font-size:12px;" onclick="sessionAction('resume')">Resume</button>
+            <button id="sessCancel" class="btn" style="flex:1;padding:7px;font-size:12px;" onclick="sessionAction('cancel')">Cancel</button>
+          </div>
+          <div id="sessStatus" class="mono muted" style="font-size:11px;margin-top:6px;min-height:14px;text-align:center;"></div>
           <div class="mono muted" style="font-size:11px;text-align:center;margin-top:8px;" id="runHint">Pattern-based · This feature</div>
         </div>
       </div>
@@ -612,7 +618,7 @@
       </div>
       <div style="flex-grow:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;">
         <div style="padding:18px 26px 15px;border-bottom:1px solid var(--border);">
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span id="findHeaderSev" class="badge b-high" style="padding:3px 9px;">HIGH · 7.1</span><div id="findHeaderTitle" style="font-size:20px;font-weight:700;letter-spacing:-.02em;">IDOR in Checkout order lookup</div><div style="flex-grow:1"></div><button class="btn">Export H1</button><button id="findValidateBtn" class="btn-primary" onclick="go('env')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>Validate live</button></div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span id="findHeaderSev" class="badge b-high" style="padding:3px 9px;">HIGH · 7.1</span><div id="findHeaderTitle" style="font-size:20px;font-weight:700;letter-spacing:-.02em;">IDOR in Checkout order lookup</div><div style="flex-grow:1"></div><button class="btn" onclick="exportFinding()">Export H1</button><button id="findValidateBtn" class="btn-primary" onclick="go('env')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>Validate live</button></div>
           <div id="findHeaderChips" style="display:flex;gap:7px;margin-top:11px;flex-wrap:wrap;"><span class="mono chip">CWE-639</span><span class="mono chip">pattern ACX-15</span><span class="mono chip">feature: Checkout</span><span class="chip" style="background:#F0FDF4;border-color:#BBF7D0;color:#166534;">triaged ✓</span><span class="chip" style="background:#F0FDF4;border-color:#BBF7D0;color:#166534;">validated ✓ (independent)</span><span class="chip" style="background:var(--tint);border-color:var(--accent-brd);color:#3730A3;">static-confirmed</span></div>
         </div>
         <div id="find-detail" class="scroll" style="flex-grow:1;padding:18px 26px;">
@@ -633,7 +639,11 @@
         <div style="padding:0 17px 11px;">
           <div class="kicker" style="font-size:11px;color:var(--ink3);margin-bottom:8px;">Your pattern sets</div>
           <div class="card" style="background:var(--tint);border-color:var(--accent-brd);padding:11px 12px;margin-bottom:8px;box-shadow:none;"><div style="display:flex;align-items:center;gap:8px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h6l2 2h8v12H4z"/></svg><span style="font-weight:600;font-size:13px;color:var(--accent-ink)">acme-house-rules</span><span style="flex-grow:1"></span><span class="mono" style="font-size:10.5px;color:var(--accent-ink)">18</span></div><div class="muted" style="font-size:11px;margin-top:4px;color:var(--ink2)">imported folder · 18 cards · validated ✓</div></div>
-          <div style="border:1.5px dashed var(--border);border-radius:8px;padding:11px 12px;display:flex;align-items:center;gap:8px;color:var(--ink2);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#57534E" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span style="font-size:12.5px;font-weight:500;">Import a pattern folder…</span></div>
+          <div style="display:flex;gap:6px;">
+            <input id="patternImportDir" type="text" placeholder="/path/to/pattern/folder" style="flex-grow:1;height:32px;border:1px solid var(--border);border-radius:6px;padding:0 10px;font-family:inherit;font-size:12px;background:var(--panel);color:var(--ink);">
+            <button class="btn-primary" style="padding:5px 12px;font-size:12.5px;" onclick="importPatternFolder()">Import</button>
+          </div>
+          <div id="patternImportMsg" class="muted" style="font-size:11px;margin-top:6px;min-height:14px;"></div>
         </div>
         <div class="kicker" style="padding:0 17px 6px;font-size:11px;color:var(--ink3);">Canonical families · 24</div>
         <div id="famlist" class="scroll" style="flex-grow:1;padding:0 9px;">
@@ -897,6 +907,7 @@
   function sfEmpty(msg){ return '<div class="card" style="margin:14px;padding:22px;text-align:center;box-shadow:none;background:var(--border2);border-color:var(--border);"><div class="muted" style="font-size:12.5px;line-height:1.5;max-width:380px;margin:0 auto;">'+esc(msg)+'</div></div>'; }
 
   // ---------- engine / provider / model picker (single authoritative picker) ----------
+  var SEL_IDS = ['engineSelectTop','engineSelectAssess','engineSelectLauncher'];
   function engineById(id){ return state.engines.find(function(e){ return e.id===id; }) || null; }
   function ensureModelUI(sel){
     if(sel._sfInit) return; sel._sfInit = true;
@@ -908,10 +919,10 @@
     sel._sfModel = m; sel._sfBadge = b;
     m.addEventListener('change', function(){ state.model = m.value; syncModels(m.value); });
   }
-  function syncModels(v){ ['engineSelectTop','engineSelectAssess'].forEach(function(id){ var s=document.getElementById(id); if(s && s._sfModel && s._sfModel.value!==v) s._sfModel.value=v; }); }
+  function syncModels(v){ SEL_IDS.forEach(function(id){ var s=document.getElementById(id); if(s && s._sfModel && s._sfModel.value!==v) s._sfModel.value=v; }); }
   function paintPicker(){
     var e = engineById(state.engine);
-    ['engineSelectTop','engineSelectAssess'].forEach(function(id){
+    SEL_IDS.forEach(function(id){
       var sel = document.getElementById(id); if(!sel) return; ensureModelUI(sel);
       var b = sel._sfBadge, m = sel._sfModel; if(!e) return;
       if(e.id==='rules'){ b.textContent='No AI · deterministic'; b.style.cssText+=';background:var(--border2);color:var(--ink2);border:1px solid var(--border)'; m.innerHTML='<option>—</option>'; m.disabled=true; state.model=null; }
@@ -933,7 +944,7 @@
       var suffix = e.id==='rules' ? '' : (e.connected!==false ? ' ✓' : ' — not connected');
       return '<option value="'+esc(e.id)+'"'+(e.id===state.engine?' selected':'')+'>'+esc((e.label||e.id)+suffix)+'</option>';
     }).join('');
-    ['engineSelectTop','engineSelectAssess'].forEach(function(id){
+    SEL_IDS.forEach(function(id){
       var el = document.getElementById(id); if(!el) return;
       ensureModelUI(el); el.innerHTML = html; if(state.engine) el.value = state.engine;
     });
@@ -941,7 +952,7 @@
   }
   window.onEngineChange = function(sel){
     state.engine = sel.value; state.model = null;
-    ['engineSelectTop','engineSelectAssess'].forEach(function(id){ var el=document.getElementById(id); if(el && el.value!==sel.value) el.value=sel.value; });
+    SEL_IDS.forEach(function(id){ var el=document.getElementById(id); if(el && el.value!==sel.value) el.value=sel.value; });
     paintPicker();
     if(state.engine && state.engine!=='rules'){
       get('/api/engines/'+encodeURIComponent(state.engine)+'/connection').then(function(c){ var e=engineById(state.engine); if(e){ e.connected=c.connected; e.detail=c.detail; } paintPicker(); }).catch(function(){});
@@ -1352,7 +1363,8 @@
     var rem=document.getElementById('findRemediation'); if(rem) rem.innerHTML='<span class="muted">—</span>';
   }
   function renderFindingDetail(f){
-    if(!f){ clearFindingDetail(); return; }
+    if(!f){ state.selectedFinding=null; clearFindingDetail(); return; }
+    state.selectedFinding = f;
     var sevEl = document.getElementById('findHeaderSev');
     if(sevEl){ sevEl.textContent = (f.severity||'').toUpperCase(); sevEl.className = 'badge '+sevClass(f.severity); }
     var titleEl = document.getElementById('findHeaderTitle'); if(titleEl) titleEl.textContent = f.title||'';
@@ -1385,6 +1397,51 @@
       host.insertBefore(note, host.firstChild);
     }).catch(function(){});
   }
+
+  // S2-3: export the selected finding as a HackerOne-style markdown report (local download).
+  window.exportFinding = function(){
+    var f = state.selectedFinding;
+    if(!f){ window.alert('Select a finding first.'); return; }
+    var loc = f.evidence ? (f.evidence.file+':'+f.evidence.line) : '—';
+    var md = '# '+(f.title||'Finding')+'\n\n'
+      + '**Severity:** '+(f.severity||'')+'  \n'
+      + '**Weakness:** '+(f.cwe||'')+(f.family?' ('+f.family+')':'')+'  \n'
+      + '**Asset / route:** '+(f.route||'—')+'  \n'
+      + '**Location:** '+loc+'  \n'
+      + '**Rule:** '+(f.rule||f.method||'—')+'  \n'
+      + '**Confidence:** '+(f.confidence||'static')+'\n\n'
+      + '## Summary\n\n'+(f.description || f.title || '')+'\n\n'
+      + (f.remediation ? '## Remediation\n\n'+f.remediation+'\n' : '')
+      + '\n---\n_Exported by SecForge from project '+(state.project?state.project.name:'')+'._\n';
+    var blob = new Blob([md], { type: 'text/markdown' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (String(f.id||'finding').replace(/[^\w.-]+/g,'_'))+'.md';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
+  };
+
+  // S2-5: import a custom pattern folder (POST /api/patterns/import).
+  window.importPatternFolder = function(){
+    var inp = document.getElementById('patternImportDir'); var msg = document.getElementById('patternImportMsg');
+    var dir = inp ? inp.value.trim() : '';
+    if(!dir){ if(msg) msg.textContent='Enter a folder path.'; return; }
+    if(msg) msg.textContent='Importing…';
+    post('/api/patterns/import', { dir: dir }).then(function(r){
+      if(r && r.error){ if(msg) msg.textContent='Import failed: '+r.error; return; }
+      var n = (r && (r.imported!=null ? r.imported : (r.cards?r.cards.length:null)));
+      if(msg) msg.textContent = 'Imported'+(n!=null?' '+n+' card'+(n===1?'':'s'):'')+'.';
+    }).catch(function(){ if(msg) msg.textContent='Import failed.'; });
+  };
+
+  // S2-6: pause / resume / cancel the current session.
+  window.sessionAction = function(act){
+    if(!state.project || !state.session){ var s0=document.getElementById('sessStatus'); if(s0) s0.textContent='no active session'; return; }
+    var s = document.getElementById('sessStatus'); if(s) s.textContent = act+'…';
+    post('/api/sessions/'+encodeURIComponent(state.session.sessionId)+'/'+act+'?project='+encodeURIComponent(state.project.id), {})
+      .then(function(r){ if(s) s.textContent = 'status: '+((r && r.status) || (r && r.error) || 'ok'); })
+      .catch(function(){ if(s) s.textContent = act+' failed'; });
+  };
 
   function refreshFindings(){
     if(!state.project) return Promise.resolve();
