@@ -70,6 +70,20 @@ fixture-app on 127.0.0.1:4770.
 - [x] C4/S3-5 CLI adapters "Connected" but ask() no-op — 0b0b0b7
 - [x] C7/S3-7 SSE /stream + orchestrator.fanOut unwired — 0b0b0b7
 
+## Round 2 — QA regression (8 open + 3 new + S6), against ef8895f
+QA withdrew the "47 dead controls" figure: 0 dead of 110 actionable controls.
+- [x] **S2-8b** "filter features" is now a real input that live-filters the feature sidebar. — 3241ad9
+- [x] **S2-8c** Project pill is a real switcher (dropdown of projects + "Open another…"). — 3241ad9
+- [x] **S4-1** By-feature pass rate uses the same decided/total denominator as the headline. — 3241ad9
+- [x] **S4-10** Removed the "Coverage gap" legend entry (no COVERAGE_GAP nodes are emitted). — 3241ad9
+- [x] **N-3** WIRING.md corrected (Validate-live / Env / patterns cards+import are built, not "planned"). — 3241ad9
+- [x] **N-2** Memory search already fires on Enter (`onkeydown` at the input) + Recall button — verified present. — (prior)
+- [x] **S4-8** In-page tour retired (STEPS=[], Walkthrough → /demo.html); `#proj-acme` exists only in demo.html (the intentional designed mock). — (prior)
+- [~] **N-1** Pattern cards are clickable → detail pane (UI done, 3241ad9); card BODIES on the wire pending backend re-vendor of /api/patterns/cards.
+- [~] **S6** Finding detail renders CVSS/CWE-name/description/snippet/remediation when present (UI done, 3241ad9); the enriched finding RECORD (cvss, cwe_name, description, remediation, snippet, severity-from-CVSS) pending backend.
+- [ ] **S3-6** Invalid scope.mode/method should 400 (not silently coerce) — backend, in progress.
+- [ ] **S4-3** Re-confirm scope action count (QA blocked: single-feature fixture).
+
 ## S5 · LOW / hygiene
 - [~] **S5-1** +11 tests added for packages/assess (rules + computeCoverage) and packages/map (ERROR/MAPPED); 34/34 pass. Adapters/patterns/memory/env/routes still thin. — 0b0b0b7
 - [x] **S5-2** Removed coverageStub() (routes.js) and hasAuthzGuard()+AUTHZ_EDGE_TYPES (graph-utils.js). — 0b0b0b7
