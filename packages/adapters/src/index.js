@@ -93,7 +93,7 @@ async function ollamaAskRaw(prompt) {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ model, prompt, stream: false }),
-  }, 15000);
+  }, 60000);
   if (!res.ok) throw new Error(`ollama generate failed: ${res.status}`);
   const data = await res.json();
   return data.response || '';
@@ -195,7 +195,10 @@ export async function listEngines() {
     { id: 'openai', label: openai.label, provider: openai.provider, model: openai.model, models: [openai.model], available: !!process.env.OPENAI_API_KEY },
     { id: 'anthropic', label: anthropic.label, provider: anthropic.provider, model: anthropic.model, models: [anthropic.model], available: !!process.env.ANTHROPIC_API_KEY },
   ];
-  const firstAvailable = entries.find((e) => e.id !== 'rules' && e.available);
-  const defaultId = firstAvailable ? firstAvailable.id : 'rules';
+  // Default to the fast, always-reliable deterministic engine; a model is a deliberate choice
+  // (LLM-assist adds latency and only helps with a fast/structured model). Set SECFORGE_DEFAULT_ENGINE
+  // to override (e.g. 'ollama') when you want model-assisted scans by default.
+  const pref = process.env.SECFORGE_DEFAULT_ENGINE;
+  const defaultId = (pref && entries.some((e) => e.id === pref && e.available)) ? pref : 'rules';
   return entries.map((e) => ({ ...e, default: e.id === defaultId }));
 }

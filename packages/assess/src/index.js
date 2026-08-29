@@ -58,7 +58,7 @@ function findingOf(candidate, n, engineUsed) {
 const LLM_FAMILIES = new Set(['ACX', 'QIX', 'SX']); // access-control / injection / SSRF only
 const FAMILY_CWE = Object.fromEntries(FAMILIES.map((f) => [f.prefix, f.cwe[0]]));
 const LLM_CAP = 10;
-const LLM_TIMEOUT_MS = 8000;
+const LLM_TIMEOUT_MS = Number(process.env.SECFORGE_LLM_TIMEOUT_MS) || 20000; // slower local models need room
 const LLM_MANY_FEATURES = 8; // above this, one ask() over a compact summary instead of per-feature
 
 // Belt-and-suspenders timeout: the adapter enforces its own, but a scan must never hang on it.
@@ -92,36 +92,67 @@ function summarizeFeatures(graph) {
 function buildPrompt(summaries) {
   const lines = summaries.map((f) => `- ${f.name}: ${f.endpoints.join(', ') || '(no mapped endpoints)'}`).join('\n');
   return [
-    'You are a security reviewer scanning mapped features and their HTTP endpoints for additional',
-    'LIKELY access-control, injection, or SSRF issues. For each issue output exactly one line as:',
+    'You are a security reviewer. For the HTTP endpoints below, list LIKELY access-control (IDOR/',
+    'broken authorization), injection (SQL/command), or SSRF issues. Prefer one line per issue as:',
     'FAMILY|title|METHOD|ROUTE|severity',
-    'FAMILY must be one of: ACX (access control), QIX (injection), SX (SSRF).',
-    'severity must be one of: low, medium, high, critical.',
-    'Output only such lines, nothing else. If you see nothing likely, output nothing.',
+    'where FAMILY is ACX (access control), QIX (injection), or SX (SSRF); severity is low/medium/high/critical;',
+    'and ROUTE is copied EXACTLY from the list below. Example:',
+    'ACX|order readable by any authenticated user|GET|/orders/:id|high',
+    'If you prefer prose, still name the exact route and the issue type clearly.',
     '',
-    'Features:',
+    'Endpoints by feature:',
     lines,
   ].join('\n');
 }
 
 function dedupeKey(c) { return `${c.family}::${c.route}`; }
 
+const SEVERITIES = ['low', 'medium', 'high', 'critical'];
+
+function familyFromText(s) {
+  const t = s.toLowerCase();
+  if (/ssrf|server-side request/.test(t)) return 'SX';
+  if (/sql|nosql|command inj|\binjection\b/.test(t)) return 'QIX';
+  if (/idor|access control|authoriz|ownership|broken object|bola|privilege escal/.test(t)) return 'ACX';
+  return null;
+}
+function severityFromText(s) {
+  const t = s.toLowerCase();
+  return /\bcritical\b/.test(t) ? 'critical' : /\bhigh\b/.test(t) ? 'high' : /\blow\b/.test(t) ? 'low' : 'medium';
+}
+
+// Parse model output into grounded candidates. Strict `FAMILY|title|METHOD|ROUTE|severity` lines
+// first; otherwise a lenient pass that only accepts a line naming a KNOWN route (from the graph)
+// plus a recognisable vuln keyword — so the model contributes without a rigid format and cannot
+// invent routes that don't exist.
 function parseLlmCandidates(text, routeIndex) {
   if (!text || typeof text !== 'string') return [];
-  const out = [];
-  for (const raw of text.split('\n')) {
-    const parts = raw.trim().split('|').map((p) => p.trim());
-    if (parts.length < 4) continue;
-    const [family, title, method, route, severityRaw] = parts;
-    if (!LLM_FAMILIES.has(family) || !route) continue;
+  const knownRoutes = [...routeIndex.keys()];
+  const push = (out, family, title, method, route, sev) => {
     const mapped = routeIndex.get(route) || {};
     out.push({
-      family, cwe: FAMILY_CWE[family], title: title || `${family} issue`,
+      family, cwe: FAMILY_CWE[family], title: (title || `${family} issue`).slice(0, 140),
       featureId: mapped.featureId || null, endpointId: mapped.endpointId || null,
-      method: (method || '').toUpperCase() || null, route,
-      severity: ['low', 'medium', 'high', 'critical'].includes(severityRaw) ? severityRaw : 'medium',
+      method: ((method || mapped.method || '') + '').toUpperCase() || null, route,
+      severity: SEVERITIES.includes(sev) ? sev : 'medium',
       evidence: { file: null, line: null }, rule: 'llm',
     });
+  };
+  const out = [];
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    const parts = line.split('|').map((p) => p.trim());
+    if (parts.length >= 4 && LLM_FAMILIES.has(parts[0])) {
+      push(out, parts[0], parts[1], parts[2], parts[3], parts[4]);
+      continue;
+    }
+    // lenient, grounded: a known route mentioned in the line + a vuln keyword
+    const route = knownRoutes.find((r) => r && line.includes(r));
+    if (!route) continue;
+    const family = familyFromText(line);
+    if (!family) continue;
+    push(out, family, line, null, route, severityFromText(line));
   }
   return out;
 }
