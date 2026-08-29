@@ -1,10 +1,10 @@
 // @secforge/adapters — engine backends behind one interface. The only external "engine".
 // Every backend normalises to the same job/result envelope so the pipeline is provider-agnostic.
 // Node stdlib + global fetch only. No SDKs — every provider is called over its plain HTTP API.
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
-import { spawnSync } from 'node:child_process';
+import { homedir, tmpdir } from 'node:os';
+import { spawnSync, spawn } from 'node:child_process';
 
 /**
  * @typedef {Object} EngineAdapter
@@ -168,6 +168,65 @@ const anthropic = makeAdapter({
   askRaw: anthropicAskRaw,
 });
 
+// --- codex: real backend over the Codex CLI (`codex exec`), read-only + non-interactive. ---
+// The user's configured model lives in ~/.codex/config.toml; we surface it first so their real
+// model (e.g. gpt-daybreak-blue-latest) is selectable, then a known set.
+const CODEX_KNOWN_MODELS = ['gpt-5-codex', 'gpt-5', 'o4-mini', 'codex-mini-latest'];
+function codexConfigModel() {
+  try {
+    const txt = readFileSync(join(homedir(), '.codex', 'config.toml'), 'utf8');
+    const m = txt.match(/^\s*model\s*=\s*"([^"]+)"/m);
+    return m ? m[1] : null;
+  } catch { return null; }
+}
+function codexModels() {
+  const list = [];
+  const cfg = codexConfigModel();
+  if (cfg) list.push(cfg);
+  for (const k of CODEX_KNOWN_MODELS) if (!list.includes(k)) list.push(k);
+  return list;
+}
+// One non-interactive, read-only Codex run. Never lets Codex touch the tree (sandbox read-only);
+// captures only the model's final message. Bounded by its own timeout; throws on failure.
+function codexAskRaw(prompt, model) {
+  return new Promise((resolve, reject) => {
+    const out = join(tmpdir(), `secforge-codex-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`);
+    const args = ['exec', '-s', 'read-only', '--skip-git-repo-check', '--ephemeral', '-o', out];
+    if (model) args.push('-m', model);
+    args.push(String(prompt));
+    let done = false;
+    const finish = (fn, arg) => { if (done) return; done = true; clearTimeout(timer); try { unlinkSync(out); } catch { /* best effort */ } fn(arg); };
+    const cp = spawn('codex', args, { cwd: tmpdir(), stdio: 'ignore' });
+    const timer = setTimeout(() => { try { cp.kill('SIGKILL'); } catch { /* ignore */ } finish(reject, new Error('codex exec timed out')); }, 180000);
+    cp.on('error', (e) => finish(reject, e));
+    cp.on('exit', (code) => {
+      if (done) return;
+      let text = '';
+      try { text = readFileSync(out, 'utf8'); } catch { /* no output file */ }
+      if (code === 0) finish(resolve, text);
+      else finish(reject, new Error(`codex exec exited ${code}`));
+      // note: finish() also unlinks; read happened above before unlink
+    });
+  });
+}
+const codex = {
+  id: 'codex', label: 'Codex (OpenAI)', provider: 'codex',
+  model: codexModels()[0] || null, analysis: 'llm',
+  async available() { return (await checkConnection('codex')).connected; },
+  async listModels() { return codexModels(); },
+  async ask(prompt, opts = {}) {
+    try { return await codexAskRaw(prompt, opts.model || this.model); }
+    catch (err) { return JSON.stringify({ ok: false, error: errMsg(err) }); }
+  },
+  async runAgent(job = {}) {
+    try {
+      if (!(await this.available())) return { ok: false, error: 'codex not available' };
+      const prompt = job.prompt || `Role: ${job.role || 'agent'}\nTask: ${JSON.stringify(job)}`;
+      return { ok: true, text: await codexAskRaw(prompt, job.model) };
+    } catch (err) { return { ok: false, error: errMsg(err) }; }
+  },
+};
+
 // --- provider connection detection: has the user logged in / configured this SDK? ---
 function onPath(bin) { try { return spawnSync('which', [bin], { timeout: 1500 }).status === 0; } catch { return false; } }
 function homeHas(...p) { try { return existsSync(join(homedir(), ...p)); } catch { return false; } }
@@ -188,14 +247,15 @@ const CONNECTORS = {
     },
   },
   codex: {
-    label: 'Codex (OpenAI)', models: ['gpt-5-codex', 'gpt-5', 'o4-mini', 'codex-mini-latest'],
-    analysis: 'rules-only',
+    label: 'Codex (OpenAI)', get models() { return codexModels(); },
+    analysis: 'llm', // wired: runs `codex exec` non-interactively (read-only sandbox)
     howToConnect: 'run: codex login',
     check() {
-      if (homeHas('.codex', 'auth.json')) return { connected: true, detail: 'found ~/.codex/auth.json' };
-      if (onPath('codex')) return { connected: true, detail: 'codex CLI on PATH' };
-      if (process.env.OPENAI_API_KEY) return { connected: true, detail: 'OPENAI_API_KEY set' };
-      return { connected: false, detail: 'not logged in — run: codex login' };
+      const models = codexModels();
+      if (homeHas('.codex', 'auth.json')) return { connected: true, detail: 'found ~/.codex/auth.json', models };
+      if (onPath('codex')) return { connected: true, detail: 'codex CLI on PATH', models };
+      if (process.env.OPENAI_API_KEY) return { connected: true, detail: 'OPENAI_API_KEY set', models };
+      return { connected: false, detail: 'not logged in — run: codex login', models };
     },
   },
   gemini: {
@@ -251,7 +311,7 @@ function cliAdapter(id) {
 const REGISTRY = new Map([
   ['rules', rules],
   ['claude-code', cliAdapter('claude-code')],
-  ['codex', cliAdapter('codex')],
+  ['codex', codex],
   ['gemini', cliAdapter('gemini')],
   ['ollama', ollama],
   ['openai', openai],

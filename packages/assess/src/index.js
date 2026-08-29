@@ -59,7 +59,7 @@ function findingOf(candidate, n, engineUsed) {
 const LLM_FAMILIES = new Set(['ACX', 'QIX', 'SX']); // access-control / injection / SSRF only
 const FAMILY_CWE = Object.fromEntries(FAMILIES.map((f) => [f.prefix, f.cwe[0]]));
 const LLM_CAP = 10;
-const LLM_TIMEOUT_MS = Number(process.env.SECFORGE_LLM_TIMEOUT_MS) || 20000; // slower local models need room
+const LLM_TIMEOUT_MS = Number(process.env.SECFORGE_LLM_TIMEOUT_MS) || 180000; // real CLI models (codex exec) need minutes, not seconds
 const LLM_MANY_FEATURES = 8; // above this, one ask() over a compact summary instead of per-feature
 
 // Belt-and-suspenders timeout: the adapter enforces its own, but a scan must never hang on it.
@@ -159,7 +159,7 @@ function parseLlmCandidates(text, routeIndex) {
 }
 
 // Run the bounded LLM-assist HUNT step. Never throws; returns [] on any adapter trouble.
-async function llmAssist(graph, engine, existingCandidates) {
+async function llmAssist(graph, engine, existingCandidates, model) {
   if (!engine || engine === 'rules') return [];
 
   let adapter;
@@ -187,7 +187,7 @@ async function llmAssist(graph, engine, existingCandidates) {
     const batches = summaries.length > LLM_MANY_FEATURES ? [summaries] : summaries.map((s) => [s]);
     for (const batch of batches) {
       if (extra.length >= LLM_CAP) break;
-      const text = await withTimeout(adapter.ask(buildPrompt(batch)), LLM_TIMEOUT_MS);
+      const text = await withTimeout(adapter.ask(buildPrompt(batch), { model }), LLM_TIMEOUT_MS);
       absorb(text);
     }
   } catch {
@@ -251,7 +251,7 @@ async function report(store, projectId, candidates, graph, engineUsed, ctx = {})
  * to deterministic-only, it never fails the run.
  * @returns {Promise<{jobs:number, candidates:Array, findings:Array, coverage:object|null, engineUsed:string}>}
  */
-export async function runAssessment({ store, projectId, scope = {}, engine = 'rules', onEvent } = {}) {
+export async function runAssessment({ store, projectId, scope = {}, engine = 'rules', model = null, onEvent } = {}) {
   const jobs = planJobs(scope);
   onEvent?.({ stage: 'framer', status: 'done', jobs: jobs.length });
 
@@ -259,7 +259,7 @@ export async function runAssessment({ store, projectId, scope = {}, engine = 'ru
   for (const job of jobs) onEvent?.({ stage: 'hunter', job: job.id, feature: job.feature, engine });
 
   const candidates = analyze(graph, { scope, patterns: scope.patterns });
-  const llmExtra = await llmAssist(graph, engine, candidates).catch(() => []);
+  const llmExtra = await llmAssist(graph, engine, candidates, model).catch(() => []);
   let n = candidates.length;
   const allCandidates = candidates.concat(
     llmExtra.map((c) => ({ ...c, id: ID.candidate(++n) })),

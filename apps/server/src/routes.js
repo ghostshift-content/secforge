@@ -170,7 +170,8 @@ export async function handleApi(req, res, url) {
         await mgr.configureRun(project, sid, scope);
         await mgr.recordEngine(project, sid, { provider: engine, model: typeof body.model === 'string' ? body.model : null }); // N4
         await store.clearFindings(project);                                 // N5: a re-scan replaces findings; no stale results survive
-        const result = await runAssessment({ store, projectId: project, scope, engine });
+        const model = typeof body.model === 'string' ? body.model : null;
+        const result = await runAssessment({ store, projectId: project, scope, engine, model });
         return json(res, 200, result), true;
       }
     }
