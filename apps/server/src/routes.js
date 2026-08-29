@@ -10,6 +10,7 @@ import { mapProject } from '@secforge/map';
 import { learn, recall, crossProjectRecall, stats } from '@secforge/memory';
 import { registerTarget, getTarget, validateFinding } from '@secforge/env';
 import { listEngines, checkConnection } from '@secforge/adapters';
+import { SCOPE_KINDS, RUN_METHODS } from '@secforge/schemas';
 
 const mgr = new SessionManager();
 const store = new Store();
@@ -18,6 +19,34 @@ const json = (res, code, body) => {
   res.writeHead(code, { 'content-type': 'application/json' });
   res.end(JSON.stringify(body));
 };
+
+// Only ever run/record a KNOWN engine id (a string). Unknown/non-string → 'rules'.
+async function validEngineId(id) {
+  if (typeof id !== 'string') return 'rules';
+  try { return (await listEngines()).some((e) => e.id === id) ? id : 'rules'; } catch { return 'rules'; }
+}
+// Validate the run scope against the schema's frozen sets; coerce anything invalid to safe defaults.
+// Also normalise scope.patterns to family prefixes: a family stays, a CWE id maps to the families
+// that carry it, an unknown token (e.g. a custom-set name) is dropped. If nothing resolves, drop
+// the field so the scan runs all applicable rules rather than silently matching nothing (C9).
+function normaliseScope(s) {
+  const scope = (s && typeof s === 'object') ? { ...s } : {};
+  scope.mode = SCOPE_KINDS.includes(scope.mode) ? scope.mode : 'all';
+  scope.method = RUN_METHODS.includes(scope.method) ? scope.method : 'pattern';
+  if (Array.isArray(scope.patterns) && scope.patterns.length) {
+    const prefixes = new Set(FAMILIES.map((f) => f.prefix));
+    const cweToFam = {};
+    for (const f of FAMILIES) for (const c of (f.cwe || [])) (cweToFam[c] = cweToFam[c] || []).push(f.prefix);
+    const fams = new Set();
+    for (const raw of scope.patterns) {
+      const tok = String(raw).split(' · ')[0].trim();
+      if (prefixes.has(tok)) fams.add(tok);
+      else if (cweToFam[tok]) cweToFam[tok].forEach((p) => fams.add(p));
+    }
+    if (fams.size) scope.patterns = [...fams]; else delete scope.patterns;
+  }
+  return scope;
+}
 
 // Returns true if the request was an API request (handled here).
 export async function handleApi(req, res, url) {
@@ -88,11 +117,21 @@ export async function handleApi(req, res, url) {
       if (!project) return json(res, 400, { error: 'missing ?project=' }), true;
       if (method === 'GET' && !action) return json(res, 200, await mgr.status(project, sid)), true;
       if (method === 'POST' && action === 'pause') return json(res, 200, await mgr.pause(project, sid)), true;
-      if (method === 'POST' && action === 'resume') return json(res, 200, await mgr.resume(project, sid)), true;
+      if (method === 'POST' && action === 'resume') {
+        const cur = await mgr.status(project, sid);
+        if (!cur || cur.status !== 'paused') return json(res, 400, { error: 'can only resume a paused session' }), true;
+        return json(res, 200, await mgr.resume(project, sid)), true;
+      }
       if (method === 'POST' && action === 'cancel') return json(res, 200, await mgr.cancel(project, sid)), true;
       if (method === 'POST' && action === 'scan') {
-        await mgr.configureRun(project, sid, body.scope || {});
-        const result = await runAssessment({ store, projectId: project, scope: body.scope || {}, engine: body.engine });
+        const engine = await validEngineId(body.engine);                    // N1/N2: known adapter id only, coerced to a string
+        const scope = normaliseScope(body.scope);                           // input validation vs SCOPE_KINDS/RUN_METHODS
+        const cur = await mgr.status(project, sid);
+        if (cur && cur.status === 'created') await mgr.start(project, sid);  // N3: drive the FSM so status is real + pause works
+        await mgr.configureRun(project, sid, scope);
+        await mgr.recordEngine(project, sid, { provider: engine, model: typeof body.model === 'string' ? body.model : null }); // N4
+        await store.clearFindings(project);                                 // N5: a re-scan replaces findings; no stale results survive
+        const result = await runAssessment({ store, projectId: project, scope, engine });
         return json(res, 200, result), true;
       }
     }

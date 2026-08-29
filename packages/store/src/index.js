@@ -100,6 +100,12 @@ export class Store {
       return Promise.all(names.map((n) => readJSON(path.join(dir, n, 'finding.json')))).then((a) => a.filter(Boolean));
     } catch { return []; }
   }
+
+  // Remove all findings for a project — a re-scan replaces them, so no stale results from
+  // removed rules or an earlier candidate ordering survive in the store.
+  async clearFindings(projectIdVal) {
+    try { await fs.rm(path.join(this.projectDir(projectIdVal), 'assess', 'findings'), { recursive: true, force: true }); } catch { /* nothing to clear */ }
+  }
 }
 
 export { projectId, ID };

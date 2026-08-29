@@ -60,6 +60,15 @@ export class SessionManager {
     return s;
   }
 
+  // Record the engine actually used for the run (provider + model) — the reproducibility field.
+  async recordEngine(projectId, sessionId, engine) {
+    const s = await this.store.readRun(projectId, sessionId);
+    if (!s) throw new Error(`no session ${sessionId}`);
+    s.engine = engine;
+    await this._persist(projectId, s, 'run.engine');
+    return s;
+  }
+
   async _persist(projectId, session, eventType) {
     session.checkpointedAt = new Date().toISOString();
     await this.store.writeRun(projectId, session);
