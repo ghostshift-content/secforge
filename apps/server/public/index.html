@@ -1626,5 +1626,71 @@
 })();
 </script>
 
+<!-- provider / connection / model picker: user chooses the AI SDK; we detect login; enable its models -->
+<script>
+(function(){
+  var providers = [];
+  function get(p){ return fetch(p).then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); }); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"'\/]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','/':'&#x2F;'}[c]; }); }
+  var SELECTS = ['engineSelectTop','engineSelectAssess'];
+
+  function ensureUI(sel){
+    if(sel._sfInit) return; sel._sfInit=true;
+    var model=document.createElement('select');
+    model.className='sf-model';
+    model.style.cssText='height:26px;border:1px solid var(--border);border-radius:6px;background:var(--panel);font-size:12px;margin-left:6px;color:var(--ink);max-width:160px;font-family:inherit;';
+    var badge=document.createElement('span');
+    badge.className='sf-conn';
+    badge.style.cssText='font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:20px;margin-left:6px;white-space:nowrap;';
+    sel.insertAdjacentElement('afterend', model);
+    model.insertAdjacentElement('afterend', badge);
+    sel._sfModel=model; sel._sfBadge=badge;
+    model.addEventListener('change', function(){ if(window.state) window.state.model=model.value; });
+    if(!sel._sfBound){ sel._sfBound=true; sel.addEventListener('change', function(){ apply(sel.value, true); }); }
+  }
+  function paintBadge(sel, connected, detail){
+    var b=sel._sfBadge; if(!b) return;
+    if(connected){ b.textContent='Connected'; b.style.background='#F0FDF4'; b.style.color='#166534'; b.style.border='1px solid #BBF7D0'; }
+    else { b.textContent='Not connected'; b.style.background='#FFFBEB'; b.style.color='#92400E'; b.style.border='1px solid #FDE68A'; }
+    b.title=detail||'';
+  }
+  function fillModels(sel, prov, connected){
+    var m=sel._sfModel; if(!m) return;
+    if(prov.id==='rules'){ m.innerHTML='<option>No AI · deterministic</option>'; m.disabled=true; if(window.state) window.state.model=null; return; }
+    m.innerHTML=(prov.models||[]).map(function(x){ return '<option value="'+esc(x)+'">'+esc(x)+'</option>'; }).join('') || '<option>—</option>';
+    m.disabled=!connected;
+    if(window.state) window.state.model=(prov.models&&prov.models[0])||null;
+  }
+  function apply(id, live){
+    var prov=providers.find(function(p){ return p.id===id; }) || providers[0]; if(!prov) return;
+    if(window.state){ window.state.engine=prov.id; window.state.provider=prov.id; }
+    // keep both selectors in sync
+    SELECTS.forEach(function(sid){ var s=document.getElementById(sid); if(s){ ensureUI(s); if(s.value!==prov.id) s.value=prov.id; paintBadge(s, prov.connected, prov.howToConnect); fillModels(s, prov, prov.connected); } });
+    if(live && prov.id!=='rules'){
+      get('/api/engines/'+encodeURIComponent(prov.id)+'/connection').then(function(c){
+        prov.connected=c.connected;
+        SELECTS.forEach(function(sid){ var s=document.getElementById(sid); if(s){ paintBadge(s, c.connected, c.connected? c.detail : (prov.howToConnect||c.detail)); fillModels(s, prov, c.connected); } });
+      }).catch(function(){});
+    }
+  }
+  function buildSelect(sel){
+    if(!sel) return; ensureUI(sel);
+    sel.innerHTML=providers.map(function(p){ return '<option value="'+esc(p.id)+'">'+esc(p.label)+(p.id==='rules'?'':(p.connected?' ✓':' — not connected'))+'</option>'; }).join('');
+    var def=providers.find(function(p){ return p.default; })||providers[0];
+    sel.value=def.id;
+  }
+  function boot(){
+    get('/api/engines').then(function(list){
+      providers=Array.isArray(list)?list:[];
+      if(!providers.length) return;
+      SELECTS.forEach(function(sid){ buildSelect(document.getElementById(sid)); });
+      var def=providers.find(function(p){ return p.default; })||providers[0];
+      apply(def.id, false);
+    }).catch(function(){});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+})();
+</script>
+
 </body>
 </html>

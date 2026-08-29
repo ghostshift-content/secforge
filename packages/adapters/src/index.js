@@ -1,6 +1,10 @@
 // @secforge/adapters — engine backends behind one interface. The only external "engine".
 // Every backend normalises to the same job/result envelope so the pipeline is provider-agnostic.
 // Node stdlib + global fetch only. No SDKs — every provider is called over its plain HTTP API.
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { spawnSync } from 'node:child_process';
 
 /**
  * @typedef {Object} EngineAdapter
@@ -162,8 +166,82 @@ const anthropic = makeAdapter({
   askRaw: anthropicAskRaw,
 });
 
+// --- provider connection detection: has the user logged in / configured this SDK? ---
+function onPath(bin) { try { return spawnSync('which', [bin], { timeout: 1500 }).status === 0; } catch { return false; } }
+function homeHas(...p) { try { return existsSync(join(homedir(), ...p)); } catch { return false; } }
+
+const CONNECTORS = {
+  'claude-code': {
+    label: 'Claude Code', models: ['claude-opus-4-8', 'claude-sonnet-5', 'claude-haiku-4-5'],
+    howToConnect: 'run: claude  (and log in)',
+    check() {
+      if (process.env.ANTHROPIC_API_KEY) return { connected: true, detail: 'ANTHROPIC_API_KEY set' };
+      if (homeHas('.claude', '.credentials.json') || homeHas('.claude', 'credentials.json')) return { connected: true, detail: 'Claude Code login found' };
+      if (onPath('claude')) return { connected: true, detail: 'claude CLI on PATH' };
+      return { connected: false, detail: 'not logged in — run: claude' };
+    },
+  },
+  codex: {
+    label: 'Codex (OpenAI)', models: ['gpt-5-codex', 'gpt-5', 'o4-mini', 'codex-mini-latest'],
+    howToConnect: 'run: codex login',
+    check() {
+      if (homeHas('.codex', 'auth.json')) return { connected: true, detail: 'found ~/.codex/auth.json' };
+      if (onPath('codex')) return { connected: true, detail: 'codex CLI on PATH' };
+      if (process.env.OPENAI_API_KEY) return { connected: true, detail: 'OPENAI_API_KEY set' };
+      return { connected: false, detail: 'not logged in — run: codex login' };
+    },
+  },
+  gemini: {
+    label: 'Gemini', models: ['gemini-2.5-pro', 'gemini-2.5-flash'],
+    howToConnect: 'run: gemini  (and log in)',
+    check() {
+      if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) return { connected: true, detail: 'Gemini/Google API key set' };
+      if (homeHas('.gemini')) return { connected: true, detail: '~/.gemini found' };
+      if (onPath('gemini')) return { connected: true, detail: 'gemini CLI on PATH' };
+      return { connected: false, detail: 'not logged in — run: gemini' };
+    },
+  },
+  ollama: {
+    label: 'Ollama (local)', models: [], howToConnect: 'start Ollama: ollama serve',
+    async check() { const s = await ollamaProbe(); return { connected: s.available, detail: s.available ? `running · ${s.models.length} models` : 'not running — start: ollama serve', models: s.models }; },
+  },
+  openai: {
+    label: 'OpenAI API (key)', models: ['gpt-4o', 'gpt-4o-mini', 'o4-mini'], howToConnect: 'set OPENAI_API_KEY',
+    check() { return process.env.OPENAI_API_KEY ? { connected: true, detail: 'OPENAI_API_KEY set' } : { connected: false, detail: 'set OPENAI_API_KEY' }; },
+  },
+  anthropic: {
+    label: 'Anthropic API (key)', models: ['claude-opus-4-8', 'claude-sonnet-5'], howToConnect: 'set ANTHROPIC_API_KEY',
+    check() { return process.env.ANTHROPIC_API_KEY ? { connected: true, detail: 'ANTHROPIC_API_KEY set' } : { connected: false, detail: 'set ANTHROPIC_API_KEY' }; },
+  },
+};
+
+// Per-provider connection status (used by the UI to enable/disable and label each option).
+export async function checkConnection(id) {
+  if (id === 'rules') return { id, connected: true, detail: 'always available — deterministic, no AI' };
+  const c = CONNECTORS[id];
+  if (!c) return { id, connected: false, detail: 'unknown provider' };
+  try { const r = await c.check(); return { id, connected: !!r.connected, detail: r.detail || '' }; }
+  catch { return { id, connected: false, detail: 'connection check failed' }; }
+}
+
+// A CLI-SDK adapter (claude-code / codex / gemini): connection is real; non-interactive analysis
+// is not wired in this build, so ask() is a safe no-op and the deterministic engine runs.
+function cliAdapter(id) {
+  const c = CONNECTORS[id];
+  return {
+    id, label: c.label, provider: id, model: c.models[0] || null,
+    async available() { return (await checkConnection(id)).connected; },
+    async listModels() { return c.models; },
+    async ask() { return JSON.stringify({ ok: false, error: `${id}: connected, but non-interactive model calls are not wired in this build` }); },
+    async runAgent() { return { ok: false, error: `${id}: non-interactive not wired` }; },
+  };
+}
+
 const REGISTRY = new Map([
   ['rules', rules],
+  ['claude-code', cliAdapter('claude-code')],
+  ['codex', cliAdapter('codex')],
+  ['gemini', cliAdapter('gemini')],
   ['ollama', ollama],
   ['openai', openai],
   ['anthropic', anthropic],
@@ -179,26 +257,20 @@ export function getAdapter(id = 'rules') {
 
 export function listAdapters() { return [...REGISTRY.keys()]; }
 
-// Backs the UI model selector: fast (one short-timeout ollama probe), never throws, never hangs.
+// Backs the UI provider picker: every provider with its live connection status + models.
+// Fast (bounded probes), never throws, never hangs. Default is the deterministic 'rules' engine
+// unless SECFORGE_DEFAULT_ENGINE names a CONNECTED provider — nothing is force-selected.
 export async function listEngines() {
-  const ollamaState = await ollamaProbe();
-  const entries = [
-    { id: 'rules', label: rules.label, provider: rules.provider, model: rules.model, models: [], available: true },
-    {
-      id: 'ollama',
-      label: ollama.label,
-      provider: ollama.provider,
-      model: process.env.OLLAMA_MODEL || ollamaState.models[0] || null,
-      models: ollamaState.models,
-      available: ollamaState.available,
-    },
-    { id: 'openai', label: openai.label, provider: openai.provider, model: openai.model, models: [openai.model], available: !!process.env.OPENAI_API_KEY },
-    { id: 'anthropic', label: anthropic.label, provider: anthropic.provider, model: anthropic.model, models: [anthropic.model], available: !!process.env.ANTHROPIC_API_KEY },
-  ];
-  // Default to the fast, always-reliable deterministic engine; a model is a deliberate choice
-  // (LLM-assist adds latency and only helps with a fast/structured model). Set SECFORGE_DEFAULT_ENGINE
-  // to override (e.g. 'ollama') when you want model-assisted scans by default.
+  const order = ['claude-code', 'codex', 'gemini', 'ollama', 'openai', 'anthropic'];
+  const out = [{ id: 'rules', label: 'No AI — rules only (fast, deterministic)', provider: 'rules', connected: true, howToConnect: '', models: [], model: null }];
+  for (const id of order) {
+    const c = CONNECTORS[id];
+    let r;
+    try { r = await c.check(); } catch { r = { connected: false, detail: '' }; }
+    const models = (r.models && r.models.length) ? r.models : c.models;
+    out.push({ id, label: c.label, provider: id, connected: !!r.connected, howToConnect: c.howToConnect, models, model: models[0] || null });
+  }
   const pref = process.env.SECFORGE_DEFAULT_ENGINE;
-  const defaultId = (pref && entries.some((e) => e.id === pref && e.available)) ? pref : 'rules';
-  return entries.map((e) => ({ ...e, default: e.id === defaultId }));
+  const defaultId = (pref && out.some((e) => e.id === pref && e.connected)) ? pref : 'rules';
+  return out.map((e) => ({ ...e, default: e.id === defaultId }));
 }
