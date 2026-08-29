@@ -4,9 +4,11 @@ Consolidated from the QA session's master register. Status is what **this repo**
 landed and self-verified; QA re-verifies independently before closing.
 `[x]` fixed & verified here · `[~]` partial · `[ ]` open. Commit = where the fix landed.
 
-Verification for the S1/S2 batch (commit 4fb7510): 23/23 unit tests; both inline
-scripts parse; div balance 0; fabricated-string sweep of index.html clean; live
-map/findings/memory/delete exercised against fixture-app on 127.0.0.1:4770.
+Status as of commit 0b0b0b7: all S1, all S3, all S4, S5-2/S5-3, and every S2 item
+are landed; S5-1 is partial (assess/map covered, other packages thin). Verified:
+34/34 unit tests; both inline scripts parse; div balance 0; fabricated-string sweep
+of index.html clean; live map/findings/memory/delete/SSE-stream exercised against
+fixture-app on 127.0.0.1:4770.
 
 ## S1 · CRITICAL — fabricated security evidence
 - [x] **S1-1** Findings rendered Ruby source for a JS repo → real evidence (file:line, rule, CWE, confidence). — 4fb7510
@@ -44,8 +46,8 @@ map/findings/memory/delete exercised against fixture-app on 127.0.0.1:4770.
 - [x] **S3-3 (N4)** run-record engine stale → session.recordEngine() per scan. — 1b3ab01
 - [x] **S3-4 (N1/N2)** engine id never validated → coerced to a known adapter id. — 1b3ab01
 - [x] **S3-6** no input validation at API boundary → normaliseScope validates vs SCOPE_KINDS/RUN_METHODS. — 1b3ab01
-- [ ] **S3-5** CLI adapters paint "Connected" but ask() is a no-op → make honest (rules fallback / "analysis not wired").
-- [ ] **S3-7** GET /api/sessions/:id/stream 404; orchestrator.fanOut() unused → wire SSE or remove the doc claim.
+- [x] **S3-5** CLI adapters "Connected" but ask() no-op → adapters carry a truthful `analysis` field; picker shows "Connected · analysis not wired" + disables the model for rules-only providers. — 0b0b0b7
+- [x] **S3-7** /stream 404 + fanOut unused → real deterministic SSE endpoint fans out via orchestrator.runAll; UI consumes it for live progress. — 0b0b0b7
 
 ## S4 · MEDIUM — wrong numbers / state
 - [x] **S4-4** CWE chip 0 candidates → normaliseScope maps CWE→family. — 1b3ab01
@@ -65,10 +67,10 @@ map/findings/memory/delete exercised against fixture-app on 127.0.0.1:4770.
 - [x] C8 findings-per-feature id/name — 1b3ab01
 - [x] C9 pattern/CWE — 1b3ab01
 - [x] C10 pick mode all features — 1b3ab01
-- [ ] C4/S3-5 CLI adapters "Connected" but ask() no-op
-- [ ] C7/S3-7 SSE /stream + orchestrator.fanOut unwired
+- [x] C4/S3-5 CLI adapters "Connected" but ask() no-op — 0b0b0b7
+- [x] C7/S3-7 SSE /stream + orchestrator.fanOut unwired — 0b0b0b7
 
 ## S5 · LOW / hygiene
-- [ ] **S5-1** No test coverage on map/assess/adapters/patterns/memory/env/routes.
-- [ ] **S5-2** Dead code: coverageStub() (routes.js), hasAuthzGuard() (graph-utils.js).
+- [~] **S5-1** +11 tests added for packages/assess (rules + computeCoverage) and packages/map (ERROR/MAPPED); 34/34 pass. Adapters/patterns/memory/env/routes still thin. — 0b0b0b7
+- [x] **S5-2** Removed coverageStub() (routes.js) and hasAuthzGuard()+AUTHZ_EDGE_TYPES (graph-utils.js). — 0b0b0b7
 - [x] **S5-3** README status revised — every pane renders real data or an explicit empty state; tabs lock until a project opens. — a4f5889
