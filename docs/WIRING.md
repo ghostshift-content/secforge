@@ -17,9 +17,9 @@ below are live in the skeleton (sessions/store real, engines stubbed) so wiring 
 | Assess → Live run pipeline (framer→…→reporter) | `GET /api/sessions/:id/stream` (SSE) | `orchestrator` (deterministic fan-out) | **real** |
 | Assess → By feature / By CWE / Coverage matrix | `GET /api/projects/:id/coverage` | `assess` + `patterns` | stub (Phase 2) |
 | Findings tab | `GET /api/projects/:id/findings` | `store` | **real** |
-| Findings → Validate live | `POST /api/findings/:id/validate` (Phase 4) | sandbox | planned |
-| Patterns tab (library + import) | `GET /api/patterns` | `patterns` | **real registry** |
-| Env tab (register target, authorise) | (Phase 4) | sandbox | planned |
+| Findings → Validate live | `POST /api/findings/:id/validate` | `env` (guarded, static-only by default) | **real** |
+| Patterns tab (library + import) | `GET /api/patterns` · `GET /api/patterns/cards` · `POST /api/patterns/import` | `patterns` | **real registry** |
+| Env tab (register target, authorise) | `GET`/`POST /api/projects/:id/env` | `env` (SSRF-guarded) | **real** |
 | Memory tab (recall) | (Phase 3) | `memory` → `store` | **real keyword recall** |
 | Session pause / resume / cancel | `POST /api/sessions/:id/{pause,resume,cancel}?project=` | `session` | **real** |
 | Health check | `GET /api/health` | server | **real** |
