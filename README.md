@@ -58,7 +58,9 @@ Working v1, end-to-end and self-contained:
 - **Patterns** — 24 families / 281 canonical cards / 42 CWEs, vendored into the repo.
 - **Memory / Env** — recall + learning; a guarded (static-only by default) test-target validator.
 - **UI** — the workbench served at `/`, wired to the live API (health, projects, patterns,
-  map graph, scan), with designed fallbacks.
+  map graph, scan, findings, memory, env). Every pane renders real data or an explicit empty
+  state — no panel invents findings, evidence, or validation results. The project-scoped tabs
+  stay locked until a project is open. The designed walkthrough lives at `/demo.html`.
 
 Everything is SecForge's own code over Node stdlib + SQLite/files. **Future enhancement**: an
 LLM adapter (Claude Agent SDK / OpenAI-compatible / Ollama) to augment the deterministic hunters,
