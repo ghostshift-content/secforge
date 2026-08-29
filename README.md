@@ -64,6 +64,20 @@ Everything is SecForge's own code over Node stdlib + SQLite/files. **Future enha
 LLM adapter (Claude Agent SDK / OpenAI-compatible / Ollama) to augment the deterministic hunters,
 and dynamic-validation transport hardening. See `docs/SECFORGE-PLAN.md` and `docs/WIRING.md`.
 
+## Security model
+
+SecForge is a **local, single-user, loopback-only** workbench: the server binds `127.0.0.1` and
+guards `Host`/`Origin` (DNS-rebinding protection). The operator is trusted to point it at their own
+source trees and test targets. For hardened or shared deployments:
+
+- **`SECFORGE_ALLOW_ROOT=/path`** confines which source trees may be opened and scanned (mitigates
+  arbitrary-path reads via the HTTP API).
+- Dynamic validation is **static-only by default**; a live probe runs only after a target is
+  registered with `authorized:true` and the call passes `dryRun:false`. Even then, cloud-metadata
+  and loopback hosts are blocked (override with `SECFORGE_ALLOW_INTERNAL=1`), redirects are not
+  followed, and requests time out.
+- The data store lives outside the source tree (`SECFORGE_DATA` to relocate).
+
 ## License
 
 MIT

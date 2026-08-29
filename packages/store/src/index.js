@@ -32,12 +32,21 @@ export class Store {
 
   // Resolve or create a project for a source tree. Idempotent by source path.
   async openProject({ sourceRoot, name }) {
-    const id = projectId(sourceRoot);
+    if (!sourceRoot || typeof sourceRoot !== 'string') throw new Error('sourceRoot is required');
+    const abs = path.resolve(sourceRoot);
+    // Optional confinement for hardened / multi-user deployments: SECFORGE_ALLOW_ROOT limits
+    // which trees may be opened+scanned, mitigating arbitrary-path reads via the HTTP API.
+    const allow = process.env.SECFORGE_ALLOW_ROOT;
+    if (allow) {
+      const root = path.resolve(allow);
+      if (abs !== root && !abs.startsWith(root + path.sep)) throw new Error('source path is outside SECFORGE_ALLOW_ROOT');
+    }
+    const id = projectId(abs);
     const dir = this.projectDir(id);
     const file = path.join(dir, 'project.json');
     let project = await readJSON(file);
     if (!project) {
-      project = { id, name: name || path.basename(sourceRoot), sourceRoot: path.resolve(sourceRoot), createdAt: new Date().toISOString() };
+      project = { id, name: name || path.basename(abs), sourceRoot: abs, createdAt: new Date().toISOString() };
       await writeJSON(file, project);
       await this.appendEvent(id, { type: 'project.created', project: id });
     }

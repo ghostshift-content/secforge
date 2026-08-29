@@ -60,8 +60,23 @@ export async function validateFinding(store, projectId, finding, { dryRun = true
     return { ran: false, reason: 'dry-run', wouldGet: url };
   }
 
+  // SSRF guard: refuse the classic pivots (cloud metadata, loopback) unless explicitly allowed.
+  const host = new URL(url).hostname.toLowerCase();
+  const BLOCKED = new Set(['169.254.169.254', 'metadata.google.internal', 'localhost', '127.0.0.1', '::1', '0.0.0.0']);
+  if (process.env.SECFORGE_ALLOW_INTERNAL !== '1' && (BLOCKED.has(host) || host.endsWith('.internal'))) {
+    return { ran: false, reason: 'blocked host (SSRF guard) — set SECFORGE_ALLOW_INTERNAL=1 to override', host };
+  }
+
   const headers = { ...target.extraHeaders };
   if (target.authHeader) headers.Authorization = target.authHeader;
-  const res = await fetch(url, { method: 'GET', headers });
-  return { ran: true, status: res.status, verdict: res.ok ? 'reachable' : 'not-reachable' };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  try {
+    const res = await fetch(url, { method: 'GET', headers, redirect: 'manual', signal: controller.signal });
+    return { ran: true, status: res.status, verdict: res.ok ? 'reachable' : 'not-reachable' };
+  } catch (e) {
+    return { ran: true, status: 0, verdict: 'error', error: String((e && e.message) || e) };
+  } finally {
+    clearTimeout(timer);
+  }
 }
