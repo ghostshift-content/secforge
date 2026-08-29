@@ -26,8 +26,10 @@ export function fanOut(jobs, worker, { concurrency = DEFAULT_CONCURRENCY } = {})
     }
   };
 
+  // Defer the first pump so callers can attach listeners synchronously after fanOut()
+  // and still observe 'job:start' for the initial batch.
   if (jobs.length === 0) queueMicrotask(() => events.emit('done', results));
-  else pump();
+  else queueMicrotask(pump);
   return events;
 }
 

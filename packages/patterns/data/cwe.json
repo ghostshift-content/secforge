@@ -1,0 +1,300 @@
+[
+  {
+    "id": "CWE-284",
+    "name": "Improper Access Control",
+    "families": [
+      "ACX"
+    ]
+  },
+  {
+    "id": "CWE-639",
+    "name": "Insecure Direct Object Reference (IDOR)",
+    "families": [
+      "ACX"
+    ]
+  },
+  {
+    "id": "CWE-862",
+    "name": "Missing Authorization",
+    "families": [
+      "ACX"
+    ]
+  },
+  {
+    "id": "CWE-863",
+    "name": "Incorrect Authorization",
+    "families": [
+      "ACX"
+    ]
+  },
+  {
+    "id": "CWE-287",
+    "name": "Improper Authentication",
+    "families": [
+      "ATX"
+    ]
+  },
+  {
+    "id": "CWE-640",
+    "name": "Weak Password Recovery Mechanism",
+    "families": [
+      "ATX"
+    ]
+  },
+  {
+    "id": "CWE-307",
+    "name": "Improper Restriction of Excessive Authentication Attempts",
+    "families": [
+      "ATX"
+    ]
+  },
+  {
+    "id": "CWE-1427",
+    "name": "Improper Neutralization of Input Used for LLM Prompting",
+    "families": [
+      "AIX"
+    ]
+  },
+  {
+    "id": "CWE-668",
+    "name": "Exposure of Resource to Wrong Sphere",
+    "families": [
+      "AIX"
+    ]
+  },
+  {
+    "id": "CWE-79",
+    "name": "Cross-Site Scripting (XSS)",
+    "families": [
+      "XX"
+    ]
+  },
+  {
+    "id": "CWE-524",
+    "name": "Use of Cache Containing Sensitive Information",
+    "families": [
+      "CBX"
+    ]
+  },
+  {
+    "id": "CWE-441",
+    "name": "Unintended Proxy or Intermediary (Confused Deputy)",
+    "families": [
+      "CBX",
+      "QEX"
+    ]
+  },
+  {
+    "id": "CWE-269",
+    "name": "Improper Privilege Management",
+    "families": [
+      "CLX"
+    ]
+  },
+  {
+    "id": "CWE-732",
+    "name": "Incorrect Permission Assignment for Critical Resource",
+    "families": [
+      "CLX"
+    ]
+  },
+  {
+    "id": "CWE-78",
+    "name": "OS Command Injection",
+    "families": [
+      "CIX"
+    ]
+  },
+  {
+    "id": "CWE-77",
+    "name": "Command Injection",
+    "families": [
+      "CIX"
+    ]
+  },
+  {
+    "id": "CWE-436",
+    "name": "Interpretation Conflict",
+    "families": [
+      "XD",
+      "PDX"
+    ]
+  },
+  {
+    "id": "CWE-327",
+    "name": "Use of a Broken or Risky Cryptographic Algorithm",
+    "families": [
+      "CRX"
+    ]
+  },
+  {
+    "id": "CWE-326",
+    "name": "Inadequate Encryption Strength",
+    "families": [
+      "CRX"
+    ]
+  },
+  {
+    "id": "CWE-330",
+    "name": "Use of Insufficiently Random Values",
+    "families": [
+      "CRX"
+    ]
+  },
+  {
+    "id": "CWE-434",
+    "name": "Unrestricted Upload of File with Dangerous Type",
+    "families": [
+      "UPX"
+    ]
+  },
+  {
+    "id": "CWE-119",
+    "name": "Improper Restriction of Operations within a Memory Buffer",
+    "families": [
+      "MSX"
+    ]
+  },
+  {
+    "id": "CWE-416",
+    "name": "Use After Free",
+    "families": [
+      "MSX"
+    ]
+  },
+  {
+    "id": "CWE-787",
+    "name": "Out-of-Bounds Write",
+    "families": [
+      "MSX"
+    ]
+  },
+  {
+    "id": "CWE-312",
+    "name": "Cleartext Storage of Sensitive Information",
+    "families": [
+      "MBX"
+    ]
+  },
+  {
+    "id": "CWE-923",
+    "name": "Improper Restriction of Communication Channel to Intended Endpoints",
+    "families": [
+      "MBX"
+    ]
+  },
+  {
+    "id": "CWE-22",
+    "name": "Path Traversal",
+    "families": [
+      "PTX"
+    ]
+  },
+  {
+    "id": "CWE-89",
+    "name": "SQL Injection",
+    "families": [
+      "QIX"
+    ]
+  },
+  {
+    "id": "CWE-90",
+    "name": "LDAP Injection",
+    "families": [
+      "QIX"
+    ]
+  },
+  {
+    "id": "CWE-943",
+    "name": "Improper Neutralization of Special Elements in Data Query Logic (NoSQL Injection)",
+    "families": [
+      "QIX"
+    ]
+  },
+  {
+    "id": "CWE-345",
+    "name": "Insufficient Verification of Data Authenticity",
+    "families": [
+      "QEX",
+      "RIX"
+    ]
+  },
+  {
+    "id": "CWE-352",
+    "name": "Cross-Site Request Forgery (CSRF)",
+    "families": [
+      "RIX"
+    ]
+  },
+  {
+    "id": "CWE-444",
+    "name": "Inconsistent Interpretation of HTTP Requests (Request Smuggling)",
+    "families": [
+      "HDS"
+    ]
+  },
+  {
+    "id": "CWE-400",
+    "name": "Uncontrolled Resource Consumption",
+    "families": [
+      "REX"
+    ]
+  },
+  {
+    "id": "CWE-770",
+    "name": "Allocation of Resources Without Limits or Throttling",
+    "families": [
+      "REX"
+    ]
+  },
+  {
+    "id": "CWE-200",
+    "name": "Exposure of Sensitive Information to an Unauthorized Actor",
+    "families": [
+      "SDX"
+    ]
+  },
+  {
+    "id": "CWE-359",
+    "name": "Exposure of Private Personal Information to an Unauthorized Actor",
+    "families": [
+      "SDX"
+    ]
+  },
+  {
+    "id": "CWE-841",
+    "name": "Improper Enforcement of Behavioral Workflow",
+    "families": [
+      "BCX",
+      "SMX"
+    ]
+  },
+  {
+    "id": "CWE-682",
+    "name": "Incorrect Calculation",
+    "families": [
+      "BCX"
+    ]
+  },
+  {
+    "id": "CWE-918",
+    "name": "Server-Side Request Forgery (SSRF)",
+    "families": [
+      "SX"
+    ]
+  },
+  {
+    "id": "CWE-1104",
+    "name": "Use of Unmaintained Third-Party Components",
+    "families": [
+      "SCX"
+    ]
+  },
+  {
+    "id": "CWE-829",
+    "name": "Inclusion of Functionality from Untrusted Control Sphere",
+    "families": [
+      "SCX"
+    ]
+  }
+]

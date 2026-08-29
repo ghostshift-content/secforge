@@ -1,0 +1,216 @@
+[
+  {
+    "prefix": "ACX",
+    "name": "Access control",
+    "count": 32,
+    "cwe": [
+      "CWE-284",
+      "CWE-639",
+      "CWE-862",
+      "CWE-863"
+    ]
+  },
+  {
+    "prefix": "ATX",
+    "name": "Account takeover",
+    "count": 16,
+    "cwe": [
+      "CWE-287",
+      "CWE-640",
+      "CWE-307"
+    ]
+  },
+  {
+    "prefix": "AIX",
+    "name": "AI agent",
+    "count": 12,
+    "cwe": [
+      "CWE-1427",
+      "CWE-668"
+    ]
+  },
+  {
+    "prefix": "XX",
+    "name": "Browser XSS",
+    "count": 16,
+    "cwe": [
+      "CWE-79"
+    ]
+  },
+  {
+    "prefix": "CBX",
+    "name": "Cache boundary",
+    "count": 8,
+    "cwe": [
+      "CWE-524",
+      "CWE-441"
+    ]
+  },
+  {
+    "prefix": "CLX",
+    "name": "Cloud IAM",
+    "count": 12,
+    "cwe": [
+      "CWE-269",
+      "CWE-732"
+    ]
+  },
+  {
+    "prefix": "CIX",
+    "name": "Command execution",
+    "count": 18,
+    "cwe": [
+      "CWE-78",
+      "CWE-77"
+    ]
+  },
+  {
+    "prefix": "XD",
+    "name": "Cross-cutting static differentials",
+    "count": 20,
+    "cwe": [
+      "CWE-436"
+    ]
+  },
+  {
+    "prefix": "CRX",
+    "name": "Cryptographic misuse",
+    "count": 10,
+    "cwe": [
+      "CWE-327",
+      "CWE-326",
+      "CWE-330"
+    ]
+  },
+  {
+    "prefix": "UPX",
+    "name": "File upload",
+    "count": 8,
+    "cwe": [
+      "CWE-434"
+    ]
+  },
+  {
+    "prefix": "MSX",
+    "name": "Memory safety",
+    "count": 13,
+    "cwe": [
+      "CWE-119",
+      "CWE-416",
+      "CWE-787"
+    ]
+  },
+  {
+    "prefix": "MBX",
+    "name": "Mobile client",
+    "count": 10,
+    "cwe": [
+      "CWE-312",
+      "CWE-923"
+    ]
+  },
+  {
+    "prefix": "PDX",
+    "name": "Parser differential",
+    "count": 8,
+    "cwe": [
+      "CWE-436"
+    ]
+  },
+  {
+    "prefix": "PTX",
+    "name": "Path traversal",
+    "count": 13,
+    "cwe": [
+      "CWE-22"
+    ]
+  },
+  {
+    "prefix": "QIX",
+    "name": "Query injection",
+    "count": 6,
+    "cwe": [
+      "CWE-89",
+      "CWE-90",
+      "CWE-943"
+    ]
+  },
+  {
+    "prefix": "QEX",
+    "name": "Queue / event boundary",
+    "count": 8,
+    "cwe": [
+      "CWE-345",
+      "CWE-441"
+    ]
+  },
+  {
+    "prefix": "RIX",
+    "name": "Request integrity",
+    "count": 7,
+    "cwe": [
+      "CWE-352",
+      "CWE-345"
+    ]
+  },
+  {
+    "prefix": "HDS",
+    "name": "Request smuggling",
+    "count": 8,
+    "cwe": [
+      "CWE-444"
+    ]
+  },
+  {
+    "prefix": "REX",
+    "name": "Resource exhaustion",
+    "count": 11,
+    "cwe": [
+      "CWE-400",
+      "CWE-770"
+    ]
+  },
+  {
+    "prefix": "SDX",
+    "name": "Sensitive data exposure",
+    "count": 8,
+    "cwe": [
+      "CWE-200",
+      "CWE-359"
+    ]
+  },
+  {
+    "prefix": "BCX",
+    "name": "Smart contract",
+    "count": 11,
+    "cwe": [
+      "CWE-841",
+      "CWE-682"
+    ]
+  },
+  {
+    "prefix": "SX",
+    "name": "SSRF",
+    "count": 11,
+    "cwe": [
+      "CWE-918"
+    ]
+  },
+  {
+    "prefix": "SMX",
+    "name": "State machine",
+    "count": 7,
+    "cwe": [
+      "CWE-841"
+    ]
+  },
+  {
+    "prefix": "SCX",
+    "name": "Supply chain",
+    "count": 8,
+    "cwe": [
+      "CWE-1104",
+      "CWE-829"
+    ]
+  }
+]

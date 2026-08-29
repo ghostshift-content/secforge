@@ -94,3 +94,5 @@ export class Store {
 }
 
 export { projectId, ID };
+// Graph layer (nodes/edges/claims) — re-exported so consumers reach it via @secforge/store.
+export { writeNodes, writeEdges, readGraph, neighbourhood } from './graph.js';

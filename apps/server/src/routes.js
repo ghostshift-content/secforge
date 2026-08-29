@@ -3,10 +3,10 @@
 // stubs where a Phase engine lands later (map, assess). Nothing 500s.
 
 import { SessionManager } from '@secforge/session';
-import { Store } from '@secforge/store';
+import { Store, readGraph } from '@secforge/store';
 import { runAssessment } from '@secforge/assess';
-import { FAMILIES } from '@secforge/patterns';
-import { featureGraph } from '@secforge/map';
+import { FAMILIES, loadCanonicalCards, cweCatalog } from '@secforge/patterns';
+import { mapProject } from '@secforge/map';
 
 const mgr = new SessionManager();
 const store = new Store();
@@ -28,8 +28,13 @@ export async function handleApi(req, res, url) {
     // /api/health
     if (parts[0] === 'health') return json(res, 200, { ok: true, service: 'secforge', ts: Date.now() }), true;
 
-    // /api/patterns  → the family registry (pattern picker + CWE checklist backing)
-    if (parts[0] === 'patterns' && method === 'GET') return json(res, 200, { families: FAMILIES }), true;
+    // /api/patterns → family registry (pattern picker);  /api/patterns/cards → 281 canonical cards
+    if (parts[0] === 'patterns' && method === 'GET') {
+      if (parts[1] === 'cards') return json(res, 200, { cards: loadCanonicalCards() }), true;
+      return json(res, 200, { families: FAMILIES }), true;
+    }
+    // /api/cwe → CWE catalog (the "By CWE" view)
+    if (parts[0] === 'cwe' && method === 'GET') return json(res, 200, { cwe: cweCatalog() }), true;
 
     // /api/projects
     if (parts[0] === 'projects' && parts.length === 1) {
@@ -42,7 +47,16 @@ export async function handleApi(req, res, url) {
       const pid = parts[1], sub = parts[2];
       if (sub === 'findings') return json(res, 200, { findings: await store.listFindings(pid) }), true;
       if (sub === 'coverage') return json(res, 200, coverageStub()), true;
-      if (sub === 'graph') return json(res, 200, featureGraph()), true;
+      if (sub === 'graph') return json(res, 200, await readGraph(store, pid)), true;
+    }
+
+    // POST /api/projects/:id/map → run the mapping engine over the project's source
+    if (parts[0] === 'projects' && parts.length === 3 && parts[2] === 'map' && method === 'POST') {
+      const pid = parts[1];
+      const proj = (await store.listProjects()).find((p) => p.id === pid);
+      if (!proj) return json(res, 404, { error: 'no such project' }), true;
+      const result = await mapProject({ sourceRoot: proj.sourceRoot, store, projectId: pid });
+      return json(res, 200, result), true;
     }
 
     // /api/sessions/:id  (+ /pause /resume /cancel /scan)   ?project=<id>

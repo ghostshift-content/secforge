@@ -1,0 +1,1407 @@
+[
+  {
+    "id": "ACX-01",
+    "family": "ACX",
+    "title": "Scope-preserving direct object access"
+  },
+  {
+    "id": "ACX-02",
+    "family": "ACX",
+    "title": "Equivalent mutation policy parity"
+  },
+  {
+    "id": "ACX-03",
+    "family": "ACX",
+    "title": "Caller scope after privilege elevation"
+  },
+  {
+    "id": "ACX-04",
+    "family": "ACX",
+    "title": "Privilege and resource scope alignment"
+  },
+  {
+    "id": "ACX-05",
+    "family": "ACX",
+    "title": "Delegated authority confinement"
+  },
+  {
+    "id": "ACX-06",
+    "family": "ACX",
+    "title": "Fail-closed execution provenance"
+  },
+  {
+    "id": "ACX-07",
+    "family": "ACX",
+    "title": "Authorization tuple preservation in queries and caches"
+  },
+  {
+    "id": "ACX-08",
+    "family": "ACX",
+    "title": "Authentic AI and tool state transitions"
+  },
+  {
+    "id": "ACX-09",
+    "family": "ACX",
+    "title": "Complete capability binding"
+  },
+  {
+    "id": "ACX-10",
+    "family": "ACX",
+    "title": "Approval bound to immutable semantics"
+  },
+  {
+    "id": "ACX-11",
+    "family": "ACX",
+    "title": "Resolved discriminator authority"
+  },
+  {
+    "id": "ACX-12",
+    "family": "ACX",
+    "title": "Event subscriber principal confinement"
+  },
+  {
+    "id": "ACX-13",
+    "family": "ACX",
+    "title": "Side-effect authorization during replay and simulation"
+  },
+  {
+    "id": "ACX-14",
+    "family": "ACX",
+    "title": "Complete selected-target authorization"
+  },
+  {
+    "id": "ACX-15",
+    "family": "ACX",
+    "title": "Effective collection authorization"
+  },
+  {
+    "id": "ACX-16",
+    "family": "ACX",
+    "title": "Structural authorization predicates"
+  },
+  {
+    "id": "ACX-17",
+    "family": "ACX",
+    "title": "Privilege matched to output and effect"
+  },
+  {
+    "id": "ACX-18",
+    "family": "ACX",
+    "title": "Bounded privilege over bounded primitives"
+  },
+  {
+    "id": "ACX-19",
+    "family": "ACX",
+    "title": "Domain policy through generic facades"
+  },
+  {
+    "id": "ACX-20",
+    "family": "ACX",
+    "title": "Per-item and per-field batch authorization"
+  },
+  {
+    "id": "ACX-21",
+    "family": "ACX",
+    "title": "Secret-read privilege lattice separation"
+  },
+  {
+    "id": "ACX-22",
+    "family": "ACX",
+    "title": "Single authoritative policy decision"
+  },
+  {
+    "id": "ACX-23",
+    "family": "ACX",
+    "title": "Security-sensitive field and value assignment"
+  },
+  {
+    "id": "ACX-24",
+    "family": "ACX",
+    "title": "Authorization before every terminal branch"
+  },
+  {
+    "id": "ACX-25",
+    "family": "ACX",
+    "title": "Unauthorized existence and metadata confidentiality"
+  },
+  {
+    "id": "ACX-26",
+    "family": "ACX",
+    "title": "Current authority and lifecycle revalidation"
+  },
+  {
+    "id": "ACX-27",
+    "family": "ACX",
+    "title": "Authentic acting identity and delegation chain"
+  },
+  {
+    "id": "ACX-28",
+    "family": "ACX",
+    "title": "Relationship transition authority"
+  },
+  {
+    "id": "ACX-29",
+    "family": "ACX",
+    "title": "Atomic authorization and mutation"
+  },
+  {
+    "id": "ACX-30",
+    "family": "ACX",
+    "title": "Delegated authority ceiling"
+  },
+  {
+    "id": "ACX-31",
+    "family": "ACX",
+    "title": "Accountable privileged-action provenance"
+  },
+  {
+    "id": "ACX-32",
+    "family": "ACX",
+    "title": "Authorized state-machine transitions"
+  },
+  {
+    "id": "ATX-01",
+    "family": "ATX",
+    "title": "Passkey ceremony binding failure"
+  },
+  {
+    "id": "ATX-02",
+    "family": "ATX",
+    "title": "Authentication assurance downgrade"
+  },
+  {
+    "id": "ATX-03",
+    "family": "ATX",
+    "title": "Federated and linked identity confusion"
+  },
+  {
+    "id": "ATX-04",
+    "family": "ATX",
+    "title": "Device authorization transaction confusion"
+  },
+  {
+    "id": "ATX-05",
+    "family": "ATX",
+    "title": "Refresh-token family replay"
+  },
+  {
+    "id": "ATX-06",
+    "family": "ATX",
+    "title": "Primary identifier change takeover"
+  },
+  {
+    "id": "ATX-07",
+    "family": "ATX",
+    "title": "One-time authentication and recovery token binding"
+  },
+  {
+    "id": "ATX-08",
+    "family": "ATX",
+    "title": "Session and federation lifecycle divergence"
+  },
+  {
+    "id": "ATX-09",
+    "family": "ATX",
+    "title": "Trusted-device credential transfer"
+  },
+  {
+    "id": "ATX-10",
+    "family": "ATX",
+    "title": "Support and impersonation identity confusion"
+  },
+  {
+    "id": "ATX-11",
+    "family": "ATX",
+    "title": "Account discovery and recovery oracle"
+  },
+  {
+    "id": "ATX-12",
+    "family": "ATX",
+    "title": "Privilege-transition session fixation"
+  },
+  {
+    "id": "ATX-13",
+    "family": "ATX",
+    "title": "Authentication attempt and lockout control divergence"
+  },
+  {
+    "id": "ATX-14",
+    "family": "ATX",
+    "title": "Server-side credential policy bypass"
+  },
+  {
+    "id": "ATX-15",
+    "family": "ATX",
+    "title": "Token verifier and claim binding failure"
+  },
+  {
+    "id": "ATX-16",
+    "family": "ATX",
+    "title": "Atomic identity claim and one-time transition"
+  },
+  {
+    "id": "AIX-01",
+    "family": "AIX",
+    "title": "Untrusted context becomes instruction"
+  },
+  {
+    "id": "AIX-02",
+    "family": "AIX",
+    "title": "Forged trusted conversation state"
+  },
+  {
+    "id": "AIX-03",
+    "family": "AIX",
+    "title": "Declared tool and resolved operation diverge"
+  },
+  {
+    "id": "AIX-04",
+    "family": "AIX",
+    "title": "Retrieval drops tenant or document authority"
+  },
+  {
+    "id": "AIX-05",
+    "family": "AIX",
+    "title": "Tool output reaches a second active sink"
+  },
+  {
+    "id": "AIX-06",
+    "family": "AIX",
+    "title": "Durable agent-memory poisoning"
+  },
+  {
+    "id": "AIX-07",
+    "family": "AIX",
+    "title": "Approval and execution semantic drift"
+  },
+  {
+    "id": "AIX-08",
+    "family": "AIX",
+    "title": "Agent credential and authority laundering"
+  },
+  {
+    "id": "AIX-09",
+    "family": "AIX",
+    "title": "Autonomous loop and fan-out amplification"
+  },
+  {
+    "id": "AIX-10",
+    "family": "AIX",
+    "title": "Model output used as authoritative policy"
+  },
+  {
+    "id": "AIX-11",
+    "family": "AIX",
+    "title": "Cross-modal instruction smuggling"
+  },
+  {
+    "id": "AIX-12",
+    "family": "AIX",
+    "title": "Secret-bearing context disclosure"
+  },
+  {
+    "id": "XX-01",
+    "family": "XX",
+    "title": "Trusted Types policy and gadget bypass"
+  },
+  {
+    "id": "XX-02",
+    "family": "XX",
+    "title": "DOM name and property clobbering"
+  },
+  {
+    "id": "XX-03",
+    "family": "XX",
+    "title": "Browser channel authenticity and capability confusion"
+  },
+  {
+    "id": "XX-04",
+    "family": "XX",
+    "title": "Serialized state and hydration grammar breakout"
+  },
+  {
+    "id": "XX-05",
+    "family": "XX",
+    "title": "Content Security Policy trust failure"
+  },
+  {
+    "id": "XX-06",
+    "family": "XX",
+    "title": "Executable navigation and URL interpretation"
+  },
+  {
+    "id": "XX-07",
+    "family": "XX",
+    "title": "Interpreted template and expression injection"
+  },
+  {
+    "id": "XX-08",
+    "family": "XX",
+    "title": "Active-content preview and conversion escape"
+  },
+  {
+    "id": "XX-09",
+    "family": "XX",
+    "title": "Real-time and streamed rendering gap"
+  },
+  {
+    "id": "XX-10",
+    "family": "XX",
+    "title": "Service-worker and browser-cache persistence"
+  },
+  {
+    "id": "XX-11",
+    "family": "XX",
+    "title": "Prototype and shared-default pollution to browser sink"
+  },
+  {
+    "id": "XX-12",
+    "family": "XX",
+    "title": "Sanitizer policy and post-sanitization mutation"
+  },
+  {
+    "id": "XX-13",
+    "family": "XX",
+    "title": "Decode and canonicalization order mismatch"
+  },
+  {
+    "id": "XX-14",
+    "family": "XX",
+    "title": "Contextual browser output failure"
+  },
+  {
+    "id": "XX-15",
+    "family": "XX",
+    "title": "Browser parser mutation and namespace differential"
+  },
+  {
+    "id": "XX-16",
+    "family": "XX",
+    "title": "Style-context injection and browser exfiltration"
+  },
+  {
+    "id": "CBX-01",
+    "family": "CBX",
+    "title": "Key the complete security tuple"
+  },
+  {
+    "id": "CBX-02",
+    "family": "CBX",
+    "title": "Align priming authority with consumption authority"
+  },
+  {
+    "id": "CBX-03",
+    "family": "CBX",
+    "title": "Canonicalize keys and `Vary` semantics consistently"
+  },
+  {
+    "id": "CBX-04",
+    "family": "CBX",
+    "title": "Keep private responses out of broader caches"
+  },
+  {
+    "id": "CBX-05",
+    "family": "CBX",
+    "title": "Invalidate on authority and object-state change"
+  },
+  {
+    "id": "CBX-06",
+    "family": "CBX",
+    "title": "Fail closed for negative, error, and partial entries"
+  },
+  {
+    "id": "CBX-07",
+    "family": "CBX",
+    "title": "Preserve policy across cache layers and purges"
+  },
+  {
+    "id": "CBX-08",
+    "family": "CBX",
+    "title": "Isolate capacity and eviction by accountable scope"
+  },
+  {
+    "id": "CLX-01",
+    "family": "CLX",
+    "title": "Overbroad trust principal"
+  },
+  {
+    "id": "CLX-02",
+    "family": "CLX",
+    "title": "Effective-policy composition drift"
+  },
+  {
+    "id": "CLX-03",
+    "family": "CLX",
+    "title": "Tenant scope missing from storage or keys"
+  },
+  {
+    "id": "CLX-04",
+    "family": "CLX",
+    "title": "Workload-token claim under-binding"
+  },
+  {
+    "id": "CLX-05",
+    "family": "CLX",
+    "title": "Ambient metadata or credential inheritance"
+  },
+  {
+    "id": "CLX-06",
+    "family": "CLX",
+    "title": "Workload-to-host boundary collapse"
+  },
+  {
+    "id": "CLX-07",
+    "family": "CLX",
+    "title": "Unbound serverless or event source"
+  },
+  {
+    "id": "CLX-08",
+    "family": "CLX",
+    "title": "Secret leakage through deployment artifacts"
+  },
+  {
+    "id": "CLX-09",
+    "family": "CLX",
+    "title": "Network-policy composition drift"
+  },
+  {
+    "id": "CLX-10",
+    "family": "CLX",
+    "title": "Encryption-authority mismatch"
+  },
+  {
+    "id": "CLX-11",
+    "family": "CLX",
+    "title": "Mutable deployment provenance"
+  },
+  {
+    "id": "CLX-12",
+    "family": "CLX",
+    "title": "Control-plane confused deputy"
+  },
+  {
+    "id": "CIX-01",
+    "family": "CIX",
+    "title": "Option and argument injection"
+  },
+  {
+    "id": "CIX-02",
+    "family": "CIX",
+    "title": "Environment-to-execution injection"
+  },
+  {
+    "id": "CIX-03",
+    "family": "CIX",
+    "title": "Untrusted build and repository hook execution"
+  },
+  {
+    "id": "CIX-04",
+    "family": "CIX",
+    "title": "Executable configuration injection"
+  },
+  {
+    "id": "CIX-05",
+    "family": "CIX",
+    "title": "AI-mediated tool execution"
+  },
+  {
+    "id": "CIX-06",
+    "family": "CIX",
+    "title": "Content classification and handler execution drift"
+  },
+  {
+    "id": "CIX-07",
+    "family": "CIX",
+    "title": "Runtime and plugin dispatch injection"
+  },
+  {
+    "id": "CIX-08",
+    "family": "CIX",
+    "title": "Sandbox capability escape"
+  },
+  {
+    "id": "CIX-09",
+    "family": "CIX",
+    "title": "Second-order stored execution"
+  },
+  {
+    "id": "CIX-10",
+    "family": "CIX",
+    "title": "Expression context capability escalation"
+  },
+  {
+    "id": "CIX-11",
+    "family": "CIX",
+    "title": "Lexical filtering mistaken for confinement"
+  },
+  {
+    "id": "CIX-12",
+    "family": "CIX",
+    "title": "Shell grammar injection"
+  },
+  {
+    "id": "CIX-13",
+    "family": "CIX",
+    "title": "Untrusted deserialization execution"
+  },
+  {
+    "id": "CIX-14",
+    "family": "CIX",
+    "title": "Active content processor execution"
+  },
+  {
+    "id": "CIX-15",
+    "family": "CIX",
+    "title": "Execution policy denylist drift"
+  },
+  {
+    "id": "CIX-16",
+    "family": "CIX",
+    "title": "Application protocol grammar injection"
+  },
+  {
+    "id": "CIX-17",
+    "family": "CIX",
+    "title": "Untrusted template or expression source evaluation"
+  },
+  {
+    "id": "CIX-18",
+    "family": "CIX",
+    "title": "External resource expansion in structured parsers"
+  },
+  {
+    "id": "XD-01",
+    "family": "XD",
+    "title": "Post-validation semantic drift"
+  },
+  {
+    "id": "XD-02",
+    "family": "XD",
+    "title": "Multiple-parser interpretation drift"
+  },
+  {
+    "id": "XD-03",
+    "family": "XD",
+    "title": "Integrity decision omits consumed semantics"
+  },
+  {
+    "id": "XD-04",
+    "family": "XD",
+    "title": "Declared type and runtime dispatch diverge"
+  },
+  {
+    "id": "XD-05",
+    "family": "XD",
+    "title": "Authorized principal and execution identity diverge"
+  },
+  {
+    "id": "XD-06",
+    "family": "XD",
+    "title": "Scope and cardinality drift"
+  },
+  {
+    "id": "XD-07",
+    "family": "XD",
+    "title": "Equivalent entry-point control drift"
+  },
+  {
+    "id": "XD-08",
+    "family": "XD",
+    "title": "Output or side effect exceeds route authority"
+  },
+  {
+    "id": "XD-09",
+    "family": "XD",
+    "title": "Approval bound to mutable state"
+  },
+  {
+    "id": "XD-10",
+    "family": "XD",
+    "title": "State-transition path divergence"
+  },
+  {
+    "id": "XD-11",
+    "family": "XD",
+    "title": "Non-atomic check and effect"
+  },
+  {
+    "id": "XD-12",
+    "family": "XD",
+    "title": "Partial-failure value or authority gain"
+  },
+  {
+    "id": "XD-13",
+    "family": "XD",
+    "title": "Limit enforced after expensive work"
+  },
+  {
+    "id": "XD-14",
+    "family": "XD",
+    "title": "Amplification and lifecycle escape"
+  },
+  {
+    "id": "XD-15",
+    "family": "XD",
+    "title": "Resolver selects unauthorized provenance"
+  },
+  {
+    "id": "XD-16",
+    "family": "XD",
+    "title": "Build, artifact, and runtime identity drift"
+  },
+  {
+    "id": "XD-17",
+    "family": "XD",
+    "title": "Envelope policy omits payload semantics"
+  },
+  {
+    "id": "XD-18",
+    "family": "XD",
+    "title": "Permissive indeterminate-state fallback"
+  },
+  {
+    "id": "XD-19",
+    "family": "XD",
+    "title": "Cache key omits the security tuple"
+  },
+  {
+    "id": "XD-20",
+    "family": "XD",
+    "title": "Control-plane content gains data-plane authority"
+  },
+  {
+    "id": "CRX-01",
+    "family": "CRX",
+    "title": "Nonce or IV uniqueness failure"
+  },
+  {
+    "id": "CRX-02",
+    "family": "CRX",
+    "title": "Encryption without required authenticity"
+  },
+  {
+    "id": "CRX-03",
+    "family": "CRX",
+    "title": "Incomplete signature or MAC context"
+  },
+  {
+    "id": "CRX-04",
+    "family": "CRX",
+    "title": "Algorithm, key, issuer, or key-use confusion"
+  },
+  {
+    "id": "CRX-05",
+    "family": "CRX",
+    "title": "Predictable security randomness"
+  },
+  {
+    "id": "CRX-06",
+    "family": "CRX",
+    "title": "Password and secret derivation misuse"
+  },
+  {
+    "id": "CRX-07",
+    "family": "CRX",
+    "title": "Verification oracle or distinguishable failure"
+  },
+  {
+    "id": "CRX-08",
+    "family": "CRX",
+    "title": "Key scope, storage, rotation, and revocation failure"
+  },
+  {
+    "id": "CRX-09",
+    "family": "CRX",
+    "title": "Peer or certificate verification bypass"
+  },
+  {
+    "id": "CRX-10",
+    "family": "CRX",
+    "title": "Primitive, mode, and parameter security"
+  },
+  {
+    "id": "UPX-01",
+    "family": "UPX",
+    "title": "Bound cost before upload admission"
+  },
+  {
+    "id": "UPX-02",
+    "family": "UPX",
+    "title": "Bind validation to the consumed file type"
+  },
+  {
+    "id": "UPX-03",
+    "family": "UPX",
+    "title": "Constrain the final storage identity"
+  },
+  {
+    "id": "UPX-04",
+    "family": "UPX",
+    "title": "Bind quarantine approval to immutable content"
+  },
+  {
+    "id": "UPX-05",
+    "family": "UPX",
+    "title": "Serve uploaded content with inert browser semantics"
+  },
+  {
+    "id": "UPX-06",
+    "family": "UPX",
+    "title": "Bound container and derivative processing"
+  },
+  {
+    "id": "UPX-07",
+    "family": "UPX",
+    "title": "Preserve uploader authority through processors"
+  },
+  {
+    "id": "UPX-08",
+    "family": "UPX",
+    "title": "Authorize replacement, deduplication, and references"
+  },
+  {
+    "id": "MSX-01",
+    "family": "MSX",
+    "title": "Integer overflow before allocation or access"
+  },
+  {
+    "id": "MSX-02",
+    "family": "MSX",
+    "title": "Allocation/access length divergence"
+  },
+  {
+    "id": "MSX-03",
+    "family": "MSX",
+    "title": "Signed-to-unsigned size confusion"
+  },
+  {
+    "id": "MSX-04",
+    "family": "MSX",
+    "title": "Escaped object lifetime"
+  },
+  {
+    "id": "MSX-05",
+    "family": "MSX",
+    "title": "Double release or allocator mismatch"
+  },
+  {
+    "id": "MSX-06",
+    "family": "MSX",
+    "title": "Unbounded index or offset"
+  },
+  {
+    "id": "MSX-07",
+    "family": "MSX",
+    "title": "Uninitialized data exposure"
+  },
+  {
+    "id": "MSX-08",
+    "family": "MSX",
+    "title": "Attacker-controlled format grammar"
+  },
+  {
+    "id": "MSX-09",
+    "family": "MSX",
+    "title": "Foreign-interface contract mismatch"
+  },
+  {
+    "id": "MSX-10",
+    "family": "MSX",
+    "title": "Concurrent lifetime or mutation race"
+  },
+  {
+    "id": "MSX-11",
+    "family": "MSX",
+    "title": "Parser cursor or recursion escape"
+  },
+  {
+    "id": "MSX-12",
+    "family": "MSX",
+    "title": "Unvalidated privileged address domain"
+  },
+  {
+    "id": "MSX-13",
+    "family": "MSX",
+    "title": "Type, tag, and layout confusion"
+  },
+  {
+    "id": "MBX-01",
+    "family": "MBX",
+    "title": "Authorize exported, IPC, and deep-link entry points"
+  },
+  {
+    "id": "MBX-02",
+    "family": "MBX",
+    "title": "Keep untrusted web content outside native authority"
+  },
+  {
+    "id": "MBX-03",
+    "family": "MBX",
+    "title": "Protect local copies and ambient device surfaces"
+  },
+  {
+    "id": "MBX-04",
+    "family": "MBX",
+    "title": "Authenticate the intended server on every network path"
+  },
+  {
+    "id": "MBX-05",
+    "family": "MBX",
+    "title": "Bind updates and dynamic code to trusted provenance"
+  },
+  {
+    "id": "MBX-06",
+    "family": "MBX",
+    "title": "Bind delegated intents and pending capabilities"
+  },
+  {
+    "id": "MBX-07",
+    "family": "MBX",
+    "title": "Enforce security invariants beyond the client"
+  },
+  {
+    "id": "MBX-08",
+    "family": "MBX",
+    "title": "Partition cached state across accounts and tenants"
+  },
+  {
+    "id": "MBX-09",
+    "family": "MBX",
+    "title": "Minimize notification and peripheral disclosure"
+  },
+  {
+    "id": "MBX-10",
+    "family": "MBX",
+    "title": "Bind biometric and device proof to the protected operation"
+  },
+  {
+    "id": "PDX-01",
+    "family": "PDX",
+    "title": "Guard/consumer parser disagreement"
+  },
+  {
+    "id": "PDX-02",
+    "family": "PDX",
+    "title": "Validation before final normalization"
+  },
+  {
+    "id": "PDX-03",
+    "family": "PDX",
+    "title": "Duplicate-field precedence disagreement"
+  },
+  {
+    "id": "PDX-04",
+    "family": "PDX",
+    "title": "Type, default, and numeric coercion drift"
+  },
+  {
+    "id": "PDX-05",
+    "family": "PDX",
+    "title": "Non-execution classification and parser-routing drift"
+  },
+  {
+    "id": "PDX-06",
+    "family": "PDX",
+    "title": "Canonicalization mismatch in integrity checks"
+  },
+  {
+    "id": "PDX-07",
+    "family": "PDX",
+    "title": "Recursive merge, prototype, or inherited-default injection"
+  },
+  {
+    "id": "PDX-08",
+    "family": "PDX",
+    "title": "Structured-field or record-boundary injection"
+  },
+  {
+    "id": "PTX-01",
+    "family": "PTX",
+    "title": "Multi-stage path decoding and normalization"
+  },
+  {
+    "id": "PTX-02",
+    "family": "PTX",
+    "title": "Absolute-path base reset"
+  },
+  {
+    "id": "PTX-03",
+    "family": "PTX",
+    "title": "Platform path namespace confusion"
+  },
+  {
+    "id": "PTX-04",
+    "family": "PTX",
+    "title": "Archive links and special-entry escape"
+  },
+  {
+    "id": "PTX-05",
+    "family": "PTX",
+    "title": "Temporary-file race and alias replacement"
+  },
+  {
+    "id": "PTX-06",
+    "family": "PTX",
+    "title": "Upload and download filename injection"
+  },
+  {
+    "id": "PTX-07",
+    "family": "PTX",
+    "title": "Signed object-key representation mismatch"
+  },
+  {
+    "id": "PTX-08",
+    "family": "PTX",
+    "title": "Filesystem link and mount containment escape"
+  },
+  {
+    "id": "PTX-09",
+    "family": "PTX",
+    "title": "Virtual hierarchy scope escape"
+  },
+  {
+    "id": "PTX-10",
+    "family": "PTX",
+    "title": "File and path protocol confusion"
+  },
+  {
+    "id": "PTX-11",
+    "family": "PTX",
+    "title": "Stored identifier to privileged path"
+  },
+  {
+    "id": "PTX-12",
+    "family": "PTX",
+    "title": "Direct filesystem containment failure"
+  },
+  {
+    "id": "PTX-13",
+    "family": "PTX",
+    "title": "Archive entry target containment failure"
+  },
+  {
+    "id": "QIX-01",
+    "family": "QIX",
+    "title": "Value becomes query grammar"
+  },
+  {
+    "id": "QIX-02",
+    "family": "QIX",
+    "title": "Dynamic identifier, operator, or query-shape injection"
+  },
+  {
+    "id": "QIX-03",
+    "family": "QIX",
+    "title": "Structured query-object operator smuggling"
+  },
+  {
+    "id": "QIX-04",
+    "family": "QIX",
+    "title": "Mandatory security-predicate composition failure"
+  },
+  {
+    "id": "QIX-05",
+    "family": "QIX",
+    "title": "Second-order stored query injection"
+  },
+  {
+    "id": "QIX-06",
+    "family": "QIX",
+    "title": "Query translation or gateway semantic drift"
+  },
+  {
+    "id": "QEX-01",
+    "family": "QEX",
+    "title": "Authenticate the producer and complete event"
+  },
+  {
+    "id": "QEX-02",
+    "family": "QEX",
+    "title": "Preserve the initiating principal through execution"
+  },
+  {
+    "id": "QEX-03",
+    "family": "QEX",
+    "title": "Reauthorize the resolved tenant, resource, and action"
+  },
+  {
+    "id": "QEX-04",
+    "family": "QEX",
+    "title": "Bind schema and type to the resolved handler"
+  },
+  {
+    "id": "QEX-05",
+    "family": "QEX",
+    "title": "Make delivery replay-safe and idempotent"
+  },
+  {
+    "id": "QEX-06",
+    "family": "QEX",
+    "title": "Enforce ordering, freshness, and current state"
+  },
+  {
+    "id": "QEX-07",
+    "family": "QEX",
+    "title": "Make failure, acknowledgment, and retry converge"
+  },
+  {
+    "id": "QEX-08",
+    "family": "QEX",
+    "title": "Authorize fan-out and every recipient"
+  },
+  {
+    "id": "RIX-01",
+    "family": "RIX",
+    "title": "Cross-site request action parity gap"
+  },
+  {
+    "id": "RIX-02",
+    "family": "RIX",
+    "title": "Callback or webhook integrity under-binding"
+  },
+  {
+    "id": "RIX-03",
+    "family": "RIX",
+    "title": "Replay and freshness under-binding"
+  },
+  {
+    "id": "RIX-04",
+    "family": "RIX",
+    "title": "Trusted-proxy and forwarding-header confusion"
+  },
+  {
+    "id": "RIX-05",
+    "family": "RIX",
+    "title": "Credentialed cross-origin policy composition"
+  },
+  {
+    "id": "RIX-06",
+    "family": "RIX",
+    "title": "Upgraded or persistent channel identity drift"
+  },
+  {
+    "id": "RIX-07",
+    "family": "RIX",
+    "title": "Method, route, and media-type enforcement drift"
+  },
+  {
+    "id": "HDS-01",
+    "family": "HDS",
+    "title": "Conflicting body-framing precedence"
+  },
+  {
+    "id": "HDS-02",
+    "family": "HDS",
+    "title": "Duplicate framing-field disagreement"
+  },
+  {
+    "id": "HDS-03",
+    "family": "HDS",
+    "title": "Transfer-coding normalization disagreement"
+  },
+  {
+    "id": "HDS-04",
+    "family": "HDS",
+    "title": "Protocol-conversion boundary drift"
+  },
+  {
+    "id": "HDS-05",
+    "family": "HDS",
+    "title": "Bodyless and special-method disagreement"
+  },
+  {
+    "id": "HDS-06",
+    "family": "HDS",
+    "title": "Authority and routing-identity drift"
+  },
+  {
+    "id": "HDS-07",
+    "family": "HDS",
+    "title": "Trailer and hop-by-hop policy drift"
+  },
+  {
+    "id": "HDS-08",
+    "family": "HDS",
+    "title": "Cross-request impact from parser drift"
+  },
+  {
+    "id": "REX-01",
+    "family": "REX",
+    "title": "Limit applied after allocation or buffering"
+  },
+  {
+    "id": "REX-02",
+    "family": "REX",
+    "title": "Expansion, decompression, or recursive structure amplification"
+  },
+  {
+    "id": "REX-03",
+    "family": "REX",
+    "title": "Algorithmic complexity and pathological parsing"
+  },
+  {
+    "id": "REX-04",
+    "family": "REX",
+    "title": "Unbounded query, sort, aggregation, or result materialization"
+  },
+  {
+    "id": "REX-05",
+    "family": "REX",
+    "title": "Multiplicative fan-out amplification"
+  },
+  {
+    "id": "REX-06",
+    "family": "REX",
+    "title": "Retry, requeue, and failure amplification"
+  },
+  {
+    "id": "REX-07",
+    "family": "REX",
+    "title": "Persistent storage, cache, log, or temporary-artifact exhaustion"
+  },
+  {
+    "id": "REX-08",
+    "family": "REX",
+    "title": "Tenant quota and shared-pool accounting mismatch"
+  },
+  {
+    "id": "REX-09",
+    "family": "REX",
+    "title": "Low-cost process termination"
+  },
+  {
+    "id": "REX-10",
+    "family": "REX",
+    "title": "Resource and handle leakage"
+  },
+  {
+    "id": "REX-11",
+    "family": "REX",
+    "title": "Deadlock, livelock, and starvation"
+  },
+  {
+    "id": "SDX-01",
+    "family": "SDX",
+    "title": "Project responses to the caller's field authority"
+  },
+  {
+    "id": "SDX-02",
+    "family": "SDX",
+    "title": "Keep secrets out of errors and observability channels"
+  },
+  {
+    "id": "SDX-03",
+    "family": "SDX",
+    "title": "Exclude live secrets from source and build artifacts"
+  },
+  {
+    "id": "SDX-04",
+    "family": "SDX",
+    "title": "Protect secondary copies through their lifecycle"
+  },
+  {
+    "id": "SDX-05",
+    "family": "SDX",
+    "title": "Redact the consumed canonical representation"
+  },
+  {
+    "id": "SDX-06",
+    "family": "SDX",
+    "title": "Authorize outbound recipients and destinations"
+  },
+  {
+    "id": "SDX-07",
+    "family": "SDX",
+    "title": "Secret plaintext escapes through a secondary channel"
+  },
+  {
+    "id": "SDX-08",
+    "family": "SDX",
+    "title": "Prove metadata and inference oracles cross a boundary"
+  },
+  {
+    "id": "BCX-01",
+    "family": "BCX",
+    "title": "Authorize the deployed proxy and storage context"
+  },
+  {
+    "id": "BCX-02",
+    "family": "BCX",
+    "title": "Preserve state invariants across callbacks and reentrancy"
+  },
+  {
+    "id": "BCX-03",
+    "family": "BCX",
+    "title": "Use fresh manipulation-resistant oracle semantics"
+  },
+  {
+    "id": "BCX-04",
+    "family": "BCX",
+    "title": "Bind signatures to domain, action, and one-time state"
+  },
+  {
+    "id": "BCX-05",
+    "family": "BCX",
+    "title": "Preserve units, range, and rounding through arithmetic"
+  },
+  {
+    "id": "BCX-06",
+    "family": "BCX",
+    "title": "Keep internal accounting aligned with custody"
+  },
+  {
+    "id": "BCX-07",
+    "family": "BCX",
+    "title": "Make transaction ordering respect a concrete user invariant"
+  },
+  {
+    "id": "BCX-08",
+    "family": "BCX",
+    "title": "Constrain upgrades and governance transitions"
+  },
+  {
+    "id": "BCX-09",
+    "family": "BCX",
+    "title": "Bind cross-chain messages to source, finality, and replay state"
+  },
+  {
+    "id": "BCX-10",
+    "family": "BCX",
+    "title": "Bound gas while preserving essential liveness"
+  },
+  {
+    "id": "BCX-11",
+    "family": "BCX",
+    "title": "Keep adversarial chain state out of security randomness"
+  },
+  {
+    "id": "SX-01",
+    "family": "SX",
+    "title": "Destination representation or parser drift"
+  },
+  {
+    "id": "SX-02",
+    "family": "SX",
+    "title": "Redirect, retry, or failover destination drift"
+  },
+  {
+    "id": "SX-03",
+    "family": "SX",
+    "title": "DNS resolution and connection-binding drift"
+  },
+  {
+    "id": "SX-04",
+    "family": "SX",
+    "title": "Proxy, gateway, or mesh route drift"
+  },
+  {
+    "id": "SX-05",
+    "family": "SX",
+    "title": "Scheme, adapter, or local-transport substitution"
+  },
+  {
+    "id": "SX-06",
+    "family": "SX",
+    "title": "Credential or trusted-header forwarding drift"
+  },
+  {
+    "id": "SX-07",
+    "family": "SX",
+    "title": "Service-discovery or logical-target confusion"
+  },
+  {
+    "id": "SX-08",
+    "family": "SX",
+    "title": "Deferred or persistent fetch context drift"
+  },
+  {
+    "id": "SX-09",
+    "family": "SX",
+    "title": "Delegated or indirect input controls a privileged fetch"
+  },
+  {
+    "id": "SX-10",
+    "family": "SX",
+    "title": "Response, artifact, or reachability-oracle amplification"
+  },
+  {
+    "id": "SX-11",
+    "family": "SX",
+    "title": "Attacker-selected destination reaches privileged transport"
+  },
+  {
+    "id": "SMX-01",
+    "family": "SMX",
+    "title": "Skipped, reordered, or alternate transition"
+  },
+  {
+    "id": "SMX-02",
+    "family": "SMX",
+    "title": "Replay, multiplicity, or idempotency failure"
+  },
+  {
+    "id": "SMX-03",
+    "family": "SMX",
+    "title": "Non-atomic check and mutation"
+  },
+  {
+    "id": "SMX-04",
+    "family": "SMX",
+    "title": "Partial commit and failure-order abuse"
+  },
+  {
+    "id": "SMX-05",
+    "family": "SMX",
+    "title": "Rollback, cancellation, and compensation confusion"
+  },
+  {
+    "id": "SMX-06",
+    "family": "SMX",
+    "title": "Mutable or stale transition proof"
+  },
+  {
+    "id": "SMX-07",
+    "family": "SMX",
+    "title": "Client-selected business and economic value"
+  },
+  {
+    "id": "SCX-01",
+    "family": "SCX",
+    "title": "Resolve only from the intended provenance"
+  },
+  {
+    "id": "SCX-02",
+    "family": "SCX",
+    "title": "Pin immutable dependency and artifact identity"
+  },
+  {
+    "id": "SCX-03",
+    "family": "SCX",
+    "title": "Verify provenance with the intended trust policy"
+  },
+  {
+    "id": "SCX-04",
+    "family": "SCX",
+    "title": "Constrain build-time and install-time execution"
+  },
+  {
+    "id": "SCX-05",
+    "family": "SCX",
+    "title": "Separate untrusted contributions from release authority"
+  },
+  {
+    "id": "SCX-06",
+    "family": "SCX",
+    "title": "Bind reviewed source to loaded runtime bytes"
+  },
+  {
+    "id": "SCX-07",
+    "family": "SCX",
+    "title": "Isolate build caches and intermediate artifacts"
+  },
+  {
+    "id": "SCX-08",
+    "family": "SCX",
+    "title": "Secure publisher and update lifecycle"
+  }
+]
