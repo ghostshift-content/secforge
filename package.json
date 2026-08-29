@@ -11,7 +11,7 @@
     "serve": "node apps/server/src/server.js",
     "cli": "node apps/cli/bin/secforge.js",
     "doctor": "node apps/cli/bin/secforge.js doctor",
-    "test": "node --test packages/**/test/*.test.js"
+    "test": "node --test packages/**/test/*.test.js apps/**/test/*.test.js"
   },
   "license": "MIT"
 }

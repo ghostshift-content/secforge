@@ -10,6 +10,7 @@ import { jobEnvelope } from '@secforge/schemas';
 import { getAdapter } from '@secforge/adapters';
 import { FAMILIES } from '@secforge/patterns';
 import { analyze, validateCandidate } from './rules.js';
+import { decorateFinding, buildSnippet, loadManifest, readSourceRoot } from './decorate.js';
 import { computeCoverage } from './coverage.js';
 import { indexGraph, endpointsOfFeature } from './graph-utils.js';
 
@@ -197,7 +198,7 @@ async function llmAssist(graph, engine, existingCandidates) {
 
 // REPORT stage: persist each surviving candidate as a finding, plus its graph shadow
 // (VULN_CANDIDATE + FINDING nodes, VIOLATES/MAPS_TO_CWE/CANDIDATE_IN/PROMOTED_TO edges).
-async function report(store, projectId, candidates, graph, engineUsed) {
+async function report(store, projectId, candidates, graph, engineUsed, ctx = {}) {
   const findings = [];
   const seenNodes = new Set(graph.nodes.map((n) => n.id));
   const newNodes = [];
@@ -207,7 +208,9 @@ async function report(store, projectId, candidates, graph, engineUsed) {
   let n = 0;
   for (const candidate of candidates) {
     n += 1;
-    const finding = findingOf(candidate, n, engineUsed);
+    const base = findingOf(candidate, n, engineUsed);
+    const snippet = buildSnippet(ctx.sourceRoot, ctx.manifest, base.evidence);
+    const finding = decorateFinding(base, { snippet });
     await store.writeFinding(projectId, finding);
     findings.push(finding);
 
@@ -217,7 +220,7 @@ async function report(store, projectId, candidates, graph, engineUsed) {
       data: { family: candidate.family, cwe: candidate.cwe, severity: candidate.severity, rule: candidate.rule },
       claims: [candidate.evidence] });
     addNode({ id: finding.id, type: 'FINDING', name: candidate.title,
-      data: { family: candidate.family, cwe: candidate.cwe, severity: candidate.severity },
+      data: { family: candidate.family, cwe: candidate.cwe, severity: finding.severity },
       claims: [candidate.evidence] });
     addNode({ id: patternId, type: 'PATTERN', name: candidate.family, data: {}, claims: [] });
     addNode({ id: cweId, type: 'CWE', name: candidate.cwe, data: {}, claims: [] });
@@ -273,7 +276,8 @@ export async function runAssessment({ store, projectId, scope = {}, engine = 'ru
   let findings = [];
   let coverage = null;
   if (store && projectId) {
-    findings = await report(store, projectId, validated, graph, engine);
+    const [sourceRoot, manifest] = await Promise.all([readSourceRoot(store, projectId), loadManifest(store, projectId)]);
+    findings = await report(store, projectId, validated, graph, engine, { sourceRoot, manifest });
     coverage = await computeCoverage(store, projectId);
   }
   onEvent?.({ stage: 'reporter', promoted: findings.length });
@@ -282,3 +286,5 @@ export async function runAssessment({ store, projectId, scope = {}, engine = 'ru
 }
 
 export { analyze, validateCandidate, computeCoverage, ID };
+export { severityFromScore, RULE_CVSS } from './rules.js';
+export { decorateFinding, buildSnippet, loadManifest, readSourceRoot } from './decorate.js';

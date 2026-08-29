@@ -5,7 +5,12 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { Store, writeNodes, writeEdges } from '@secforge/store';
-import { analyze, validateCandidate, computeCoverage } from '@secforge/assess';
+import { mapProject } from '@secforge/map';
+import { cweName } from '@secforge/patterns';
+import {
+  analyze, validateCandidate, computeCoverage,
+  severityFromScore, decorateFinding, buildSnippet, loadManifest, readSourceRoot, runAssessment,
+} from '@secforge/assess';
 
 // --- tiny in-memory graph builders (mirror the shapes the map engine emits) ---
 const feature = (id, name) => ({ id, type: 'FEATURE', name, data: {}, claims: [{ file: 'a.js', line: 1 }] });
@@ -123,5 +128,106 @@ describe('computeCoverage()', () => {
     const acx = cov.matrix[0].cells.find((c) => c.family === 'ACX');
     assert.equal(acx.verdict, 'vuln');
     assert.equal(cov.byCwe.some((r) => r.cwe === 'CWE-639' && r.count === 1), true);
+  });
+});
+
+describe('severityFromScore() — CVSS v3.1 bands', () => {
+  test('band boundaries', () => {
+    assert.equal(severityFromScore(9.0), 'critical');
+    assert.equal(severityFromScore(7.5), 'high');   // SDX & missing-auth land here
+    assert.equal(severityFromScore(7.0), 'high');
+    assert.equal(severityFromScore(6.5), 'medium'); // IDOR
+    assert.equal(severityFromScore(5.3), 'medium'); // REX
+    assert.equal(severityFromScore(4.0), 'medium');
+    assert.equal(severityFromScore(0.1), 'low');
+    assert.equal(severityFromScore(0), 'info');
+  });
+});
+
+describe('decorateFinding() — pure enrichment', () => {
+  const base = (rule, cwe) => ({
+    id: 'finding:F-1-x', rule, cwe, family: 'SDX', title: 't',
+    method: 'GET', route: '/x/:id', evidence: { file: 'a.js', line: 3 }, severity: 'critical',
+  });
+
+  test('SDX derives high (not the old hardcoded critical) + carries cvss vector/score', () => {
+    const d = decorateFinding(base('SDX-unauth-datastore-reachable', 'CWE-200'), {});
+    assert.equal(d.severity, 'high');
+    assert.equal(d.cvss.score, 7.5);
+    assert.match(d.cvss.vector, /^CVSS:3\.1\//);
+  });
+
+  test('cwe_name is looked up (never invented); unknown cwe → null', () => {
+    const d = decorateFinding(base('ACX-idor-no-owner-check', 'CWE-639'), {});
+    assert.equal(d.cwe_name, 'Insecure Direct Object Reference (IDOR)');
+    assert.equal(cweName('CWE-639'), d.cwe_name);
+    assert.equal(cweName('CWE-99999'), null);
+    const u = decorateFinding({ ...base('ACX-idor-no-owner-check', 'CWE-99999') }, {});
+    assert.equal(u.cwe_name, null);
+  });
+
+  test('description + remediation are non-empty and carry the graph clearing condition', () => {
+    const d = decorateFinding(base('ACX-missing-authentication', 'CWE-306'), {});
+    assert.ok(d.description.includes('/x/:id') && d.description.includes('a.js:3'));
+    assert.match(d.remediation, /AUTHENTICATED_BY edge/);
+  });
+
+  test('snippet is passed through untouched', () => {
+    const snip = { file: 'a.js', startLine: 1, endLine: 5, lines: ['x'], sha256: 'abc', stale: false };
+    assert.deepEqual(decorateFinding(base('REX-no-rate-limit', 'CWE-770'), { snippet: snip }).snippet, snip);
+  });
+});
+
+describe('buildSnippet() — sha match vs stale-on-edit (source is NOT frozen)', () => {
+  let tmpRoot, store, pid, sourceRoot;
+
+  before(async () => {
+    tmpRoot = path.join(os.tmpdir(), 'sf-snip-' + crypto.randomBytes(4).toString('hex'));
+    store = new Store(tmpRoot);
+    sourceRoot = path.join(tmpRoot, 'proj');
+    await fs.mkdir(path.join(sourceRoot, 'api'), { recursive: true });
+    // one feature (dir=api) with an UNAUTHENTICATED endpoint + a data store → SDX + missing-auth
+    await fs.writeFile(path.join(sourceRoot, 'api', 'orders.js'), [
+      "router.get('/orders/:id', (req, res) => res.json({}));",
+      "const Order = mongoose.model('Order', schema);",
+      '',
+    ].join('\n'));
+    const project = await store.openProject({ sourceRoot, name: 'SNIP' });
+    pid = project.id;
+    await mapProject({ sourceRoot, store, projectId: pid });
+  });
+
+  after(async () => { await fs.rm(tmpRoot, { recursive: true, force: true }); });
+
+  test('end-to-end scan: SDX finding is high, and its snippet matches the snapshot (stale:false)', async () => {
+    const result = await runAssessment({ store, projectId: pid, scope: {}, engine: 'rules' });
+    const sdx = result.findings.find((f) => f.rule === 'SDX-unauth-datastore-reachable');
+    assert.ok(sdx, 'an SDX finding was produced');
+    assert.equal(sdx.severity, 'high'); // was hardcoded critical before S6
+    assert.equal(sdx.cwe_name, 'Exposure of Sensitive Information to an Unauthorized Actor');
+    assert.ok(sdx.snippet, 'snippet present');
+    assert.equal(sdx.snippet.stale, false);
+    assert.ok(sdx.snippet.lines.some((l) => l.includes("/orders/:id")));
+  });
+
+  test('editing the source after the scan → re-read shows stale:true with the NEW lines', async () => {
+    const manifest = await loadManifest(store, pid);
+    const root = await readSourceRoot(store, pid);
+    assert.equal(root, sourceRoot);
+    // edit the file AFTER the snapshot was taken
+    await fs.writeFile(path.join(sourceRoot, 'api', 'orders.js'), [
+      "router.get('/orders/:id', (req, res) => res.json({ CHANGED: true }));",
+      "const Order = mongoose.model('Order', schema);",
+      '',
+    ].join('\n'));
+    const snip = buildSnippet(root, manifest, { file: 'api/orders.js', line: 1 });
+    assert.equal(snip.stale, true);
+    assert.ok(snip.lines.some((l) => l.includes('CHANGED')), 'reflects the edited source');
+  });
+
+  test('no manifest entry or unreadable file → null', () => {
+    assert.equal(buildSnippet(sourceRoot, new Map(), { file: 'api/orders.js', line: 1 }), null);
+    const m = new Map([['nope.js', 'deadbeef']]);
+    assert.equal(buildSnippet(sourceRoot, m, { file: 'nope.js', line: 1 }), null);
   });
 });

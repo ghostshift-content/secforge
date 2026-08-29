@@ -12,6 +12,27 @@ function evidenceOf(node) {
   return { file: claim.file || null, line: claim.line || null };
 }
 
+// CVSS v3.1 base metrics co-located with each rule so score/vector/severity stay in sync.
+// Severity is DERIVED from score (standard v3.1 bands) — never hardcoded per rule.
+export const RULE_CVSS = Object.freeze({
+  'ACX-missing-authentication':     { vector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N', score: 7.5 },
+  'ACX-idor-no-owner-check':        { vector: 'CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N', score: 6.5 },
+  'REX-no-rate-limit':              { vector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L', score: 5.3 },
+  'SDX-unauth-datastore-reachable': { vector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N', score: 7.5 },
+});
+
+// Standard CVSS v3.1 qualitative severity bands.
+export function severityFromScore(score) {
+  if (typeof score !== 'number') return 'info';
+  if (score >= 9.0) return 'critical';
+  if (score >= 7.0) return 'high';
+  if (score >= 4.0) return 'medium';
+  if (score >= 0.1) return 'low';
+  return 'info';
+}
+
+const severityOf = (rule) => severityFromScore(RULE_CVSS[rule]?.score);
+
 // ACX / CWE-639 (IDOR): an object read (GET with an id path-param) that has authentication but
 // NO authorization/ownership check — the classic "read any record by id" shape.
 function ruleIdor(idx, graph) {
@@ -24,7 +45,7 @@ function ruleIdor(idx, graph) {
       title: `${ep.name} reads an object by id without an ownership/authorization check`,
       featureId: feature?.id || null, endpointId: ep.id,
       method: ep.data?.method || null, route: ep.data?.route || null,
-      severity: 'high', evidence: evidenceOf(ep),
+      severity: severityOf('ACX-idor-no-owner-check'), evidence: evidenceOf(ep),
     });
   }
   return out;
@@ -41,7 +62,7 @@ function ruleMissingAuth(idx, graph) {
       title: `${ep.name} is reachable without authentication`,
       featureId: feature?.id || null, endpointId: ep.id,
       method: ep.data?.method || null, route: ep.data?.route || null,
-      severity: 'high', evidence: evidenceOf(ep),
+      severity: severityOf('ACX-missing-authentication'), evidence: evidenceOf(ep),
     });
   }
   return out;
@@ -60,7 +81,7 @@ function ruleRex(idx, graph) {
       title: `${ep.name} is state-changing with no rate-limit signal`,
       featureId: feature?.id || null, endpointId: ep.id,
       method, route: ep.data?.route || null,
-      severity: 'medium', evidence: evidenceOf(ep),
+      severity: severityOf('REX-no-rate-limit'), evidence: evidenceOf(ep),
     });
   }
   return out;
@@ -79,7 +100,7 @@ function ruleSdx(idx, graph) {
         title: `${ds.name} data store reachable from unauthenticated ${ep.name}`,
         featureId: feature.id, endpointId: ep.id,
         method: ep.data?.method || null, route: ep.data?.route || null,
-        severity: 'critical', evidence: evidenceOf(ep),
+        severity: severityOf('SDX-unauth-datastore-reachable'), evidence: evidenceOf(ep),
       });
     }
   }

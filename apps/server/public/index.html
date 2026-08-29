@@ -1472,7 +1472,7 @@
       + '<div><span class="muted" style="display:inline-block;width:90px;">Rule</span><span class="mono chip">'+esc(f.rule||f.method||'—')+'</span></div>'
       + '<div><span class="muted" style="display:inline-block;width:90px;">CWE</span><span class="mono chip">'+esc(f.cwe||'—')+(f.cwe_name?' · '+esc(f.cwe_name):'')+'</span></div>'
       + (score!=null ? '<div><span class="muted" style="display:inline-block;width:90px;">CVSS</span><span class="mono chip">'+score+'</span> <span class="mono chip">'+esc((f.cvss&&f.cvss.vector)||'')+'</span></div>' : '')
-      + '<div><span class="muted" style="display:inline-block;width:90px;">Confidence</span><span class="mono chip">'+esc(f.confidence||'static')+'</span></div>'
+      + '<div><span class="muted" style="display:inline-block;width:90px;">Assessment</span><span class="mono chip">'+esc(f.assessment_mode||f.confidence||'static')+'</span>'+(f.verification?' <span class="mono chip">'+esc(f.verification)+'</span>':'')+'</div>'
       + snippetHtml(f.snippet, f.evidence && f.evidence.line);
     var remEl = document.getElementById('findRemediation');
     if(remEl) remEl.innerHTML = f.remediation ? esc(f.remediation) : '<span class="muted">No remediation text recorded for this rule.</span>';

@@ -30,6 +30,15 @@ async function validEngineId(id) {
 // Also normalise scope.patterns to family prefixes: a family stays, a CWE id maps to the families
 // that carry it, an unknown token (e.g. a custom-set name) is dropped. If nothing resolves, drop
 // the field so the scan runs all applicable rules rather than silently matching nothing (C9).
+// S3-6: reject an EXPLICIT invalid scope.mode/scope.method instead of silently coercing it.
+// Absent fields are fine (they default in normaliseScope); a present-but-unknown value is a 400.
+export function scopeInputError(s) {
+  if (!s || typeof s !== 'object') return null;
+  if (s.mode != null && !SCOPE_KINDS.includes(s.mode)) return 'mode';
+  if (s.method != null && !RUN_METHODS.includes(s.method)) return 'method';
+  return null;
+}
+
 function normaliseScope(s) {
   const scope = (s && typeof s === 'object') ? { ...s } : {};
   scope.mode = SCOPE_KINDS.includes(scope.mode) ? scope.mode : 'all';
@@ -152,6 +161,8 @@ export async function handleApi(req, res, url) {
       }
       if (method === 'POST' && action === 'cancel') return json(res, 200, await mgr.cancel(project, sid)), true;
       if (method === 'POST' && action === 'scan') {
+        const bad = scopeInputError(body.scope);                            // S3-6: don't silently coerce an explicit bad scope
+        if (bad) return json(res, 400, { error: `invalid scope.${bad}`, allowed: { mode: [...SCOPE_KINDS], method: [...RUN_METHODS] } }), true;
         const engine = await validEngineId(body.engine);                    // N1/N2: known adapter id only, coerced to a string
         const scope = normaliseScope(body.scope);                           // input validation vs SCOPE_KINDS/RUN_METHODS
         const cur = await mgr.status(project, sid);

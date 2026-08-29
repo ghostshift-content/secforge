@@ -80,6 +80,7 @@ const CWE_NAMES = Object.freeze({
   'CWE-269': 'Improper Privilege Management',
   'CWE-284': 'Improper Access Control',
   'CWE-287': 'Improper Authentication',
+  'CWE-306': 'Missing Authentication for Critical Function',
   'CWE-307': 'Improper Restriction of Excessive Authentication Attempts',
   'CWE-312': 'Cleartext Storage of Sensitive Information',
   'CWE-326': 'Inadequate Encryption Strength',
@@ -126,6 +127,9 @@ const FIELD_LABEL_RE = Object.freeze({
   overlaps: /\*\*Overlaps:\*\*/i,
 });
 
+// CWE id -> canonical name (null if unknown — never invent one).
+export function cweName(id) { return CWE_NAMES[id] || null; }
+
 export function familyByPrefix(prefix) { return FAMILIES.find((f) => f.prefix === prefix) || null; }
 export function cwesForFamilies(prefixes) {
   return [...new Set(prefixes.flatMap((p) => (familyByPrefix(p)?.cwe) || []))];
@@ -152,8 +156,18 @@ export function loadCanonicalCards() {
   catch { return []; }
 }
 
+// Extract the one-line value following a bold field label within a card body. null if absent.
+function extractField(body, re) {
+  const m = body.match(re);
+  if (!m) return null;
+  const first = body.slice(m.index + m[0].length).split(/\r?\n/)[0].trim();
+  return first || null;
+}
+
 // Build-time helper (maintainers only) to re-vendor the catalog from a reference checkout.
 // NOT used at runtime; requires an explicit path so no external location is baked into the product.
+// Captures the 6 CARD_FIELDS bodies from the markdown between one card header and the next; a card
+// whose body yields at least one field is flagged hasBody:true so the UI knows the text is present.
 export function importCanonicalCards(root) {
   if (!root) throw new Error('importCanonicalCards(root): pass an explicit reference path');
   const refDir = join(root, 'vulnerabilities-pattern-skill', 'references');
@@ -163,8 +177,20 @@ export function importCanonicalCards(root) {
     const file = REFERENCE_FILE_BY_PREFIX[family.prefix];
     const p = file && join(refDir, file);
     if (!p || !existsSync(p)) continue;
-    for (const match of readFileSync(p, 'utf8').matchAll(CARD_HEADER_RE)) {
-      cards.push({ id: match[1], family: family.prefix, title: match[2].trim() });
+    const text = readFileSync(p, 'utf8');
+    const matches = [...text.matchAll(CARD_HEADER_RE)];
+    for (let i = 0; i < matches.length; i += 1) {
+      const match = matches[i];
+      const bodyStart = match.index + match[0].length;
+      const body = text.slice(bodyStart, i + 1 < matches.length ? matches[i + 1].index : text.length);
+      const fields = {};
+      let hasBody = false;
+      for (const key of CARD_FIELDS) {
+        const val = extractField(body, FIELD_LABEL_RE[key]);
+        fields[key] = val;
+        if (val) hasBody = true;
+      }
+      cards.push({ id: match[1], family: family.prefix, title: match[2].trim(), ...fields, hasBody });
     }
   }
   return cards;
