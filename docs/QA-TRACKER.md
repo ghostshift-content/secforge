@@ -85,6 +85,6 @@ QA withdrew the "47 dead controls" figure: 0 dead of 110 actionable controls.
 - [~] **S4-3** Per-feature action count is wired from real counts; QA couldn't retest on the single-feature fixture — needs a multi-feature project to confirm.
 
 ## S5 · LOW / hygiene
-- [~] **S5-1** +11 tests added for packages/assess (rules + computeCoverage) and packages/map (ERROR/MAPPED); 34/34 pass. Adapters/patterns/memory/env/routes still thin. — 0b0b0b7
+- [~] **S5-1** Test suite grown 22 → 48: assess (rules, computeCoverage, decorate/CVSS/snippet), map (ERROR/MAPPED), routes (scope-400). Adapters/patterns/memory/env still thin. — 0b0b0b7/32e05e5
 - [x] **S5-2** Removed coverageStub() (routes.js) and hasAuthzGuard()+AUTHZ_EDGE_TYPES (graph-utils.js). — 0b0b0b7
 - [x] **S5-3** README status revised — every pane renders real data or an explicit empty state; tabs lock until a project opens. — a4f5889
