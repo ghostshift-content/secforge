@@ -1,9 +1,10 @@
 // @secforge/assess/rules — the deterministic rule engine. Pure function over a graph → candidates.
-// No LLM: three hand-written rules, each a plain predicate over nodes/edges/claims.
+// No LLM: hand-written rules, each a plain predicate over nodes/edges/claims. Auth edges emitted by
+// the map engine let these distinguish guarded vs unguarded endpoints (precision over noise).
 import { ID } from '@secforge/schemas';
 import {
-  STATE_CHANGING_METHODS, indexGraph, featureOfEndpoint, hasAuthzGuard,
-  hasRateLimitGuard, dataStoresOfFeature,
+  STATE_CHANGING_METHODS, indexGraph, featureOfEndpoint,
+  hasAuthn, hasAuthz, isObjectRead, hasRateLimitGuard, dataStoresOfFeature,
 } from './graph-utils.js';
 
 function evidenceOf(node) {
@@ -11,15 +12,33 @@ function evidenceOf(node) {
   return { file: claim.file || null, line: claim.line || null };
 }
 
-// ACX / CWE-639: an endpoint with no authorization/authentication guard edge at all.
-function ruleAcx(idx, graph) {
+// ACX / CWE-639 (IDOR): an object read (GET with an id path-param) that has authentication but
+// NO authorization/ownership check — the classic "read any record by id" shape.
+function ruleIdor(idx, graph) {
   const out = [];
   for (const ep of graph.nodes) {
-    if (ep.type !== 'ENDPOINT' || hasAuthzGuard(idx, ep.id)) continue;
+    if (ep.type !== 'ENDPOINT' || !isObjectRead(ep) || !hasAuthn(idx, ep.id) || hasAuthz(idx, ep.id)) continue;
     const feature = featureOfEndpoint(idx, ep.id);
     out.push({
-      family: 'ACX', cwe: 'CWE-639', rule: 'ACX-no-authz-guard',
-      title: `${ep.name} has no authorization guard`,
+      family: 'ACX', cwe: 'CWE-639', rule: 'ACX-idor-no-owner-check',
+      title: `${ep.name} reads an object by id without an ownership/authorization check`,
+      featureId: feature?.id || null, endpointId: ep.id,
+      method: ep.data?.method || null, route: ep.data?.route || null,
+      severity: 'high', evidence: evidenceOf(ep),
+    });
+  }
+  return out;
+}
+
+// ACX / CWE-306: an endpoint reachable with NO authentication and NO authorization at all.
+function ruleMissingAuth(idx, graph) {
+  const out = [];
+  for (const ep of graph.nodes) {
+    if (ep.type !== 'ENDPOINT' || hasAuthn(idx, ep.id) || hasAuthz(idx, ep.id)) continue;
+    const feature = featureOfEndpoint(idx, ep.id);
+    out.push({
+      family: 'ACX', cwe: 'CWE-306', rule: 'ACX-missing-authentication',
+      title: `${ep.name} is reachable without authentication`,
       featureId: feature?.id || null, endpointId: ep.id,
       method: ep.data?.method || null, route: ep.data?.route || null,
       severity: 'high', evidence: evidenceOf(ep),
@@ -47,11 +66,11 @@ function ruleRex(idx, graph) {
   return out;
 }
 
-// SDX / CWE-200: a data store reachable (same feature) from an endpoint with no auth guard.
+// SDX / CWE-200: a data store reachable (same feature) from a fully-unauthenticated endpoint.
 function ruleSdx(idx, graph) {
   const out = [];
   for (const ep of graph.nodes) {
-    if (ep.type !== 'ENDPOINT' || hasAuthzGuard(idx, ep.id)) continue;
+    if (ep.type !== 'ENDPOINT' || hasAuthn(idx, ep.id) || hasAuthz(idx, ep.id)) continue;
     const feature = featureOfEndpoint(idx, ep.id);
     if (!feature) continue;
     for (const ds of dataStoresOfFeature(idx, feature.id)) {
@@ -68,23 +87,29 @@ function ruleSdx(idx, graph) {
 }
 
 const RULES = [
-  { family: 'ACX', run: ruleAcx },
+  { family: 'ACX', run: ruleIdor },
+  { family: 'ACX', run: ruleMissingAuth },
   { family: 'REX', run: ruleRex },
   { family: 'SDX', run: ruleSdx },
 ];
 
-// Re-check a single already-produced candidate against a (possibly re-read) graph — the
-// independent VALIDATE pass. Re-derives from the same node/edge predicates, but against the
-// candidate alone rather than a fresh batch scan.
+// Independent VALIDATE pass: re-derive a single candidate's predicate against the graph.
 const REVERIFY = {
-  'ACX-no-authz-guard': (c, idx) => !hasAuthzGuard(idx, c.endpointId),
+  'ACX-idor-no-owner-check': (c, idx) => {
+    const ep = idx.nodeById.get(c.endpointId);
+    return !!ep && isObjectRead(ep) && hasAuthn(idx, c.endpointId) && !hasAuthz(idx, c.endpointId);
+  },
+  'ACX-missing-authentication': (c, idx) => {
+    const ep = idx.nodeById.get(c.endpointId);
+    return !!ep && !hasAuthn(idx, c.endpointId) && !hasAuthz(idx, c.endpointId);
+  },
   'REX-no-rate-limit': (c, idx) => {
     const ep = idx.nodeById.get(c.endpointId);
     return !!ep && !hasRateLimitGuard(idx, ep);
   },
   'SDX-unauth-datastore-reachable': (c, idx) => {
     const ep = idx.nodeById.get(c.endpointId);
-    return !!ep && !hasAuthzGuard(idx, c.endpointId) && dataStoresOfFeature(idx, c.featureId).length > 0;
+    return !!ep && !hasAuthn(idx, c.endpointId) && !hasAuthz(idx, c.endpointId) && dataStoresOfFeature(idx, c.featureId).length > 0;
   },
 };
 
@@ -117,14 +142,11 @@ function familyAllowed(family, patterns) {
 
 /**
  * Pure rule engine: graph -> candidates. No I/O, no LLM.
- * @param {{nodes:Array, edges:Array}} graph
- * @param {{scope?:object, patterns?:string[]}} opts
- * @returns {Array<object>} candidates, each {id, family, cwe, title, featureId, endpointId,
+ * @returns {Array<object>} candidates {id, family, cwe, title, featureId, endpointId,
  *   method, route, severity, evidence:{file,line}, rule}
  */
 export function analyze(graph, { scope = {}, patterns = [] } = {}) {
   const idx = indexGraph(graph);
-  // A prompt-driven run still exercises every applicable rule — the prompt is metadata, not a filter.
   const effectivePatterns = scope.method === 'prompt' ? [] : (patterns.length ? patterns : (scope.patterns || []));
 
   const raw = [];

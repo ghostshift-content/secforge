@@ -79,6 +79,10 @@ const matchDataStore = (line) =>
   /\bclass\s+([A-Za-z0-9_]*Model)\b/.exec(line)?.[1] ||
   null;
 
+// Auth guards (heuristic, language-agnostic). AUTHN = "who are you", AUTHZ = "may you".
+const AUTHN_RE = /before_action\s+:authenticate|authenticate_user!?|\blogin_required\b|requires?_login|requireAuth|ensureAuthenticated|isAuthenticated|passport\.authenticate|@login_required|@requires_auth|\[Authorize\]|verify(?:_?token|Token)|AuthGuard/i;
+const AUTHZ_RE = /\bauthorize!?\b|\bcan\?|\bpolicy\b|\bowns?_|\bowner\b|current_user\.\w+\.(?:find|where)|@PreAuthorize|\bPundit\b|authorize_resource|cancancan/i;
+
 function scanFile(sourceRoot, rel) {
   let text;
   try { text = fs.readFileSync(path.join(sourceRoot, rel), 'utf8'); } catch { return []; }
@@ -86,6 +90,8 @@ function scanFile(sourceRoot, rel) {
   const lines = text.split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    if (AUTHN_RE.test(line)) rows.push({ kind: 'AUTHN', file: rel, line: i + 1 });
+    if (AUTHZ_RE.test(line)) rows.push({ kind: 'AUTHZ', file: rel, line: i + 1 });
     const ep = matchEndpoint(line);
     if (ep) { rows.push({ kind: 'ENDPOINT', file: rel, line: i + 1, method: ep.method, route: ep.route }); continue; }
     const svc = matchService(line);
@@ -107,6 +113,16 @@ function buildGraph(inventory) {
   const edges = [];
   const edgeIds = new Set();
   const addEdge = (id, type, src, dst) => { if (!edgeIds.has(id)) { edgeIds.add(id); edges.push({ id, type, src, dst }); } };
+
+  // Per-file auth signals — an endpoint inherits its file's guards (before_action etc. are file-level).
+  const fileAuth = new Map();
+  for (const row of inventory) {
+    if (row.kind !== 'AUTHN' && row.kind !== 'AUTHZ') continue;
+    const fa = fileAuth.get(row.file) || {};
+    if (row.kind === 'AUTHN' && fa.authn == null) fa.authn = row.line;
+    if (row.kind === 'AUTHZ' && fa.authz == null) fa.authz = row.line;
+    fileAuth.set(row.file, fa);
+  }
 
   const clusters = new Map();
   for (const row of inventory) {
@@ -136,6 +152,17 @@ function buildGraph(inventory) {
         addNode({ id, type: 'ENDPOINT', name: `${row.method} ${row.route}`, data: { method: row.method, route: row.route }, claims: [claim] });
         addEdge(`edge:${featureId}:EXPOSES:${id}`, 'EXPOSES', featureId, id);
         counts.endpoints++;
+        const fa = fileAuth.get(row.file);
+        if (fa && fa.authn != null) {
+          const acId = `authcheck:authn:${slugify(row.file)}`;
+          addNode({ id: acId, type: 'AUTH_CHECK', name: 'authenticate', data: { kind: 'authentication' }, claims: [{ file: row.file, line: fa.authn, method: 'grep', confidence: 'medium' }] });
+          addEdge(`edge:${id}:AUTHENTICATED_BY:${acId}`, 'AUTHENTICATED_BY', id, acId);
+        }
+        if (fa && fa.authz != null) {
+          const acId = `authcheck:authz:${slugify(row.file)}`;
+          addNode({ id: acId, type: 'AUTH_CHECK', name: 'authorize', data: { kind: 'authorization' }, claims: [{ file: row.file, line: fa.authz, method: 'grep', confidence: 'medium' }] });
+          addEdge(`edge:${id}:AUTHORIZED_BY:${acId}`, 'AUTHORIZED_BY', id, acId);
+        }
       } else if (row.kind === 'SERVICE') {
         const id = `service:${slugify(row.file)}:${row.line}`;
         addNode({ id, type: 'SERVICE', name: row.name, data: {}, claims: [claim] });

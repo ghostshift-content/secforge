@@ -34,6 +34,22 @@ export function hasAuthzGuard(idx, endpointId) {
   return touching(idx, endpointId).some((e) => AUTHZ_EDGE_TYPES.has(e.type));
 }
 
+// Authentication present (who are you): an AUTHENTICATED_BY edge touches the endpoint.
+export function hasAuthn(idx, endpointId) {
+  return touching(idx, endpointId).some((e) => e.type === 'AUTHENTICATED_BY');
+}
+
+// Authorization present (may you): an AUTHORIZED_BY / GUARDED_BY edge touches the endpoint.
+export function hasAuthz(idx, endpointId) {
+  return touching(idx, endpointId).some((e) => e.type === 'AUTHORIZED_BY' || e.type === 'GUARDED_BY');
+}
+
+const PARAM_RE = /:\w+|<\w+>|\{\w+\}/;
+// A GET whose route carries a path parameter — the object-read shape an IDOR needs.
+export function isObjectRead(ep) {
+  return (ep.data?.method || '').toUpperCase() === 'GET' && PARAM_RE.test(ep.data?.route || '');
+}
+
 export function hasRateLimitGuard(idx, endpointNode) {
   if (endpointNode.data?.rateLimited) return true;
   return touching(idx, endpointNode.id).some((e) => {
