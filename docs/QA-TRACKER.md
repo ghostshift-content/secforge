@@ -79,10 +79,10 @@ QA withdrew the "47 dead controls" figure: 0 dead of 110 actionable controls.
 - [x] **N-3** WIRING.md corrected (Validate-live / Env / patterns cards+import are built, not "planned"). — 3241ad9
 - [x] **N-2** Memory search already fires on Enter (`onkeydown` at the input) + Recall button — verified present. — (prior)
 - [x] **S4-8** In-page tour retired (STEPS=[], Walkthrough → /demo.html); `#proj-acme` exists only in demo.html (the intentional designed mock). — (prior)
-- [~] **N-1** Pattern cards are clickable → detail pane (UI done, 3241ad9); card BODIES on the wire pending backend re-vendor of /api/patterns/cards.
-- [~] **S6** Finding detail renders CVSS/CWE-name/description/snippet/remediation when present (UI done, 3241ad9); the enriched finding RECORD (cvss, cwe_name, description, remediation, snippet, severity-from-CVSS) pending backend.
-- [ ] **S3-6** Invalid scope.mode/method should 400 (not silently coerce) — backend, in progress.
-- [ ] **S4-3** Re-confirm scope action count (QA blocked: single-feature fixture).
+- [x] **N-1** Pattern cards clickable → detail pane; cards.json re-vendored so all 281 carry the 6 CARD_FIELDS on the wire. — 3241ad9/32e05e5
+- [x] **S6** Finding records enriched: cwe_name, cvss {vector,score}, severity DERIVED from score (fixes SDX fake-criticals → high), factual description, honest remediation (graph clearing-condition, no fake diff), sha-verified source snippet (stale flag on edit). UI renders all of it. — 32e05e5
+- [x] **S3-6** Invalid scope.mode/method → 400 {error, allowed:{…}}; absent fields still default. — 32e05e5
+- [~] **S4-3** Per-feature action count is wired from real counts; QA couldn't retest on the single-feature fixture — needs a multi-feature project to confirm.
 
 ## S5 · LOW / hygiene
 - [~] **S5-1** +11 tests added for packages/assess (rules + computeCoverage) and packages/map (ERROR/MAPPED); 34/34 pass. Adapters/patterns/memory/env/routes still thin. — 0b0b0b7
