@@ -203,6 +203,7 @@
     </button>
     <div style="flex-grow:1"></div>
     <button class="walkbtn" onclick="tour.start()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l14 8-14 8z"/></svg>Walkthrough</button>
+    <div id="live-badge" class="enginepill" style="background:#F0FDF4;border-color:#BBF7D0;" title="backend connection"><span class="sd" style="background:var(--ok)"></span><span class="mono" style="font-size:12px;color:#166534;font-weight:600;">live</span></div>
     <div class="enginepill"><span class="dot"></span><span class="mono" style="font-size:12px;color:var(--accent-ink);font-weight:600;">Claude · opus · high</span></div>
     <div class="avatar"></div>
   </div>
@@ -244,7 +245,8 @@
           </div>
 
           <div style="flex:1 1 440px;display:flex;flex-direction:column;gap:12px;">
-            <div style="display:flex;align-items:baseline;justify-content:space-between;"><div style="font-size:15px;font-weight:600;">Recent projects</div><div class="mono muted" style="font-size:12px;">3 sessions saved</div></div>
+            <div style="display:flex;align-items:baseline;justify-content:space-between;"><div style="font-size:15px;font-weight:600;">Recent projects</div><div class="mono muted" style="font-size:12px;" id="recent-count">3 sessions saved</div></div>
+            <div id="recent-projects">
             <button id="proj-acme" class="card" onclick="openMap()" style="text-align:left;border-left:3px solid var(--accent);padding:15px 17px;cursor:pointer;">
               <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;"><div style="font-weight:600;font-size:15px;">acme-api</div><span class="mono chip">@ a1b2c3</span><span class="pill-ok">● session active</span><div style="flex-grow:1"></div><span style="font-size:12.5px;color:var(--accent);font-weight:600;">Resume →</span></div>
               <div class="mono muted" style="font-size:11.5px;margin-top:4px;">Ruby on Rails · 1,284 files</div>
@@ -270,6 +272,7 @@
               <div class="mono muted" style="font-size:11.5px;margin-top:4px;">TypeScript · 2,010 files</div>
               <div style="margin-top:12px;"><div class="bar-track"><div class="bar-fill" style="width:41%;background:var(--info)"></div></div><div class="muted" style="font-size:11px;margin-top:5px;">freezing snapshot · 823 / 2,010 inventoried</div></div>
             </button>
+            </div>
             <div class="mono muted" style="font-size:11.5px;text-align:center;border-top:1px dashed var(--border);padding-top:13px;margin-top:2px;">$ secforge open ~/code/acme-api</div>
           </div>
         </div>
@@ -372,7 +375,7 @@
             </div>
           </div>
 
-          <!-- FEATURE MAP (codengram sections) -->
+          <!-- FEATURE MAP -->
           <div class="msubpanel" data-msub="feature" style="padding:14px 24px 26px;">
             <div class="sechd" style="margin-top:6px"><span class="n">1</span>Feature Identity</div>
             <div class="grid2" style="margin-top:8px;">
@@ -832,7 +835,7 @@
           <div style="border:1.5px dashed var(--border);border-radius:8px;padding:11px 12px;display:flex;align-items:center;gap:8px;color:var(--ink2);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#57534E" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span style="font-size:12.5px;font-weight:500;">Import a pattern folder…</span></div>
         </div>
         <div class="kicker" style="padding:0 17px 6px;font-size:11px;color:var(--ink3);">Canonical families · 24</div>
-        <div class="scroll" style="flex-grow:1;padding:0 9px;">
+        <div id="famlist" class="scroll" style="flex-grow:1;padding:0 9px;">
           <div class="navitem sel" style="border-radius:7px;"><span class="mono" style="font-size:11px;font-weight:600;color:var(--accent);width:34px;">ACX</span>Access control<span class="ct">32</span></div>
           <div class="navitem"><span class="mono" style="font-size:11px;font-weight:600;color:var(--ink2);width:34px;">QIX</span>Query injection<span class="ct">17</span></div>
           <div class="navitem"><span class="mono" style="font-size:11px;font-weight:600;color:var(--ink2);width:34px;">SX</span>SSRF<span class="ct">11</span></div>
@@ -995,7 +998,7 @@
   var STEPS=[
     {tab:'launcher', target:'#proj-acme', title:'Open a project', body:'Every project runs in its own session and remembers everything on disk. The context window is only a cache — nothing is lost when it fills. Pick provider, model and effort here, then open.'},
     {tab:'map', sub:'graph', target:'#kgraph', title:'The code becomes a knowledge graph', body:'On open, SecForge maps the codebase into a typed graph — actors, endpoints, auth checks, services, data stores, jobs. Every node and edge cites file:line. The red edge is a coverage gap: an order read that reaches the store with no owner check.'},
-    {tab:'map', sub:'feature', target:'#ledgerhd', title:'codengram structure, in full', body:'Each feature carries codengram’s complete map — the Endpoint/Action Ledger (the ground-truth denominator), authorization map, actor context, same-functionality clusters and honest depth-status. Object-authz is the column that matters.'},
+    {tab:'map', sub:'feature', target:'#ledgerhd', title:'The full feature map', body:'Each feature carries its complete map — the Endpoint/Action Ledger (the ground-truth denominator), authorization map, actor context, same-functionality clusters and honest depth-status. Object-authz is the column that matters.'},
     {tab:'map', sub:'cons', target:'#conshd', title:'Nothing is silently missing', body:'Consolidation aggregates every feature into the phase1-maps tree: coverage matrices, the ranked Phase 2 review queue (patterns A–H), and a completion gate separating technical from semantic coverage.'},
     {tab:'assess', asub:'run', target:'#assess-pipeline', title:'Run it your way', body:'Scan one feature or all 47 — by pattern family, by CWE, or by just telling the session in plain English what to look for. Agents fan out: framer → hunters → triager → validator → reporter, and only survivors are promoted.'},
     {tab:'assess', asub:'matrix', target:'#covmatrix', title:'Everything is tracked', body:'The portal tracks coverage three ways — by feature, by CWE category, and a feature × pattern matrix where every cell carries a verdict, so nothing is silently skipped.'},
@@ -1083,6 +1086,92 @@
   }
   mselInit('features'); mselInit('patterns');
   show('launcher');
+</script>
+
+<!-- live-data layer: hydrates the designed UI from the API; falls back to sample on any error -->
+<script>
+(function(){
+  function get(p){ return fetch(p).then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); }); }
+  function post(p,body){ return fetch(p,{method:'POST',headers:{'content-type':'application/json'},body:body?JSON.stringify(body):undefined}).then(function(r){ return r.json(); }); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  var ctx = { projects: [], project: null, session: null };
+
+  function setBadge(ok){
+    var el = document.getElementById('live-badge'); if(!el) return;
+    var dot = el.querySelector('.sd'), txt = el.querySelector('span:last-child');
+    if(ok){ el.style.background='#F0FDF4'; el.style.borderColor='#BBF7D0'; if(dot) dot.style.background='var(--ok)'; if(txt){ txt.textContent='live'; txt.style.color='#166534'; } }
+    else  { el.style.background='var(--border2)'; el.style.borderColor='var(--border)'; if(dot) dot.style.background='var(--ink3)'; if(txt){ txt.textContent='offline'; txt.style.color='var(--ink3)'; } }
+  }
+
+  function projectCard(p){
+    var short = esc(p.id).replace('p_','@ ').slice(0,10);
+    return '<button class="card" onclick="openLiveProject(\''+esc(p.id)+'\')" style="text-align:left;padding:15px 17px;cursor:pointer;">'
+      + '<div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;"><div style="font-weight:600;font-size:15px;">'+esc(p.name)+'</div>'
+      + '<span class="mono chip">'+short+'</span><div style="flex-grow:1"></div>'
+      + '<span style="font-size:12.5px;color:var(--accent);font-weight:600;">Open &rarr;</span></div>'
+      + '<div class="mono muted" style="font-size:11.5px;margin-top:4px;">'+esc(p.sourceRoot||'')+'</div></button>';
+  }
+
+  window.openLiveProject = function(id){
+    var p = ctx.projects.find(function(x){ return x.id===id; });
+    if(!p){ if(typeof openMap==='function') openMap(); return; }
+    post('/api/projects', { sourceRoot: p.sourceRoot }).then(function(d){
+      ctx.project = d.project; ctx.session = d.session;
+      if(typeof show==='function'){ show('map'); if(typeof mapSub==='function') mapSub('graph'); }
+      post('/api/projects/'+d.project.id+'/map').then(loadGraph).catch(loadGraph);
+    }).catch(function(){ if(typeof openMap==='function') openMap(); });
+  };
+
+  function loadGraph(){
+    if(!ctx.project) return;
+    get('/api/projects/'+ctx.project.id+'/graph').then(function(g){
+      var host = document.getElementById('kgraph'); if(!host) return;
+      var b = host.querySelector('.live-graph-badge');
+      if(!b){ b = document.createElement('div'); b.className='live-graph-badge';
+        b.style.cssText="position:absolute;top:10px;right:14px;font:600 11px 'IBM Plex Mono',monospace;color:var(--accent-ink);background:var(--tint);border:1px solid var(--accent-brd);padding:3px 9px;border-radius:6px;z-index:2;";
+        host.style.position='relative'; host.appendChild(b); }
+      b.textContent = 'live · '+(g.nodes?g.nodes.length:0)+' nodes · '+(g.edges?g.edges.length:0)+' edges';
+    }).catch(function(){});
+  }
+
+  // Run the assessment for real; keep the designed Live-run view.
+  var _run = window.runAssess;
+  window.runAssess = function(){
+    if(typeof _run==='function') _run();
+    if(ctx.project && ctx.session){
+      post('/api/sessions/'+ctx.session.sessionId+'/scan?project='+ctx.project.id, { scope:{ mode:'all', method:'pattern' } }).catch(function(){});
+    }
+  };
+
+  function hydratePatterns(families){
+    if(!families || !families.length) return;
+    if(typeof window.MSEL!=='undefined' && MSEL.patterns){
+      MSEL.patterns.opts = families.map(function(f){ return { v: f.prefix+' · '+f.name, t: String(f.count) }; }).concat([{ v:'acme-house-rules · 18', t:'yours' }]);
+      MSEL.patterns.sel = MSEL.patterns.sel.filter(function(v){ return MSEL.patterns.opts.some(function(o){ return o.v===v; }); });
+      if(!MSEL.patterns.sel.length) MSEL.patterns.sel = [MSEL.patterns.opts[0].v];
+      if(typeof mselRender==='function') mselRender('patterns');
+    }
+    var fl = document.getElementById('famlist');
+    if(fl){ fl.innerHTML = families.map(function(f,i){
+      return '<div class="navitem'+(i===0?' sel':'')+'" style="border-radius:7px;"><span class="mono" style="font-size:11px;font-weight:600;color:'+(i===0?'var(--accent)':'var(--ink2)')+';width:34px;">'+esc(f.prefix)+'</span>'+esc(f.name)+'<span class="ct">'+f.count+'</span></div>';
+    }).join(''); }
+  }
+
+  function hydrateProjects(projects){
+    ctx.projects = projects || [];
+    var host = document.getElementById('recent-projects');
+    if(!host || !projects || !projects.length) return; // keep designed sample when the store is empty
+    host.innerHTML = projects.map(projectCard).join('');
+    var c = document.getElementById('recent-count'); if(c) c.textContent = projects.length+' project'+(projects.length===1?'':'s');
+  }
+
+  function boot(){
+    get('/api/health').then(function(){ setBadge(true); }).catch(function(){ setBadge(false); });
+    get('/api/patterns').then(function(d){ hydratePatterns(d.families); }).catch(function(){});
+    get('/api/projects').then(function(d){ hydrateProjects(d.projects); }).catch(function(){});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+})();
 </script>
 
 </body>

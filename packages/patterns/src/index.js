@@ -113,7 +113,7 @@ const CWE_NAMES = Object.freeze({
   'CWE-1427': 'Improper Neutralization of Input Used for LLM Prompting',
 });
 
-// The six-field canonical card shape (StaticCodeReview `## <ID> — <title>` card contract).
+// The six-field canonical card shape (`## <ID> — <title>` card contract).
 export const CARD_FIELDS = Object.freeze(['invariant', 'attackerControl', 'differential', 'requiredProof', 'decisiveRejection', 'overlaps']);
 
 // field key -> the exact bold label used in a canonical/custom card's markdown.
@@ -197,4 +197,15 @@ export function loadCustomSet(dir) {
   const files = readdirSync(dir).filter((f) => f.endsWith('.md'));
   const cards = files.map((f) => parseCustomCard(join(dir, f)));
   return customSet(name, cards);
+}
+
+// Import a folder of custom `.md` pattern cards for the UI's import flow. Pure — reads the
+// folder, validates each card's 6 fields, persists nothing. Wraps loadCustomSet.
+export function importCustomFolder(dir) {
+  const { name, cards } = loadCustomSet(dir);
+  return {
+    name,
+    count: cards.length,
+    cards: cards.map((c) => ({ id: c.id, title: c.title, ok: c.ok, missing: c.missing })),
+  };
 }

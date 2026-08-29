@@ -3,7 +3,7 @@
 
 // Knowledge-graph node types. Codengram's recon vocabulary + SecForge's security layer.
 export const NODE_TYPES = Object.freeze([
-  // structure (from codengram)
+  // structure
   'PROJECT', 'SNAPSHOT', 'DOMAIN', 'FILE', 'SYMBOL', 'FEATURE', 'ROUTE', 'ENDPOINT',
   'GRAPHQL_OPERATION', 'JOB', 'SERVICE', 'MODEL', 'DATA_STORE', 'INTEGRATION',
   // identity
@@ -39,7 +39,7 @@ export const SESSION_TRANSITIONS = Object.freeze({
 export const SCOPE_KINDS = Object.freeze(['feature', 'pick', 'all']);
 export const RUN_METHODS = Object.freeze(['pattern', 'prompt', 'full']);
 
-// Finding: four orthogonal fields (from StaticCodeReview).
+// Finding: four orthogonal fields (lifecycle / outcome / verification / assessment-mode).
 export const LIFECYCLE = Object.freeze(['planned', 'queued', 'running', 'awaiting_verification', 'retest_required', 'error', 'terminal']);
 export const OUTCOME = Object.freeze(['pass', 'vulnerable', 'not_applicable', 'deduplicated', 'blocked']);
 export const VERIFICATION = Object.freeze(['unverified', 'verified', 'rejected']);

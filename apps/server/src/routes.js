@@ -4,9 +4,11 @@
 
 import { SessionManager } from '@secforge/session';
 import { Store, readGraph } from '@secforge/store';
-import { runAssessment } from '@secforge/assess';
-import { FAMILIES, loadCanonicalCards, cweCatalog } from '@secforge/patterns';
+import { runAssessment, computeCoverage } from '@secforge/assess';
+import { FAMILIES, loadCanonicalCards, cweCatalog, importCustomFolder } from '@secforge/patterns';
 import { mapProject } from '@secforge/map';
+import { learn, recall, crossProjectRecall, stats } from '@secforge/memory';
+import { registerTarget, getTarget, validateFinding } from '@secforge/env';
 
 const mgr = new SessionManager();
 const store = new Store();
@@ -35,6 +37,8 @@ export async function handleApi(req, res, url) {
     }
     // /api/cwe → CWE catalog (the "By CWE" view)
     if (parts[0] === 'cwe' && method === 'GET') return json(res, 200, { cwe: cweCatalog() }), true;
+    // POST /api/patterns/import  { dir } → validate + import a custom pattern folder
+    if (parts[0] === 'patterns' && parts[1] === 'import' && method === 'POST') return json(res, 200, importCustomFolder(body.dir || '')), true;
 
     // /api/projects
     if (parts[0] === 'projects' && parts.length === 1) {
@@ -42,12 +46,17 @@ export async function handleApi(req, res, url) {
       if (method === 'POST') { const r = await mgr.open(body); return json(res, 201, r), true; }
     }
 
-    // /api/projects/:id/(findings|coverage|graph)
+    // /api/projects/:id/(findings|coverage|graph|memory|env)
     if (parts[0] === 'projects' && parts.length === 3 && method === 'GET') {
       const pid = parts[1], sub = parts[2];
       if (sub === 'findings') return json(res, 200, { findings: await store.listFindings(pid) }), true;
-      if (sub === 'coverage') return json(res, 200, coverageStub()), true;
+      if (sub === 'coverage') return json(res, 200, await computeCoverage(store, pid)), true;
       if (sub === 'graph') return json(res, 200, await readGraph(store, pid)), true;
+      if (sub === 'memory') {
+        const q = url.searchParams.get('q') || '';
+        return json(res, 200, { stats: await stats(store, pid), recall: q ? await recall(store, pid, q) : null, cross: q ? await crossProjectRecall(store, q) : [] }), true;
+      }
+      if (sub === 'env') return json(res, 200, { target: await getTarget(store, pid) }), true;
     }
 
     // POST /api/projects/:id/map → run the mapping engine over the project's source
@@ -57,6 +66,13 @@ export async function handleApi(req, res, url) {
       if (!proj) return json(res, 404, { error: 'no such project' }), true;
       const result = await mapProject({ sourceRoot: proj.sourceRoot, store, projectId: pid });
       return json(res, 200, result), true;
+    }
+
+    // POST /api/projects/:id/(memory|env)
+    if (parts[0] === 'projects' && parts.length === 3 && method === 'POST') {
+      const pid = parts[1], sub = parts[2];
+      if (sub === 'memory') return json(res, 200, await learn(store, pid, body)), true;
+      if (sub === 'env') return json(res, 200, await registerTarget(store, pid, body)), true;
     }
 
     // /api/sessions/:id  (+ /pause /resume /cancel /scan)   ?project=<id>
@@ -69,9 +85,18 @@ export async function handleApi(req, res, url) {
       if (method === 'POST' && action === 'cancel') return json(res, 200, await mgr.cancel(project, sid)), true;
       if (method === 'POST' && action === 'scan') {
         await mgr.configureRun(project, sid, body.scope || {});
-        const result = await runAssessment({ scope: body.scope || {}, engine: body.engine });
+        const result = await runAssessment({ store, projectId: project, scope: body.scope || {}, engine: body.engine });
         return json(res, 200, result), true;
       }
+    }
+
+    // POST /api/findings/:id/validate?project=<pid> → guarded dynamic validation (static-only by default)
+    if (parts[0] === 'findings' && parts[1] && parts[2] === 'validate' && method === 'POST') {
+      if (!project) return json(res, 400, { error: 'missing ?project=' }), true;
+      const fid = decodeURIComponent(parts[1]);
+      const finding = (await store.listFindings(project)).find((f) => f.id === fid || f.id.endsWith(fid));
+      if (!finding) return json(res, 404, { error: 'no such finding' }), true;
+      return json(res, 200, await validateFinding(store, project, finding, { dryRun: body.dryRun !== false })), true;
     }
 
     return json(res, 404, { error: 'no such route', path: url.pathname }), true;
