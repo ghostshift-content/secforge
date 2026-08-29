@@ -1,0 +1,17 @@
+{
+  "name": "secforge",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "SecForge — self-contained security scanning workbench. Map a codebase into a knowledge base, then run tracked, feature-by-feature security assessments.",
+  "engines": { "node": ">=22" },
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "start": "node apps/server/src/server.js",
+    "serve": "node apps/server/src/server.js",
+    "cli": "node apps/cli/bin/secforge.js",
+    "doctor": "node apps/cli/bin/secforge.js doctor",
+    "test": "node --test packages/**/test/*.test.js"
+  },
+  "license": "MIT"
+}

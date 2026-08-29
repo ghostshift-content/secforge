@@ -1,0 +1,12 @@
+{
+  "name": "@secforge/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": { "secforge": "bin/secforge.js" },
+  "dependencies": {
+    "@secforge/session": "*",
+    "@secforge/store": "*",
+    "@secforge/map": "*"
+  }
+}

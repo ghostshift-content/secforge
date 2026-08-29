@@ -1,0 +1,12 @@
+node_modules/
+.secforge/
+.secforge-data/
+*.log
+dist/
+.DS_Store
+.env
+.env.*
+coverage/
+
+# local dev-tool scratch (never part of the product)
+.claude-flow/

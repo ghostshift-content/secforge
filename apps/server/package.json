@@ -1,0 +1,12 @@
+{
+  "name": "@secforge/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/server.js",
+  "dependencies": {
+    "@secforge/session": "*",
+    "@secforge/store": "*",
+    "@secforge/schemas": "*"
+  }
+}

@@ -1,0 +1,1089 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SecForge</title>
+<style>
+  :root{
+    --bg:#FAFAF9; --panel:#FFFFFF; --border:#E7E5E4; --border2:#F5F5F4;
+    --ink:#1C1917; --ink2:#57534E; --ink3:#A8A29E;
+    --accent:#4F46E5; --tint:#EEF2FF; --accent-ink:#4338CA; --accent-brd:#C7D2FE;
+    --crit:#DC2626; --high:#EA580C; --med:#D97706; --ok:#16A34A; --info:#0891B2;
+    --sh:0 1px 2px rgba(28,25,23,.04), 0 1px 3px rgba(28,25,23,.06);
+    --shlg:0 8px 30px rgba(28,25,23,.14);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;}
+  body{background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+    font-size:14px;-webkit-font-smoothing:antialiased;overflow:hidden;}
+  .mono{font-family:'IBM Plex Mono',ui-monospace,SFMono-Regular,monospace;}
+  .muted{color:var(--ink3);}
+  .kicker{font-size:11px;font-weight:600;color:var(--ink2);text-transform:uppercase;letter-spacing:.06em;}
+  a{color:var(--accent);}
+  button{font-family:inherit;cursor:pointer;}
+  button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+
+  .shell{height:100vh;display:flex;flex-direction:column;overflow:hidden;}
+  .topbar{height:56px;flex-shrink:0;background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;padding:0 18px;}
+  .brand{width:26px;height:26px;border-radius:7px;background:var(--accent);display:flex;align-items:center;justify-content:center;}
+  .brandname{font-weight:700;font-size:15px;letter-spacing:-.01em;}
+  .vr{width:1px;height:20px;background:var(--border);}
+  .projpill{display:flex;align-items:center;gap:8px;background:var(--border2);border:1px solid var(--border);padding:5px 10px;border-radius:7px;font-weight:600;font-size:13.5px;color:var(--ink);}
+  .projpill .mono{font-weight:400;font-size:11px;color:var(--ink3);}
+  .enginepill{display:flex;align-items:center;gap:7px;background:var(--tint);border:1px solid var(--accent-brd);padding:5px 11px;border-radius:7px;}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);flex-shrink:0;}
+  .avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#E7E5E4,#D6D3D1);}
+  .walkbtn{display:flex;align-items:center;gap:7px;border:0;background:var(--accent);color:#fff;font-weight:600;font-size:13px;padding:8px 14px;border-radius:8px;box-shadow:var(--sh);}
+  .walkbtn:hover{background:var(--accent-ink);}
+
+  .tabs{height:48px;flex-shrink:0;background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:4px;padding:0 14px;}
+  .tab{border:0;background:transparent;color:var(--ink2);font-weight:500;font-size:13.5px;height:47px;padding:0 12px;border-bottom:2px solid transparent;}
+  .tab:hover{color:var(--ink);}
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600;}
+
+  .content{flex-grow:1;overflow:hidden;position:relative;}
+  .panel{position:absolute;inset:0;display:none;overflow:hidden;}
+  .panel.active{display:flex;}
+
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;box-shadow:var(--sh);}
+  .btn{border:1px solid var(--border);background:var(--panel);color:var(--ink);font-weight:600;font-size:12.5px;padding:8px 14px;border-radius:8px;}
+  .btn:hover{border-color:var(--ink3);}
+  .btn-primary{border:0;background:var(--accent);color:#fff;font-weight:600;font-size:12.5px;padding:8px 15px;border-radius:8px;box-shadow:var(--sh);}
+  .btn-primary:hover{background:var(--accent-ink);}
+  .chip{font-size:11px;padding:3px 9px;border-radius:6px;border:1px solid var(--border);background:var(--border2);color:var(--ink2);}
+  .badge{font-size:10.5px;font-weight:700;color:#fff;padding:2px 8px;border-radius:5px;}
+  .b-crit{background:var(--crit);} .b-high{background:var(--high);} .b-med{background:var(--med);}
+  .pill-ok{font-size:11px;font-weight:600;color:var(--ok);background:#F0FDF4;border:1px solid #BBF7D0;padding:2px 9px;border-radius:20px;}
+  .pill-info{font-size:11px;font-weight:600;color:var(--info);background:#ECFEFF;border:1px solid #A5F3FC;padding:2px 9px;border-radius:20px;}
+  .sd{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+  .check{flex-shrink:0;}
+  .scroll{overflow:auto;}
+  .scroll::-webkit-scrollbar{width:10px;height:10px;} .scroll::-webkit-scrollbar-thumb{background:#E7E5E4;border-radius:6px;border:3px solid var(--bg);}
+
+  .spot{outline:2px solid var(--accent);outline-offset:3px;border-radius:10px;box-shadow:0 0 0 5px rgba(79,70,229,.18);position:relative;z-index:1;}
+  @media (prefers-reduced-motion:no-preference){
+    .spot{animation:pulse 1.6s ease-in-out infinite;}
+    @keyframes pulse{0%,100%{box-shadow:0 0 0 5px rgba(79,70,229,.18);}50%{box-shadow:0 0 0 9px rgba(79,70,229,.09);}}
+  }
+  .tourwrap{position:fixed;inset:0;pointer-events:none;z-index:1000;display:none;}
+  .tourwrap.on{display:block;}
+  .scrim{position:absolute;inset:0;background:rgba(28,25,23,.28);pointer-events:auto;opacity:0;transition:opacity .2s;}
+  .tourwrap.on .scrim{opacity:1;}
+  .tourcard{position:absolute;left:50%;bottom:26px;transform:translateX(-50%);width:min(520px,92vw);background:var(--panel);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shlg);padding:18px 20px;pointer-events:auto;}
+  .tourcard .step{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:600;color:var(--accent-ink);background:var(--tint);border:1px solid var(--accent-brd);padding:3px 10px;border-radius:20px;}
+  .tourcard h3{margin:11px 0 6px;font-size:17px;letter-spacing:-.01em;text-wrap:balance;}
+  .tourcard p{margin:0;color:var(--ink2);line-height:1.55;font-size:13.5px;}
+  .tourbar{display:flex;align-items:center;gap:8px;margin-top:16px;}
+  .tourbar .grow{flex-grow:1;}
+  .prog{display:flex;gap:4px;} .prog i{width:16px;height:4px;border-radius:3px;background:var(--border);display:block;} .prog i.on{background:var(--accent);}
+  .lnk{border:0;background:transparent;color:var(--ink3);font-weight:600;font-size:12.5px;padding:6px 4px;} .lnk:hover{color:var(--ink2);}
+
+  .side{width:264px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
+  .navitem{display:flex;align-items:center;gap:8px;padding:8px 16px;font-size:13px;cursor:pointer;}
+  .navitem.sel{background:var(--tint);border-left:2px solid var(--accent);color:var(--accent-ink);font-weight:600;}
+  .navitem .ct{margin-left:auto;font-size:10.5px;color:var(--ink3);}
+  .grouplbl{padding:8px 16px 4px;font-size:11px;font-weight:600;color:var(--ink2);}
+
+  /* map sub-tabs */
+  .msubbar{height:42px;flex-shrink:0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:2px;padding:0 16px;background:var(--panel);}
+  .msub{border:0;background:transparent;color:var(--ink2);font-size:12.5px;font-weight:500;height:41px;padding:0 11px;border-bottom:2px solid transparent;display:flex;align-items:center;gap:6px;}
+  .msub:hover{color:var(--ink);}
+  .msub.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600;}
+  .msubpanel{display:none;} .msubpanel.on{display:block;}
+
+  /* knowledge graph */
+  .gwrap{background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:var(--sh);overflow:hidden;}
+  .gsvg{width:100%;height:auto;display:block;background:
+    radial-gradient(circle at 1px 1px, #ECEAE7 1px, transparent 0) 0 0/22px 22px;}
+  .gtag{font:600 8.5px 'IBM Plex Mono',monospace;letter-spacing:.04em;}
+  .gname{font:600 12px 'IBM Plex Sans',sans-serif;fill:var(--ink);}
+  .gedge{stroke:#CFCBC6;stroke-width:1.5;fill:none;}
+  .glabel{font:500 9px 'IBM Plex Mono',monospace;fill:var(--ink3);}
+  .gnode rect{transition:filter .15s;} .gnode:hover rect{filter:brightness(.985);}
+  .leg{display:flex;gap:14px;flex-wrap:wrap;align-items:center;}
+  .leg span{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink2);}
+  .leg i{width:11px;height:11px;border-radius:3px;display:inline-block;}
+
+  table.grid{width:100%;border-collapse:collapse;font-size:12px;}
+  table.grid th{background:var(--border2);font-size:10px;font-weight:600;color:var(--ink2);text-transform:uppercase;letter-spacing:.03em;text-align:left;padding:8px 10px;white-space:nowrap;}
+  table.grid td{border-top:1px solid var(--border2);padding:8px 10px;vertical-align:top;}
+  .st-tag{font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;}
+  .st-authz{background:#F0FDF4;color:#166534;border:1px solid #BBF7D0;}
+  .st-traced{background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;}
+  .st-mapped{background:var(--border2);color:var(--ink2);border:1px solid var(--border);}
+  .yes{color:var(--ok);font-weight:600;} .no{color:var(--crit);font-weight:600;} .part{color:var(--med);font-weight:600;}
+  .p2-h{color:var(--high);font-weight:700;} .p2-m{color:var(--med);font-weight:700;} .p2-l{color:var(--ink3);font-weight:700;}
+  .m-post{color:var(--ok);} .m-get{color:var(--info);} .m-patch{color:var(--med);} .m-job{color:var(--ink3);}
+  .mtag{font-size:10px;font-weight:700;}
+  .sechd{font-size:14px;font-weight:700;letter-spacing:-.01em;margin:22px 0 4px;display:flex;align-items:center;gap:8px;}
+  .sechd .n{font-size:10px;font-weight:700;color:#fff;background:var(--accent);width:18px;height:18px;border-radius:5px;display:flex;align-items:center;justify-content:center;}
+
+  .tree{font-size:12.5px;line-height:1.9;}
+  .tree .d{color:var(--accent-ink);font-weight:600;} .tree .f{color:var(--ink2);} .tree .c{color:var(--ink3);}
+
+  .flow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .flow .node{font-size:11.5px;background:var(--panel);border:1px solid var(--border);padding:6px 10px;border-radius:6px;}
+  .flow .sink{background:#FEF2F2;border-color:#FECACA;color:#991B1B;} .flow .arr{color:var(--ink3);}
+
+  .stage{background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:13px 14px;flex:1;min-width:0;}
+  .stage h4{margin:0 0 7px;font-size:13px;display:flex;align-items:center;gap:7px;}
+  .stage p{margin:0;font-size:11.5px;color:var(--ink2);line-height:1.45;} .stage .st{font-size:10.5px;font-weight:600;margin-top:8px;}
+  .term{background:#1C1917;border-radius:10px;overflow:hidden;}
+  .term .bar{display:flex;align-items:center;gap:7px;padding:9px 14px;border-bottom:1px solid #292524;}
+  .term .code{font-size:12.5px;line-height:1.8;padding:12px 14px;color:#E7E5E4;}
+  .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
+  .grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;}
+  .stat .n{font-size:26px;font-weight:700;letter-spacing:-.02em;}
+  .bar-track{height:6px;background:var(--border2);border-radius:4px;overflow:hidden;} .bar-fill{height:100%;background:var(--accent);}
+  .guard-ok{font-size:11px;background:#F0FDF4;color:#166534;border:1px solid #BBF7D0;padding:1px 6px;border-radius:4px;}
+  .guard-warn{font-size:11px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;padding:1px 6px;border-radius:4px;}
+
+  /* assess run portal */
+  .assessgrid{flex-grow:1;display:flex;overflow:hidden;min-width:0;}
+  .runcfg{width:344px;flex-shrink:0;border-right:1px solid var(--border);background:var(--panel);display:flex;flex-direction:column;overflow:auto;}
+  .cfg-sec{padding:14px 18px;border-top:1px solid var(--border2);}
+  .seg{display:flex;background:var(--border2);border:1px solid var(--border);border-radius:8px;padding:3px;gap:3px;}
+  .segbtn{flex:1;border:0;background:transparent;color:var(--ink2);font-size:12px;font-weight:500;padding:6px 4px;border-radius:6px;font-family:inherit;}
+  .segbtn.on{background:var(--panel);color:var(--accent-ink);font-weight:600;box-shadow:var(--sh);}
+  .scopebox{display:none;margin-top:10px;} .scopebox.on{display:block;}
+  .mcard{display:block;width:100%;text-align:left;border:1.5px solid var(--border);background:var(--panel);border-radius:9px;padding:11px 13px;margin-bottom:8px;cursor:pointer;font-family:inherit;}
+  .mcard.on{border-color:var(--accent);background:var(--tint);}
+  .mcard .t{font-weight:600;font-size:13px;display:flex;align-items:center;gap:8px;color:var(--ink);}
+  .mcard .d{font-size:11.5px;color:var(--ink2);margin-top:3px;line-height:1.4;}
+  .modebox{display:none;} .modebox.on{display:block;}
+  .pchip{font-size:11.5px;padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--ink2);cursor:pointer;}
+  .pchip.on{border-color:var(--accent);background:var(--tint);color:var(--accent-ink);font-weight:600;}
+  .ask{width:100%;min-height:88px;resize:vertical;border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:inherit;font-size:13px;color:var(--ink);background:var(--panel);line-height:1.5;box-sizing:border-box;}
+  .ask:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent);}
+  .portal{flex-grow:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;}
+  .asubbar{height:42px;flex-shrink:0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:2px;padding:0 16px;background:var(--panel);}
+  .asub{border:0;background:transparent;color:var(--ink2);font-size:12.5px;font-weight:500;height:41px;padding:0 11px;border-bottom:2px solid transparent;font-family:inherit;}
+  .asub.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600;}
+  .asubpanel{display:none;} .asubpanel.on{display:block;}
+  .mdot{width:16px;height:16px;border-radius:50%;display:inline-block;}
+  .md-pass{background:var(--ok);} .md-vuln{background:var(--crit);} .md-open{background:#fff;border:2px solid var(--med);} .md-na{background:var(--border2);border:1px solid var(--border);}
+  table.matrix{width:100%;border-collapse:collapse;min-width:720px;}
+  table.matrix th{font-size:11px;font-weight:600;color:var(--ink2);padding:8px 6px;text-align:center;white-space:normal;line-height:1.25;vertical-align:bottom;min-width:66px;}
+  table.matrix th:first-child{text-align:left;}
+  table.matrix td{padding:8px 6px;text-align:center;border-top:1px solid var(--border2);}
+  table.matrix td:first-child{text-align:left;font-size:12.5px;font-weight:500;white-space:nowrap;}
+
+  /* searchable multi-select */
+  .msel{position:relative;}
+  .msel-box{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:38px;border:1px solid var(--border);border-radius:8px;padding:6px 8px;background:var(--panel);cursor:text;}
+  .msel-box:focus-within{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent);}
+  .msel-chip{display:inline-flex;align-items:center;gap:2px;font-size:11.5px;background:var(--tint);border:1px solid var(--accent-brd);color:var(--accent-ink);padding:3px 4px 3px 9px;border-radius:6px;font-weight:500;}
+  .msel-x{cursor:pointer;border:0;background:transparent;color:var(--accent-ink);font-size:14px;line-height:1;padding:0 3px;font-family:inherit;}
+  .msel-x:hover{color:var(--crit);}
+  .msel-input{flex:1;min-width:90px;border:0;outline:0;background:transparent;font-family:inherit;font-size:12.5px;color:var(--ink);padding:3px 2px;}
+  .msel-menu{margin-top:5px;background:var(--panel);border:1px solid var(--border);border-radius:9px;box-shadow:var(--sh);max-height:224px;overflow:auto;padding:5px;}
+  .msel-opt{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:6px;font-size:12.5px;cursor:pointer;}
+  .msel-opt:hover{background:var(--border2);}
+  .msel-opt .ck{width:15px;height:15px;border-radius:4px;border:1.5px solid var(--border);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .msel-opt.sel .ck{background:var(--accent);border-color:var(--accent);}
+  .msel-opt .tag{margin-left:auto;font-size:10.5px;color:var(--ink3);font-family:'IBM Plex Mono',monospace;}
+  .msel-empty{padding:10px;text-align:center;color:var(--ink3);font-size:12px;}
+  .promptchk{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:500;color:var(--ink);cursor:pointer;padding:6px 0 2px;}
+  .promptchk input{width:15px;height:15px;accent-color:var(--accent);cursor:pointer;}
+  .gated{opacity:.45;pointer-events:none;margin-top:8px;transition:opacity .15s;}
+  .gated.on{opacity:1;pointer-events:auto;}
+</style>
+
+</head>
+<body>
+<div class="shell">
+  <div class="topbar">
+    <div class="brand"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4-3 7.5-7 9-4-1.5-7-5-7-9V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg></div>
+    <div class="brandname">SecForge</div>
+    <div class="vr"></div>
+    <button class="projpill" onclick="go('launcher')" title="Switch project" style="border-color:var(--border);">
+      <span>acme-api</span><span class="mono">@ a1b2c3</span>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#A8A29E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div style="flex-grow:1"></div>
+    <button class="walkbtn" onclick="tour.start()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l14 8-14 8z"/></svg>Walkthrough</button>
+    <div class="enginepill"><span class="dot"></span><span class="mono" style="font-size:12px;color:var(--accent-ink);font-weight:600;">Claude · opus · high</span></div>
+    <div class="avatar"></div>
+  </div>
+
+  <div class="tabs" id="tabs">
+    <button class="tab" data-tab="map"      onclick="go('map')">Map</button>
+    <button class="tab" data-tab="assess"   onclick="go('assess')">Assess</button>
+    <button class="tab" data-tab="findings" onclick="go('findings')">Findings</button>
+    <button class="tab" data-tab="patterns" onclick="go('patterns')">Patterns</button>
+    <button class="tab" data-tab="env"      onclick="go('env')">Env</button>
+    <button class="tab" data-tab="memory"   onclick="go('memory')">Memory</button>
+  </div>
+
+  <div class="content">
+
+    <!-- ============ LAUNCHER ============ -->
+    <div class="panel" data-panel="launcher">
+      <div class="scroll" style="flex-grow:1;padding:34px 40px;">
+        <div style="display:flex;gap:34px;flex-wrap:wrap;align-items:flex-start;max-width:1180px;margin:0 auto;">
+          <div style="flex:1 1 480px;display:flex;flex-direction:column;gap:18px;">
+            <div>
+              <div style="font-size:24px;font-weight:700;letter-spacing:-.02em;">Open a project</div>
+              <div class="muted" style="margin-top:6px;line-height:1.5;max-width:52ch;">Point SecForge at a source tree. It freezes a snapshot and maps the code into a knowledge graph — feature by feature — that each session reloads from disk and never forgets.</div>
+            </div>
+            <div class="card" style="border-style:dashed;padding:26px;display:flex;flex-direction:column;align-items:center;gap:13px;text-align:center;">
+              <div style="width:46px;height:46px;border-radius:12px;background:var(--tint);display:flex;align-items:center;justify-content:center;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11v5"/><path d="M9.5 13.5L12 11l2.5 2.5"/></svg></div>
+              <div style="font-weight:600;">Drop a source folder here</div>
+              <div class="mono" style="font-size:12.5px;color:var(--ink2);background:var(--border2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;width:100%;text-align:left;">~/code/acme-api</div>
+              <button class="btn-primary" style="padding:10px 18px;" onclick="openMap()">Open &amp; map project</button>
+            </div>
+            <div class="card" style="padding:15px 17px;">
+              <div class="kicker" style="margin-bottom:11px;">Engine for this session</div>
+              <div style="display:flex;flex-direction:column;gap:9px;">
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span style="width:78px;color:var(--ink2);font-size:13px;">Provider</span><span class="chip" style="border-color:var(--accent);background:var(--tint);color:var(--accent-ink);font-weight:600;">Claude Code</span><span class="chip">Codex</span><span class="chip">Kimi</span><span class="chip">Ollama</span></div>
+                <div style="display:flex;align-items:center;gap:10px;"><span style="width:78px;color:var(--ink2);font-size:13px;">Model</span><span class="mono chip" style="flex-grow:1;">claude-opus-4-8</span></div>
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span style="width:78px;color:var(--ink2);font-size:13px;">Effort</span><span class="chip">low</span><span class="chip">medium</span><span class="chip" style="border-color:var(--accent);background:var(--tint);color:var(--accent-ink);font-weight:600;">high</span><span class="chip">max</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div style="flex:1 1 440px;display:flex;flex-direction:column;gap:12px;">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;"><div style="font-size:15px;font-weight:600;">Recent projects</div><div class="mono muted" style="font-size:12px;">3 sessions saved</div></div>
+            <button id="proj-acme" class="card" onclick="openMap()" style="text-align:left;border-left:3px solid var(--accent);padding:15px 17px;cursor:pointer;">
+              <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;"><div style="font-weight:600;font-size:15px;">acme-api</div><span class="mono chip">@ a1b2c3</span><span class="pill-ok">● session active</span><div style="flex-grow:1"></div><span style="font-size:12.5px;color:var(--accent);font-weight:600;">Resume →</span></div>
+              <div class="mono muted" style="font-size:11.5px;margin-top:4px;">Ruby on Rails · 1,284 files</div>
+              <div style="display:flex;gap:22px;margin-top:12px;align-items:flex-end;flex-wrap:wrap;">
+                <div><div style="font-size:19px;font-weight:700;">47</div><div class="muted" style="font-size:11px;">features</div></div>
+                <div><div style="font-size:19px;font-weight:700;color:var(--high);">12</div><div class="muted" style="font-size:11px;">findings</div></div>
+                <div><div style="font-size:19px;font-weight:700;">78%</div><div class="muted" style="font-size:11px;">CWE coverage</div></div>
+                <div style="flex-grow:1;min-width:120px;"><div class="bar-track"><div class="bar-fill" style="width:78%"></div></div><div class="muted" style="font-size:11px;margin-top:5px;">last scan 2h ago</div></div>
+              </div>
+            </button>
+            <button class="card" onclick="openMap()" style="text-align:left;padding:15px 17px;cursor:pointer;">
+              <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;"><div style="font-weight:600;font-size:15px;">payments-svc</div><span class="mono chip">@ 9fce20</span><div style="flex-grow:1"></div><span style="font-size:12.5px;color:var(--ink2);font-weight:600;">Resume →</span></div>
+              <div class="mono muted" style="font-size:11.5px;margin-top:4px;">Go · 612 files</div>
+              <div style="display:flex;gap:22px;margin-top:12px;align-items:flex-end;flex-wrap:wrap;">
+                <div><div style="font-size:19px;font-weight:700;">23</div><div class="muted" style="font-size:11px;">features</div></div>
+                <div><div style="font-size:19px;font-weight:700;color:var(--crit);">4</div><div class="muted" style="font-size:11px;">findings</div></div>
+                <div><div style="font-size:19px;font-weight:700;">100%</div><div class="muted" style="font-size:11px;">CWE coverage</div></div>
+                <div style="flex-grow:1;min-width:120px;"><div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--ok)"></div></div><div class="muted" style="font-size:11px;margin-top:5px;">complete · verified</div></div>
+              </div>
+            </button>
+            <button class="card" onclick="openMap()" style="text-align:left;padding:15px 17px;cursor:pointer;">
+              <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;"><div style="font-weight:600;font-size:15px;">mobile-app</div><span class="mono chip">@ 4471aa</span><span class="pill-info">mapping…</span><div style="flex-grow:1"></div><span style="font-size:12.5px;color:var(--ink2);font-weight:600;">Open →</span></div>
+              <div class="mono muted" style="font-size:11.5px;margin-top:4px;">TypeScript · 2,010 files</div>
+              <div style="margin-top:12px;"><div class="bar-track"><div class="bar-fill" style="width:41%;background:var(--info)"></div></div><div class="muted" style="font-size:11px;margin-top:5px;">freezing snapshot · 823 / 2,010 inventoried</div></div>
+            </button>
+            <div class="mono muted" style="font-size:11.5px;text-align:center;border-top:1px dashed var(--border);padding-top:13px;margin-top:2px;">$ secforge open ~/code/acme-api</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ MAP ============ -->
+    <div class="panel" data-panel="map">
+      <div class="side">
+        <div style="padding:13px 16px 8px;"><div class="mono muted" style="font-size:11.5px;background:var(--border2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;">🔍 filter features…</div></div>
+        <div class="grouplbl muted" style="text-transform:uppercase;letter-spacing:.06em;font-size:11px;">Feature queue · 47</div>
+        <div class="scroll" style="flex-grow:1;">
+          <div class="grouplbl">Commerce</div>
+          <div class="navitem sel"><span class="sd" style="background:var(--ok)"></span>Checkout<span class="ct">9</span></div>
+          <div class="navitem"><span class="sd" style="background:var(--ok)"></span>Cart<span class="ct">6</span></div>
+          <div class="navitem"><span class="sd" style="background:var(--med)"></span>Orders<span class="ct">11</span></div>
+          <div class="grouplbl">Identity</div>
+          <div class="navitem"><span class="sd" style="background:var(--ok)"></span>Authentication<span class="ct">7</span></div>
+          <div class="navitem"><span class="sd" style="background:var(--med)"></span>Sessions &amp; tokens<span class="ct">5</span></div>
+          <div class="grouplbl">Admin</div>
+          <div class="navitem"><span class="sd" style="background:var(--ink3)"></span>User management<span class="ct">8</span></div>
+        </div>
+        <div style="border-top:1px solid var(--border);padding:10px 16px;">
+          <div class="kicker" style="font-size:10px;margin-bottom:7px;">Depth-status ladder</div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px 8px;">
+            <span style="display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--ink2)"><span class="sd" style="background:var(--ok)"></span>AuthZ verified</span>
+            <span style="display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--ink2)"><span class="sd" style="background:var(--med)"></span>Traced</span>
+            <span style="display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--ink2)"><span class="sd" style="background:var(--ink3)"></span>Mapped</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="flex-grow:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;">
+        <!-- header + sub-tabs -->
+        <div style="padding:15px 24px 0;border-bottom:1px solid var(--border);">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <div style="font-size:20px;font-weight:700;letter-spacing:-.02em;">Checkout</div>
+            <span class="pill-ok">Authority verified</span>
+            <span class="mono chip">phase1-maps/features/checkout.md</span>
+            <div style="flex-grow:1"></div>
+            <button class="btn-primary" onclick="assessFeature('Checkout')">Assess this feature →</button>
+          </div>
+        </div>
+        <div class="msubbar" id="msubbar">
+          <button class="msub on" data-msub="graph" onclick="mapSub('graph')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="8" cy="18" r="2.5"/><circle cx="18" cy="17" r="2.5"/><path d="M8 7l8 .5M8 16l1-8M16 16l1-7"/></svg>Graph</button>
+          <button class="msub" data-msub="feature" onclick="mapSub('feature')">Feature map</button>
+          <button class="msub" data-msub="inv" onclick="mapSub('inv')">Inventories</button>
+          <button class="msub" data-msub="roles" onclick="mapSub('roles')">Roles</button>
+          <button class="msub" data-msub="cons" onclick="mapSub('cons')">Consolidated</button>
+        </div>
+
+        <div class="scroll" style="flex-grow:1;min-width:0;">
+
+          <!-- GRAPH -->
+          <div class="msubpanel on" data-msub="graph" style="padding:18px 24px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+              <div class="kicker">Knowledge graph · Checkout subgraph</div>
+              <div class="mono muted" style="font-size:11px;">nodes/edges projected from index.sqlite · every claim cites file:line</div>
+            </div>
+            <div id="kgraph" class="gwrap">
+              <svg class="gsvg" viewBox="0 0 980 400" role="img" aria-label="Knowledge graph of the Checkout feature">
+                <!-- edges (drawn first) -->
+                <line class="gedge" x1="80" y1="210" x2="295" y2="95"/><text class="glabel" x="150" y="146">calls</text>
+                <line class="gedge" x1="80" y1="210" x2="295" y2="320"/><text class="glabel" x="150" y="278">calls</text>
+                <line class="gedge" x1="295" y1="95" x2="505" y2="80"/><text class="glabel" x="360" y="80">AUTHENTICATED_BY</text>
+                <line class="gedge" x1="295" y1="95" x2="505" y2="155"/><text class="glabel" x="360" y="135">AUTHORIZED_BY</text>
+                <line class="gedge" x1="295" y1="95" x2="715" y2="120"/><text class="glabel" x="540" y="98">USES_SERVICE</text>
+                <line class="gedge" x1="295" y1="95" x2="700" y2="180"/><text class="glabel" x="470" y="168">ENQUEUES</text>
+                <line class="gedge" x1="715" y1="120" x2="885" y2="110"/><text class="glabel" x="770" y="103">WRITES</text>
+                <line class="gedge" x1="295" y1="95" x2="885" y2="250"/><text class="glabel" x="560" y="205">WRITES</text>
+                <line class="gedge" x1="295" y1="320" x2="505" y2="320" stroke="#F59E0B" stroke-dasharray="5 4"/><text class="glabel" x="360" y="313" fill="#B45309">no AUTHORIZED_BY</text>
+                <line class="gedge" x1="505" y1="320" x2="885" y2="250" stroke="#DC2626" stroke-width="2"/><text class="glabel" x="640" y="304" fill="#B91C1C" style="font-weight:600">READS · no owner scope</text>
+
+                <!-- nodes -->
+                <g class="gnode" onclick="mapSub('feature')"><rect x="20" y="192" width="120" height="36" rx="9" fill="#EEF2FF" stroke="#C7D2FE"/><text class="gtag" x="80" y="207" text-anchor="middle" fill="#4338CA">ACTOR</text><text class="gname" x="80" y="221" text-anchor="middle">customer</text></g>
+                <g class="gnode" onclick="mapSub('feature')"><rect x="205" y="75" width="180" height="40" rx="9" fill="#fff" stroke="#E7E5E4"/><text class="gtag" x="295" y="91" text-anchor="middle" fill="#0891B2">ENDPOINT</text><text class="gname" x="295" y="107" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="11">POST /checkout</text></g>
+                <g class="gnode" onclick="mapSub('feature')"><rect x="205" y="300" width="180" height="40" rx="9" fill="#FFFBEB" stroke="#FDE68A"/><text class="gtag" x="295" y="316" text-anchor="middle" fill="#0891B2">ENDPOINT</text><text class="gname" x="295" y="332" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="11">GET /orders/:id</text></g>
+                <g class="gnode" onclick="mapSub('feature')"><rect x="415" y="63" width="180" height="33" rx="9" fill="#fff" stroke="#E7E5E4"/><text class="gtag" x="505" y="78" text-anchor="middle" fill="#16A34A">AUTH_CHECK</text><text class="gname" x="505" y="90" text-anchor="middle" font-size="11">authenticate_user</text></g>
+                <g class="gnode" onclick="mapSub('feature')"><rect x="415" y="138" width="180" height="33" rx="9" fill="#fff" stroke="#E7E5E4"/><text class="gtag" x="505" y="153" text-anchor="middle" fill="#16A34A">AUTH_CHECK</text><text class="gname" x="505" y="165" text-anchor="middle" font-size="11">CartPolicy#owns?</text></g>
+                <g class="gnode"><rect x="410" y="303" width="190" height="34" rx="9" fill="#FEF2F2" stroke="#FCA5A5" stroke-dasharray="5 4"/><text class="gtag" x="505" y="318" text-anchor="middle" fill="#B91C1C">COVERAGE_GAP</text><text class="gname" x="505" y="330" text-anchor="middle" font-size="11" fill="#991B1B">no owner check</text></g>
+                <g class="gnode" onclick="mapSub('feature')"><rect x="635" y="102" width="160" height="36" rx="9" fill="#fff" stroke="#E7E5E4"/><text class="gtag" x="715" y="118" text-anchor="middle" fill="#4F46E5">SERVICE</text><text class="gname" x="715" y="132" text-anchor="middle" font-size="11">PaymentService</text></g>
+                <g class="gnode" onclick="mapSub('feature')"><rect x="625" y="163" width="150" height="34" rx="9" fill="#fff" stroke="#E7E5E4"/><text class="gtag" x="700" y="178" text-anchor="middle" fill="#78716C">JOB</text><text class="gname" x="700" y="190" text-anchor="middle" font-size="11">FulfilOrder</text></g>
+                <g class="gnode" onclick="mapSub('feature')"><rect x="825" y="92" width="120" height="36" rx="9" fill="#F5F5F4" stroke="#E7E5E4"/><text class="gtag" x="885" y="108" text-anchor="middle" fill="#78716C">DATA_STORE</text><text class="gname" x="885" y="122" text-anchor="middle" font-size="11">payments</text></g>
+                <g class="gnode" onclick="mapSub('feature')"><rect x="825" y="230" width="120" height="40" rx="9" fill="#F5F5F4" stroke="#E7E5E4"/><text class="gtag" x="885" y="247" text-anchor="middle" fill="#78716C">DATA_STORE</text><text class="gname" x="885" y="262" text-anchor="middle" font-size="11">orders</text></g>
+              </svg>
+              <div style="border-top:1px solid var(--border);padding:11px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+                <div class="leg">
+                  <span><i style="background:#EEF2FF;border:1px solid #C7D2FE"></i>Actor</span>
+                  <span><i style="background:#fff;border:1px solid #E7E5E4"></i>Endpoint / Auth / Service</span>
+                  <span><i style="background:#F5F5F4;border:1px solid #E7E5E4"></i>Data store / Job</span>
+                  <span><i style="background:#FEF2F2;border:1px solid #FCA5A5"></i>Coverage gap</span>
+                </div>
+                <div class="mono muted" style="font-size:11px;">click any node → feature map</div>
+              </div>
+            </div>
+            <div class="card" style="margin-top:14px;background:var(--tint);border-color:var(--accent-brd);padding:13px 15px;box-shadow:none;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B91C1C" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9L2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+              <div style="flex-grow:1;min-width:220px;font-size:12.5px;color:var(--ink2);">The red edge is the lead: <span class="mono" style="font-size:11px">GET /orders/:id</span> reaches the <b>orders</b> store through a <b>COVERAGE_GAP</b> — authenticated, but no <span class="mono" style="font-size:11px">AUTHORIZED_BY</span> to an owner check.</div>
+              <button class="btn-primary" onclick="assessLead()">Assess this lead →</button>
+            </div>
+          </div>
+
+          <!-- FEATURE MAP (codengram sections) -->
+          <div class="msubpanel" data-msub="feature" style="padding:14px 24px 26px;">
+            <div class="sechd" style="margin-top:6px"><span class="n">1</span>Feature Identity</div>
+            <div class="grid2" style="margin-top:8px;">
+              <div class="card" style="padding:12px 14px;box-shadow:none;font-size:12.5px;line-height:1.7;"><b>Slug</b> <span class="mono">checkout</span><br><b>Domain</b> Commerce <span class="muted">· feature_category :checkout</span><br><b>Main objects</b> <span class="mono" style="font-size:11px">Order, Cart, Payment</span></div>
+              <div class="card" style="padding:12px 14px;box-shadow:none;font-size:12.5px;line-height:1.7;"><b>Actors</b> customer, admin, system-job<br><b>Abilities</b> <span class="mono" style="font-size:11px">create_order, read_order, refund</span><br><b>Roles</b> → see <span class="mono" style="font-size:11px">roles/role-ability-matrix.md</span></div>
+            </div>
+
+            <div class="sechd"><span class="n">2</span>Endpoint / Action Ledger</div>
+            <div class="muted" style="font-size:12px;margin-bottom:8px;">The ground-truth denominator — one row per route+method / mutation / worker. Object-authz is the point.</div>
+            <div id="ledgerhd" class="card" style="overflow-x:auto;box-shadow:none;">
+              <table class="grid">
+                <thead><tr><th>Entry Point</th><th>File · Class/Method</th><th>Object Lookup</th><th>Auth Check</th><th>Obj Authz</th><th>Response/State</th><th>Siblings</th><th>Status</th><th>P2</th><th>Gaps</th></tr></thead>
+                <tbody>
+                  <tr><td><span class="mtag m-post">POST</span> <span class="mono">/checkout</span></td><td class="mono muted">checkout_controller.rb#create <span class="muted">:24</span></td><td class="mono">Cart.find(session)</td><td class="mono">authenticate_user</td><td><span class="yes">Yes</span></td><td>Order.create!</td><td>cart-crud</td><td><span class="st-tag st-authz">AuthZ Verified</span></td><td><span class="p2-l">Low</span></td><td>—</td></tr>
+                  <tr style="background:#FFFBEB;"><td><span class="mtag m-get">GET</span> <span class="mono">/orders/:id</span></td><td class="mono muted">orders_controller.rb#show <span class="muted">:41</span></td><td class="mono">Order.find(params[:id])</td><td class="mono">authenticate_user</td><td><span class="no">No</span></td><td>renders order json</td><td>object-read</td><td><span class="st-tag st-traced">Traced</span></td><td><span class="p2-h">High</span></td><td>owner scope not read</td></tr>
+                  <tr><td><span class="mtag m-patch">PATCH</span> <span class="mono">/checkout/:id</span></td><td class="mono muted">checkout_controller.rb#update <span class="muted">:58</span></td><td class="mono">current_user.orders</td><td class="mono">policy: owns_order?</td><td><span class="yes">Yes</span></td><td>updates order</td><td>object-write</td><td><span class="st-tag st-authz">AuthZ Verified</span></td><td><span class="p2-l">Low</span></td><td>—</td></tr>
+                  <tr><td><span class="mtag m-job">JOB</span> <span class="mono">FulfilOrder</span></td><td class="mono muted">jobs/fulfil_order.rb#perform <span class="muted">:9</span></td><td class="mono">Order.find(order_id)</td><td class="muted">system context</td><td><span class="part">parent</span></td><td>marks fulfilled</td><td>async-fulfil</td><td><span class="st-tag st-mapped">Mapped</span></td><td><span class="p2-m">Med</span></td><td>re-auth? not read</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="sechd"><span class="n">3</span>Authorization Map</div>
+            <div class="card" style="overflow-x:auto;box-shadow:none;">
+              <table class="grid">
+                <thead><tr><th>Action</th><th>Expected permission</th><th>Actual check found</th><th>Object authorized</th><th>File/Method</th><th>Notes</th></tr></thead>
+                <tbody>
+                  <tr><td>read order</td><td class="mono">read_order + owner</td><td class="mono">authenticate_user only</td><td><span class="no">No</span></td><td class="mono muted">orders_controller.rb:41</td><td>owner predicate missing (pattern A)</td></tr>
+                  <tr><td>update order</td><td class="mono">owns_order?</td><td class="mono">owns_order?</td><td><span class="yes">Yes</span></td><td class="mono muted">checkout_controller.rb:58</td><td>ok</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="sechd"><span class="n">4</span>Authentication / Actor Context Map</div>
+            <div class="card" style="padding:12px 14px;box-shadow:none;font-size:12.5px;line-height:1.75;">
+              <b>Web</b> — session cookie; <span class="mono" style="font-size:11px">current_user</span> nil for anonymous; no anonymous read paths on checkout.<br>
+              <b>Workers</b> — <span class="mono" style="font-size:11px">FulfilOrder</span> re-loads the order in <b>system context</b> with no per-object re-auth (see ledger).
+            </div>
+
+            <div class="sechd"><span class="n">5</span>Same-Functionality Map <span class="muted" style="font-weight:400;font-size:12px">· review the shared gate once, check every caller</span></div>
+            <div class="card" style="overflow-x:auto;box-shadow:none;">
+              <table class="grid">
+                <thead><tr><th>Functionality pattern</th><th>Similar features</th><th>Shared service/finder</th><th>Notes for Phase 2</th></tr></thead>
+                <tbody>
+                  <tr><td>object read by id</td><td>Orders, Invoices, Tickets</td><td class="mono">find(params[:id])</td><td>same missing-owner shape — check all callers</td></tr>
+                  <tr><td>async fulfilment</td><td>Checkout, Subscriptions</td><td class="mono">FulfilJob base</td><td>system-context re-auth</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="sechd"><span class="n">6</span>Coverage Notes</div>
+            <div class="grid2" style="margin-top:8px;">
+              <div class="card" style="padding:12px 14px;box-shadow:none;font-size:12.5px;line-height:1.6;"><b style="color:var(--ok)">AuthZ verified</b> — POST /checkout, PATCH /checkout/:id read to source.<br><b style="color:var(--med)">Needs 2nd pass</b> — GET /orders/:id owner scope, FulfilOrder re-auth.</div>
+              <div class="card" style="padding:12px 14px;box-shadow:none;font-size:12.5px;line-height:1.6;"><b>Assumptions</b> — finder scoping on <span class="mono" style="font-size:11px">Cart.find</span> not line-verified.<br><b>Follow-up for Phase 2</b> — open <span class="mono" style="font-size:11px">orders_controller.rb</span>, <span class="mono" style="font-size:11px">fulfil_order.rb</span>.</div>
+            </div>
+          </div>
+
+          <!-- INVENTORIES -->
+          <div class="msubpanel" data-msub="inv" style="padding:16px 24px 26px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+              <div class="kicker">Object axis · scripted enumeration (no model)</div>
+              <div class="mono muted" style="font-size:11px;">phase1-maps/inventories/ · file:line, one header per file</div>
+            </div>
+            <div class="grid2" style="margin-top:12px;">
+              <div class="card" style="overflow:hidden;box-shadow:none;">
+                <table class="grid">
+                  <thead><tr><th>Inventory list</th><th>Rows</th></tr></thead>
+                  <tbody>
+                    <tr><td class="mono">01_routes_endpoints.txt</td><td class="mono">312</td></tr>
+                    <tr><td class="mono">02_rest_api.txt</td><td class="mono">148</td></tr>
+                    <tr><td class="mono">03_graphql.txt</td><td class="mono">0 — none</td></tr>
+                    <tr><td class="mono">04_workers_jobs.txt</td><td class="mono">37</td></tr>
+                    <tr><td class="mono">05_services_finders_policies.txt</td><td class="mono">204</td></tr>
+                    <tr><td class="mono">06_response_shaping.txt</td><td class="mono">91</td></tr>
+                    <tr><td class="mono">07_downloads_uploads_exports.txt</td><td class="mono">22</td></tr>
+                    <tr><td class="mono">08_search_aggregation.txt</td><td class="mono">44</td></tr>
+                    <tr><td class="mono">09_tokens_actors.txt</td><td class="mono">18</td></tr>
+                    <tr><td class="mono">10_processes_ipc.txt</td><td class="mono">6</td></tr>
+                    <tr><td class="mono">11_datastores_integrations.txt</td><td class="mono">29</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:14px;">
+                <div class="card" style="padding:14px 16px;box-shadow:none;">
+                  <div class="kicker" style="margin-bottom:10px;">5-category reconciliation · nothing vanishes</div>
+                  <div style="display:flex;flex-direction:column;gap:9px;font-size:12.5px;">
+                    <div style="display:flex;align-items:center;gap:8px;"><span style="width:130px">Mapped to feature</span><div class="bar-track" style="flex-grow:1"><div class="bar-fill" style="width:82%"></div></div><span class="mono muted" style="font-size:11px">82%</span></div>
+                    <div style="display:flex;align-items:center;gap:8px;"><span style="width:130px">Shared infrastructure</span><div class="bar-track" style="flex-grow:1"><div class="bar-fill" style="width:11%;background:var(--info)"></div></div><span class="mono muted" style="font-size:11px">11%</span></div>
+                    <div style="display:flex;align-items:center;gap:8px;"><span style="width:130px">Not relevant + reason</span><div class="bar-track" style="flex-grow:1"><div class="bar-fill" style="width:5%;background:var(--ink3)"></div></div><span class="mono muted" style="font-size:11px">5%</span></div>
+                    <div style="display:flex;align-items:center;gap:8px;"><span style="width:130px;color:var(--med)">Unclear — gap</span><div class="bar-track" style="flex-grow:1"><div class="bar-fill" style="width:2%;background:var(--med)"></div></div><span class="mono muted" style="font-size:11px">2%</span></div>
+                  </div>
+                </div>
+                <div class="card term" style="box-shadow:none;">
+                  <div class="bar"><span class="mono" style="font-size:11px;color:#A8A29E">01_routes_endpoints.txt</span></div>
+                  <div class="code mono" style="font-size:11.5px;line-height:1.7;">
+                    <div><span style="color:#57534E"># app/config/routes.rb</span></div>
+                    <div><span style="color:#93C5FD">24</span>:  post <span style="color:#FCD34D">'/checkout'</span> =&gt; <span style="color:#A5B4FC">'checkout#create'</span></div>
+                    <div><span style="color:#93C5FD">41</span>:  get  <span style="color:#FCD34D">'/orders/:id'</span> =&gt; <span style="color:#A5B4FC">'orders#show'</span></div>
+                    <div><span style="color:#93C5FD">58</span>:  patch <span style="color:#FCD34D">'/checkout/:id'</span> =&gt; <span style="color:#A5B4FC">'checkout#update'</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ROLES -->
+          <div class="msubpanel" data-msub="roles" style="padding:16px 24px 26px;">
+            <div class="kicker">Subject axis · who can act · phase1-maps/roles/</div>
+            <div class="sechd" style="margin-top:12px;"><span class="n">A</span>Actor catalog &amp; ladder</div>
+            <div class="card" style="overflow-x:auto;box-shadow:none;">
+              <table class="grid">
+                <thead><tr><th>Actor</th><th>Kind</th><th>Auth mechanism</th><th>Ladder</th><th>Source of truth</th></tr></thead>
+                <tbody>
+                  <tr><td>anonymous</td><td>human</td><td>none</td><td>0</td><td class="mono muted">—</td></tr>
+                  <tr><td>customer</td><td>human</td><td>session cookie</td><td>1</td><td class="mono muted">models/user.rb:12</td></tr>
+                  <tr><td>admin</td><td>human</td><td>session + 2FA</td><td>3</td><td class="mono muted">models/user.rb:44</td></tr>
+                  <tr><td>fulfilment-bot</td><td>token</td><td>PAT · scope <span class="mono" style="font-size:11px">orders:write</span></td><td>2</td><td class="mono muted">config/tokens.yml:7</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="sechd"><span class="n">B</span>Role → ability matrix <span class="muted" style="font-weight:400;font-size:12px">· closes blocker ROLE-1</span></div>
+            <div class="card" style="overflow-x:auto;box-shadow:none;">
+              <table class="grid">
+                <thead><tr><th>Ability</th><th>customer</th><th>admin</th><th>fulfilment-bot</th><th>Wiring</th></tr></thead>
+                <tbody>
+                  <tr><td class="mono">create_order</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td>—</td><td class="mono muted">CartPolicy</td></tr>
+                  <tr><td class="mono">read_order</td><td><span class="yes">✓ own</span></td><td><span class="yes">✓ all</span></td><td>—</td><td class="mono muted">OrderPolicy</td></tr>
+                  <tr><td class="mono">refund</td><td>—</td><td><span class="yes">✓</span></td><td>—</td><td class="mono muted">AdminPolicy</td></tr>
+                  <tr><td class="mono">fulfil</td><td>—</td><td>—</td><td><span class="yes">✓</span></td><td class="mono muted">token scope</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- CONSOLIDATED -->
+          <div class="msubpanel" data-msub="cons" style="padding:16px 24px 26px;">
+            <div style="display:flex;gap:22px;flex-wrap:wrap;">
+              <div style="flex:1 1 300px;min-width:0;">
+                <div class="kicker" style="margin-bottom:10px;">phase1-maps/ artifact tree</div>
+                <div id="conshd" class="card tree" style="padding:14px 16px;box-shadow:none;">
+                  <div><span class="d">phase1-maps/</span></div>
+                  <div>├─ <span class="f">README.md</span> <span class="c">· target, method, depth ladder, queue</span></div>
+                  <div>├─ <span class="d">inventories/</span> <span class="c">· 00_MANIFEST + 01..11</span></div>
+                  <div>├─ <span class="d">roles/</span> <span class="c">· role-structure, role-ability-matrix</span></div>
+                  <div>├─ <span class="d">features/</span> <span class="c">· 47 × &lt;slug&gt;.md</span></div>
+                  <div>└─ <span class="d">consolidated/</span></div>
+                  <div>&nbsp;&nbsp;&nbsp;├─ <span class="f">00_INDEX.md</span> <span class="c">· 21 required outputs</span></div>
+                  <div>&nbsp;&nbsp;&nbsp;├─ <span class="f">feature_coverage_matrix.md</span></div>
+                  <div>&nbsp;&nbsp;&nbsp;├─ <span class="f">source_inventory_coverage_matrix.md</span></div>
+                  <div>&nbsp;&nbsp;&nbsp;├─ <span class="f">same_functionality_cross_feature_map.md</span></div>
+                  <div>&nbsp;&nbsp;&nbsp;├─ <span class="f">phase2_review_queue.md</span></div>
+                  <div>&nbsp;&nbsp;&nbsp;└─ <span class="f">phase1_completion_gate.md</span></div>
+                </div>
+                <div class="kicker" style="margin:18px 0 10px;">Phase 2 review queue · patterns A–H</div>
+                <div class="card" style="overflow:hidden;box-shadow:none;">
+                  <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;font-size:12.5px;"><span class="p2-h">A</span><span style="font-weight:600">Parent-only authz on object read</span><span style="flex-grow:1"></span><span class="mono muted" style="font-size:11px">GET /orders/:id</span></div>
+                  <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;font-size:12.5px;border-top:1px solid var(--border2)"><span class="p2-m">B</span><span style="font-weight:600">Route vs enforced permission divergence</span><span style="flex-grow:1"></span><span class="mono muted" style="font-size:11px">admin/*</span></div>
+                  <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;font-size:12.5px;border-top:1px solid var(--border2)"><span class="p2-m">G</span><span style="font-weight:600">Worker runs in system context</span><span style="flex-grow:1"></span><span class="mono muted" style="font-size:11px">FulfilOrder</span></div>
+                </div>
+              </div>
+
+              <div style="flex:1 1 300px;min-width:0;">
+                <div class="kicker" style="margin-bottom:10px;">Feature coverage matrix</div>
+                <div class="card" style="overflow-x:auto;box-shadow:none;">
+                  <table class="grid">
+                    <thead><tr><th>Feature</th><th>Ledger rows</th><th>Traced</th><th>AuthZ verified</th></tr></thead>
+                    <tbody>
+                      <tr><td>Checkout</td><td class="mono">9</td><td class="mono">9</td><td class="mono">7</td></tr>
+                      <tr><td>Cart</td><td class="mono">6</td><td class="mono">6</td><td class="mono">6</td></tr>
+                      <tr><td>Orders</td><td class="mono">11</td><td class="mono">8</td><td class="mono">4</td></tr>
+                      <tr><td>Authentication</td><td class="mono">7</td><td class="mono">7</td><td class="mono">7</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div class="kicker" style="margin:18px 0 10px;">Phase 1 completion gate</div>
+                <div class="card" style="padding:14px 16px;box-shadow:none;">
+                  <div style="display:flex;flex-direction:column;gap:9px;font-size:12.5px;">
+                    <div style="display:flex;align-items:center;gap:8px;"><svg class="check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Technical coverage — 100% of inventory reconciled</div>
+                    <div style="display:flex;align-items:center;gap:8px;"><span style="width:15px;height:15px;border-radius:50%;border:2px solid var(--med);"></span>Semantic coverage — 96% mapped to features</div>
+                    <div style="display:flex;align-items:center;gap:8px;"><svg class="check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Every ledger row has an honest depth-status</div>
+                    <div style="display:flex;align-items:center;gap:8px;color:var(--ink2)"><span style="width:15px;height:15px;border-radius:50%;border:2px solid var(--med);"></span>2 blockers open — see completion gate</div>
+                  </div>
+                  <div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border);font-size:11.5px;color:var(--ink3);line-height:1.5;">Mapping, not vulnerability hunting. 100% coverage means the map is complete — not that every vulnerability was found.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ ASSESS (run portal) ============ -->
+    <div class="panel" data-panel="assess">
+     <div class="assessgrid">
+
+      <!-- CONFIG -->
+      <div class="runcfg">
+        <div style="padding:16px 18px 2px;">
+          <div style="font-size:16px;font-weight:700;letter-spacing:-.01em;">New assessment run</div>
+          <div class="mono muted" style="font-size:11.5px;margin-top:3px;">acme-api @ a1b2c3 · session-07</div>
+        </div>
+
+        <!-- scope -->
+        <div class="cfg-sec">
+          <div class="kicker" style="margin-bottom:8px;">Scope</div>
+          <div class="seg">
+            <button class="segbtn on" data-scope="feature" onclick="setScope('feature')">This feature</button>
+            <button class="segbtn" data-scope="pick" onclick="setScope('pick')">Pick</button>
+            <button class="segbtn" data-scope="all" onclick="setScope('all')">All 47</button>
+          </div>
+          <div class="scopebox on" data-scope="feature">
+            <div class="card" style="box-shadow:none;padding:10px 12px;display:flex;align-items:center;gap:8px;">
+              <span class="sd" style="background:var(--ok)"></span>
+              <span style="font-weight:600;font-size:13px;" id="scopeFeatureName">Checkout</span>
+              <span class="mono muted" style="font-size:11px;">· 9 actions</span>
+            </div>
+          </div>
+          <div class="scopebox" data-scope="pick">
+            <div class="msel" id="mselFeatures"></div>
+            <div class="mono muted" style="font-size:11px;margin-top:7px;" id="pickHint">2 of 47 features selected</div>
+          </div>
+          <div class="scopebox" data-scope="all">
+            <div class="card" style="box-shadow:none;padding:10px 12px;font-size:12.5px;color:var(--ink2);line-height:1.5;">All <b>47 features</b> · 312 actions — every applicable pattern.</div>
+          </div>
+        </div>
+
+        <!-- method -->
+        <div class="cfg-sec">
+          <div class="kicker" style="margin-bottom:8px;">Method</div>
+          <button class="mcard on" data-mode="pattern" onclick="setMode('pattern')">
+            <div class="t"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Pattern-based</div>
+            <div class="d">Run chosen families, CWEs, or your custom set.</div>
+          </button>
+          <button class="mcard" data-mode="prompt" onclick="setMode('prompt')">
+            <div class="t"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#57534E" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>Prompt the session</div>
+            <div class="d">Describe what to look for in plain English.</div>
+          </button>
+          <button class="mcard" data-mode="full" onclick="setMode('full')">
+            <div class="t"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#57534E" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>Full sweep</div>
+            <div class="d">Every applicable pattern across the scope.</div>
+          </button>
+
+          <div class="modebox on" data-mode="pattern">
+            <div class="kicker" style="font-size:10px;margin:12px 0 7px;color:var(--ink3)">Patterns to run — search &amp; pick any</div>
+            <div class="msel" id="mselPatterns"></div>
+            <div class="mono muted" style="font-size:11px;margin-top:7px;">families · CWEs · your imported sets — pick as many as you need</div>
+          </div>
+
+          <div class="modebox" data-mode="prompt">
+            <label class="promptchk"><input type="checkbox" id="promptEnable" onchange="togglePrompt()"> Tell the session what to look for</label>
+            <div class="gated" id="promptBody">
+              <textarea class="ask" id="askText" spellcheck="false" disabled>find any place an order or invoice is loaded by id without checking the caller owns it</textarea>
+              <div class="kicker" style="font-size:10px;margin:12px 0 7px;color:var(--ink3)">Examples</div>
+              <div style="display:flex;flex-direction:column;gap:6px;">
+                <div class="pchip" style="text-align:left;cursor:pointer;">“missing rate limit on auth endpoints”</div>
+                <div class="pchip" style="text-align:left;cursor:pointer;">“secrets or PII returned in API responses”</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="modebox" data-mode="full">
+            <div class="card" style="box-shadow:none;padding:11px 13px;font-size:12.5px;color:var(--ink2);line-height:1.5;margin-top:10px;">All <b>281 canonical patterns</b> + your set, only where applicable to each feature. Fills the CWE checklist and the coverage matrix in one pass.</div>
+          </div>
+        </div>
+
+        <!-- engine -->
+        <div class="cfg-sec">
+          <div class="kicker" style="margin-bottom:8px;">Engine</div>
+          <div class="enginepill" style="display:inline-flex;"><span class="dot"></span><span class="mono" style="font-size:12px;color:var(--accent-ink);font-weight:600;">Claude · opus · high</span></div>
+        </div>
+
+        <div style="padding:14px 18px;margin-top:auto;border-top:1px solid var(--border2);position:sticky;bottom:0;background:var(--panel);">
+          <button class="btn-primary" style="width:100%;padding:11px;" onclick="runAssess()">▶ Run assessment</button>
+          <div class="mono muted" style="font-size:11px;text-align:center;margin-top:8px;" id="runHint">Pattern-based · This feature</div>
+        </div>
+      </div>
+
+      <!-- PORTAL -->
+      <div class="portal">
+        <div class="asubbar">
+          <button class="asub on" data-asub="run" onclick="assessSub('run')">Live run</button>
+          <button class="asub" data-asub="feature" onclick="assessSub('feature')">By feature</button>
+          <button class="asub" data-asub="cwe" onclick="assessSub('cwe')">By CWE</button>
+          <button class="asub" data-asub="matrix" onclick="assessSub('matrix')">Coverage matrix</button>
+        </div>
+        <div class="scroll" style="flex-grow:1;">
+
+          <!-- LIVE RUN -->
+          <div class="asubpanel on" data-asub="run" style="padding:18px 24px;">
+            <div class="card" style="box-shadow:none;padding:12px 15px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px;">
+              <span class="sd" style="background:var(--accent);width:9px;height:9px;"></span>
+              <div><div style="font-weight:600;font-size:13.5px;">Run #a1b2c3-07 · Checkout · pattern ACX</div><div class="mono muted" style="font-size:11px;">started 40s ago · 5 hunters · 3 candidates</div></div>
+              <div style="flex-grow:1"></div>
+              <div class="bar-track" style="width:150px;"><div class="bar-fill" style="width:62%"></div></div>
+              <span class="mono muted" style="font-size:11px;">62%</span>
+            </div>
+            <div class="kicker" style="margin:0 0 11px;">Pipeline · framer → hunters → triager → validator → reporter</div>
+            <div id="assess-pipeline" style="display:flex;align-items:stretch;gap:9px;flex-wrap:wrap;">
+          <div class="stage"><h4><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Question-framer</h4><p>Scoped to a forbidden actor × resource × action tuple.</p><div class="st" style="color:var(--ok)">done · 1 job</div></div>
+          <div style="display:flex;align-items:center;color:var(--ink3)">→</div>
+          <div class="stage"><h4><span class="sd" style="background:var(--accent)"></span>Hunters <span class="muted" style="font-weight:400;font-size:10px;">×5</span></h4><p>One agent per action group. Differential engine, 5 ledgers.</p><div class="st" style="color:var(--accent)">3 candidates</div></div>
+          <div style="display:flex;align-items:center;color:var(--ink3)">→</div>
+          <div class="stage"><h4><span class="sd" style="background:var(--med)"></span>Triager</h4><p>Real vs bogus. Applies decisive-rejection controls.</p><div class="st" style="color:var(--ink2)">2 kept · 1 rejected</div></div>
+          <div style="display:flex;align-items:center;color:var(--ink3)">→</div>
+          <div class="stage" style="opacity:.55"><h4><span class="sd" style="background:var(--ink3)"></span>Validator</h4><p>Independent re-proof. Cannot validate its own work.</p><div class="st muted">queued · 2</div></div>
+          <div style="display:flex;align-items:center;color:var(--ink3)">→</div>
+          <div class="stage" style="opacity:.55"><h4><span class="sd" style="background:var(--ink3)"></span>Reporter</h4><p>Freezes validated records into Findings.</p><div class="st muted">waiting</div></div>
+        </div>
+        <div class="kicker" style="margin:22px 0 11px;">Candidates streaming in</div>
+        <div class="card" style="overflow:hidden;box-shadow:none;">
+          <div style="display:flex;align-items:center;gap:12px;padding:12px 15px;flex-wrap:wrap;"><span class="badge b-high">HIGH</span><span style="font-weight:600;font-size:13.5px;">Broken object-level authz on order lookup</span><span class="mono muted" style="font-size:11px;">ACX-15 · CWE-639</span><div style="flex-grow:1"></div><span class="mono guard-warn">GET /orders/:id</span><span class="muted" style="font-size:11px;">triaged ✓ → validating</span></div>
+          <div style="display:flex;align-items:center;gap:12px;padding:12px 15px;border-top:1px solid var(--border2);flex-wrap:wrap;"><span class="badge b-med">MED</span><span style="font-weight:600;font-size:13.5px;">Coupon apply missing rate limit</span><span class="mono muted" style="font-size:11px;">RLX-04 · CWE-770</span><div style="flex-grow:1"></div><span class="mono guard-warn">POST /checkout/coupon</span><span class="muted" style="font-size:11px;">triaged ✓ → validating</span></div>
+          <div style="display:flex;align-items:center;gap:12px;padding:12px 15px;border-top:1px solid var(--border2);opacity:.6;flex-wrap:wrap;"><span class="chip" style="font-weight:700;">REJ</span><span style="font-weight:500;font-size:13.5px;text-decoration:line-through;">CSRF on checkout submit</span><span class="mono muted" style="font-size:11px;">CSX-02</span><div style="flex-grow:1"></div><span class="muted" style="font-size:11px;">rejected — SameSite=strict + token</span></div>
+        </div>
+          </div>
+
+          <!-- BY FEATURE -->
+          <div class="asubpanel" data-asub="feature" style="padding:18px 24px;">
+            <div class="kicker" style="margin-bottom:11px;">Every feature — click a row to scope a run to it</div>
+            <div class="card" style="overflow-x:auto;box-shadow:none;">
+              <table class="grid">
+                <thead><tr><th>Feature</th><th>Actions</th><th>Patterns run</th><th>Candidates</th><th>Findings</th><th>Coverage</th><th>Last run</th></tr></thead>
+                <tbody>
+                  <tr style="cursor:pointer;" onclick="assessFeature('Checkout')"><td style="font-weight:600;">Checkout</td><td class="mono">9</td><td class="mono">6/7</td><td class="mono">3</td><td class="mono" style="color:var(--high)">2</td><td><div style="display:flex;align-items:center;gap:7px;"><div class="bar-track" style="width:66px;"><div class="bar-fill" style="width:78%"></div></div><span class="mono muted" style="font-size:11px">78%</span></div></td><td class="muted" style="font-size:11.5px">2h ago</td></tr>
+                  <tr style="cursor:pointer;" onclick="assessFeature('Orders')"><td style="font-weight:600;">Orders</td><td class="mono">11</td><td class="mono">4/7</td><td class="mono">5</td><td class="mono" style="color:var(--crit)">1</td><td><div style="display:flex;align-items:center;gap:7px;"><div class="bar-track" style="width:66px;"><div class="bar-fill" style="width:60%;background:var(--med)"></div></div><span class="mono muted" style="font-size:11px">60%</span></div></td><td class="muted" style="font-size:11.5px">2h ago</td></tr>
+                  <tr style="cursor:pointer;" onclick="assessFeature('Cart')"><td style="font-weight:600;">Cart</td><td class="mono">6</td><td class="mono">6/6</td><td class="mono">1</td><td class="mono">0</td><td><div style="display:flex;align-items:center;gap:7px;"><div class="bar-track" style="width:66px;"><div class="bar-fill" style="width:100%;background:var(--ok)"></div></div><span class="mono muted" style="font-size:11px">100%</span></div></td><td class="muted" style="font-size:11.5px">2h ago</td></tr>
+                  <tr style="cursor:pointer;" onclick="assessFeature('Authentication')"><td style="font-weight:600;">Authentication</td><td class="mono">7</td><td class="mono">7/7</td><td class="mono">2</td><td class="mono">0</td><td><div style="display:flex;align-items:center;gap:7px;"><div class="bar-track" style="width:66px;"><div class="bar-fill" style="width:100%;background:var(--ok)"></div></div><span class="mono muted" style="font-size:11px">100%</span></div></td><td class="muted" style="font-size:11.5px">1d ago</td></tr>
+                  <tr style="cursor:pointer;" onclick="assessFeature('Sessions &amp; tokens')"><td style="font-weight:600;">Sessions &amp; tokens</td><td class="mono">5</td><td class="mono">3/6</td><td class="mono">1</td><td class="mono">0</td><td><div style="display:flex;align-items:center;gap:7px;"><div class="bar-track" style="width:66px;"><div class="bar-fill" style="width:55%;background:var(--med)"></div></div><span class="mono muted" style="font-size:11px">55%</span></div></td><td class="muted" style="font-size:11.5px">1d ago</td></tr>
+                  <tr style="cursor:pointer;" onclick="assessFeature('User management')"><td style="font-weight:600;">User management</td><td class="mono">8</td><td class="mono">0/7</td><td class="mono">0</td><td class="mono">0</td><td><div style="display:flex;align-items:center;gap:7px;"><div class="bar-track" style="width:66px;"><div class="bar-fill" style="width:0%"></div></div><span class="mono muted" style="font-size:11px">0%</span></div></td><td class="muted" style="font-size:11.5px">—</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- BY CWE -->
+          <div class="asubpanel" data-asub="cwe" style="padding:18px 24px;">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;max-width:760px;margin-bottom:6px;"><div class="kicker">CWE coverage — the assessment spine</div><div class="mono muted" style="font-size:12px">78% covered</div></div>
+            <div class="bar-track" style="height:7px;max-width:760px;margin-bottom:18px;"><div class="bar-fill" style="width:78%"></div></div>
+            <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 22px;max-width:760px;">
+              <div>
+                <div class="kicker" style="font-size:11px;color:var(--ink3);margin-bottom:8px;">Access control</div>
+                <div style="display:flex;flex-direction:column;gap:2px;">
+                  <div style="display:flex;align-items:center;gap:9px;padding:6px 2px;font-size:12.5px;"><svg class="check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><span class="mono" style="font-size:11.5px">CWE-284</span><span class="muted">Improper access ctrl</span></div>
+                  <div style="display:flex;align-items:center;gap:9px;padding:6px 4px;font-size:12.5px;background:#FFFBEB;border-radius:6px;"><span class="mdot md-open" style="width:14px;height:14px"></span><span class="mono" style="font-size:11.5px">CWE-639</span><span class="muted">IDOR</span><span style="flex-grow:1"></span><span style="font-size:10px;font-weight:700;color:var(--high)">1 open</span></div>
+                  <div style="display:flex;align-items:center;gap:9px;padding:6px 2px;font-size:12.5px;"><svg class="check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><span class="mono" style="font-size:11.5px">CWE-862</span><span class="muted">Missing authz</span></div>
+                  <div style="display:flex;align-items:center;gap:9px;padding:6px 2px;font-size:12.5px;"><svg class="check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><span class="mono" style="font-size:11.5px">CWE-863</span><span class="muted">Incorrect authz</span></div>
+                </div>
+              </div>
+              <div>
+                <div class="kicker" style="font-size:11px;color:var(--ink3);margin-bottom:8px;">Injection</div>
+                <div style="display:flex;flex-direction:column;gap:2px;">
+                  <div style="display:flex;align-items:center;gap:9px;padding:6px 2px;font-size:12.5px;"><svg class="check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><span class="mono" style="font-size:11.5px">CWE-89</span><span class="muted">SQL injection</span><span style="flex-grow:1"></span><span style="font-size:10px;font-weight:700;color:var(--crit)">1 find</span></div>
+                  <div style="display:flex;align-items:center;gap:9px;padding:6px 2px;font-size:12.5px;"><svg class="check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><span class="mono" style="font-size:11.5px">CWE-78</span><span class="muted">OS command</span></div>
+                  <div style="display:flex;align-items:center;gap:9px;padding:6px 2px;font-size:12.5px;"><svg class="check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><span class="mono" style="font-size:11.5px">CWE-90</span><span class="muted">LDAP injection</span></div>
+                </div>
+              </div>
+              <div>
+                <div class="kicker" style="font-size:11px;color:var(--ink3);margin-bottom:8px;">SSRF &amp; requests</div>
+                <div style="display:flex;flex-direction:column;gap:2px;">
+                  <div style="display:flex;align-items:center;gap:9px;padding:6px 4px;font-size:12.5px;background:#FFFBEB;border-radius:6px;"><span class="mdot md-open" style="width:14px;height:14px"></span><span class="mono" style="font-size:11.5px">CWE-918</span><span class="muted">SSRF</span><span style="flex-grow:1"></span><span style="font-size:10px;font-weight:700;color:var(--high)">1 draft</span></div>
+                  <div style="display:flex;align-items:center;gap:9px;padding:6px 2px;font-size:12.5px;"><svg class="check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><span class="mono" style="font-size:11.5px">CWE-601</span><span class="muted">Open redirect</span></div>
+                </div>
+              </div>
+              <div>
+                <div class="kicker" style="font-size:11px;color:var(--ink3);margin-bottom:8px;">Business logic</div>
+                <div style="display:flex;flex-direction:column;gap:2px;">
+                  <div style="display:flex;align-items:center;gap:9px;padding:6px 4px;font-size:12.5px;background:#FFFBEB;border-radius:6px;"><span class="mdot md-open" style="width:14px;height:14px"></span><span class="mono" style="font-size:11.5px">CWE-770</span><span class="muted">Missing rate limit</span><span style="flex-grow:1"></span><span style="font-size:10px;font-weight:700;color:var(--med)">1 open</span></div>
+                  <div style="display:flex;align-items:center;gap:9px;padding:6px 2px;font-size:12.5px;"><span class="mdot md-na" style="width:14px;height:14px"></span><span class="mono" style="font-size:11.5px">CWE-841</span><span class="muted">Workflow bypass</span><span style="flex-grow:1"></span><span style="font-size:10px;color:var(--ink3)">queued</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- COVERAGE MATRIX -->
+          <div class="asubpanel" data-asub="matrix" style="padding:18px 24px;">
+            <div class="kicker" style="margin-bottom:4px;">Feature × pattern-family — every cell carries a verdict</div>
+            <div class="muted" style="font-size:12px;margin-bottom:12px;">This is the coverage denominator: no cell is left blank, so nothing is silently skipped.</div>
+            <div id="covmatrix" class="card" style="overflow-x:auto;box-shadow:none;padding:4px 12px;">
+              <table class="matrix">
+                <thead><tr><th>Feature</th><th>Access control</th><th>Injection</th><th>SSRF</th><th>XSS</th><th>Command exec</th><th>State machine</th><th>Rate limit</th></tr></thead>
+                <tbody>
+                  <tr><td>Checkout</td><td><span class="mdot md-vuln" title="vulnerable"></span></td><td><span class="mdot md-pass"></span></td><td><span class="mdot md-pass"></span></td><td><span class="mdot md-na"></span></td><td><span class="mdot md-pass"></span></td><td><span class="mdot md-open" title="open"></span></td><td><span class="mdot md-vuln"></span></td></tr>
+                  <tr><td>Orders</td><td><span class="mdot md-open"></span></td><td><span class="mdot md-pass"></span></td><td><span class="mdot md-pass"></span></td><td><span class="mdot md-pass"></span></td><td><span class="mdot md-na"></span></td><td><span class="mdot md-open"></span></td><td><span class="mdot md-na"></span></td></tr>
+                  <tr><td>Cart</td><td><span class="mdot md-pass"></span></td><td><span class="mdot md-pass"></span></td><td><span class="mdot md-na"></span></td><td><span class="mdot md-na"></span></td><td><span class="mdot md-na"></span></td><td><span class="mdot md-pass"></span></td><td><span class="mdot md-pass"></span></td></tr>
+                  <tr><td>Authentication</td><td><span class="mdot md-pass"></span></td><td><span class="mdot md-pass"></span></td><td><span class="mdot md-na"></span></td><td><span class="mdot md-pass"></span></td><td><span class="mdot md-na"></span></td><td><span class="mdot md-pass"></span></td><td><span class="mdot md-open"></span></td></tr>
+                  <tr><td>Sessions &amp; tokens</td><td><span class="mdot md-pass"></span></td><td><span class="mdot md-na"></span></td><td><span class="mdot md-na"></span></td><td><span class="mdot md-na"></span></td><td><span class="mdot md-na"></span></td><td><span class="mdot md-open"></span></td><td><span class="mdot md-na"></span></td></tr>
+                  <tr><td>User management</td><td><span class="mdot md-open"></span></td><td><span class="mdot md-open"></span></td><td><span class="mdot md-na"></span></td><td><span class="mdot md-open"></span></td><td><span class="mdot md-na"></span></td><td><span class="mdot md-open"></span></td><td><span class="mdot md-open"></span></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div style="display:flex;gap:18px;margin-top:14px;flex-wrap:wrap;font-size:12px;color:var(--ink2);">
+              <span style="display:inline-flex;align-items:center;gap:7px;"><span class="mdot md-vuln" style="width:13px;height:13px"></span>vulnerable</span>
+              <span style="display:inline-flex;align-items:center;gap:7px;"><span class="mdot md-pass" style="width:13px;height:13px"></span>assessed · clean</span>
+              <span style="display:inline-flex;align-items:center;gap:7px;"><span class="mdot md-open" style="width:13px;height:13px"></span>open / queued</span>
+              <span style="display:inline-flex;align-items:center;gap:7px;"><span class="mdot md-na" style="width:13px;height:13px"></span>not applicable</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+     </div>
+    </div>
+
+    <!-- ============ FINDINGS ============ -->
+    <div class="panel" data-panel="findings">
+      <div class="side" style="width:334px;">
+        <div style="padding:12px 15px;border-bottom:1px solid var(--border);display:flex;gap:7px;flex-wrap:wrap;">
+          <span class="chip" style="border-color:var(--accent);background:var(--tint);color:var(--accent-ink);font-weight:600;border-radius:20px;">All 12</span>
+          <span class="chip" style="border-radius:20px;">Validated 8</span><span class="chip" style="border-radius:20px;">Draft 4</span>
+        </div>
+        <div class="scroll" style="flex-grow:1;">
+          <div class="navitem sel" style="flex-direction:column;align-items:stretch;gap:5px;padding:11px 15px;border-bottom:1px solid var(--border2);"><div style="display:flex;align-items:center;gap:8px;"><span class="badge b-high">HIGH</span><span class="mono muted" style="font-size:10.5px">F-3</span><span style="flex-grow:1"></span><span style="font-size:10px;color:var(--ok);font-weight:600;">✓ validated</span></div><div style="font-weight:600;font-size:13px;color:var(--accent-ink)">IDOR in Checkout order lookup</div><div class="mono muted" style="font-size:10.5px">CWE-639 · Checkout · GET /orders/:id</div></div>
+          <div class="navitem" style="flex-direction:column;align-items:stretch;gap:5px;padding:11px 15px;border-bottom:1px solid var(--border2);"><div style="display:flex;align-items:center;gap:8px;"><span class="badge b-crit">CRIT</span><span class="mono muted" style="font-size:10.5px">F-1</span><span style="flex-grow:1"></span><span style="font-size:10px;color:var(--ok);font-weight:600;">✓ validated</span></div><div style="font-weight:600;font-size:13px;">SQL injection in report export</div><div class="mono muted" style="font-size:10.5px">CWE-89 · Reporting · GET /reports</div></div>
+          <div class="navitem" style="flex-direction:column;align-items:stretch;gap:5px;padding:11px 15px;border-bottom:1px solid var(--border2);"><div style="display:flex;align-items:center;gap:8px;"><span class="badge b-crit">CRIT</span><span class="mono muted" style="font-size:10.5px">F-2</span><span style="flex-grow:1"></span><span style="font-size:10px;color:var(--med);font-weight:600;">● runtime</span></div><div style="font-weight:600;font-size:13px;">Auth bypass on admin refund</div><div class="mono muted" style="font-size:10.5px">CWE-306 · Admin · POST /admin/refund</div></div>
+          <div class="navitem" style="flex-direction:column;align-items:stretch;gap:5px;padding:11px 15px;border-bottom:1px solid var(--border2);"><div style="display:flex;align-items:center;gap:8px;"><span class="badge b-high">HIGH</span><span class="mono muted" style="font-size:10.5px">F-4</span><span style="flex-grow:1"></span><span style="font-size:10px;color:var(--ink3);font-weight:600;">draft</span></div><div style="font-weight:600;font-size:13px;">SSRF in avatar URL fetch</div><div class="mono muted" style="font-size:10.5px">CWE-918 · Profile · POST /profile/avatar</div></div>
+        </div>
+      </div>
+      <div style="flex-grow:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;">
+        <div style="padding:18px 26px 15px;border-bottom:1px solid var(--border);">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span class="badge b-high" style="padding:3px 9px;">HIGH · 7.1</span><div style="font-size:20px;font-weight:700;letter-spacing:-.02em;">IDOR in Checkout order lookup</div><div style="flex-grow:1"></div><button class="btn">Export H1</button><button class="btn-primary" onclick="go('env')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>Validate live</button></div>
+          <div style="display:flex;gap:7px;margin-top:11px;flex-wrap:wrap;"><span class="mono chip">CWE-639</span><span class="mono chip">pattern ACX-15</span><span class="mono chip">feature: Checkout</span><span class="chip" style="background:#F0FDF4;border-color:#BBF7D0;color:#166534;">triaged ✓</span><span class="chip" style="background:#F0FDF4;border-color:#BBF7D0;color:#166534;">validated ✓ (independent)</span><span class="chip" style="background:var(--tint);border-color:var(--accent-brd);color:#3730A3;">static-confirmed</span></div>
+        </div>
+        <div id="find-detail" class="scroll" style="flex-grow:1;padding:18px 26px;">
+          <div class="kicker" style="margin-bottom:8px;">What happens</div>
+          <div style="line-height:1.6;max-width:82ch;margin-bottom:18px;"><span class="mono chip">OrdersController#show</span> loads an order by <span class="mono chip">params[:id]</span> behind authentication but never checks that the order belongs to the current user. Any authenticated customer can read any other customer's order — line items, address, card last-4.</div>
+          <div class="kicker" style="margin-bottom:8px;">Vulnerable source · snapshot a1b2c3</div>
+          <div class="term" style="max-width:820px;">
+            <div class="bar"><span class="sd" style="background:#57534E"></span><span class="mono" style="font-size:11px;color:#A8A29E">app/controllers/orders_controller.rb</span></div>
+            <div class="code mono">
+              <div><span style="color:#57534E">40</span>&nbsp;&nbsp;<span style="color:#C084FC">def</span> <span style="color:#93C5FD">show</span></div>
+              <div style="background:#3F1D1D;margin:0 -14px;padding:0 14px;"><span style="color:#57534E">41</span>&nbsp;&nbsp;&nbsp;&nbsp;@order = <span style="color:#93C5FD">Order</span>.find(params[<span style="color:#FCA5A5">:id</span>])&nbsp;&nbsp;<span style="color:#F87171"># ← no owner scope</span></div>
+              <div><span style="color:#57534E">42</span>&nbsp;&nbsp;&nbsp;&nbsp;render <span style="color:#FCA5A5">json:</span> @order</div>
+              <div><span style="color:#57534E">43</span>&nbsp;&nbsp;<span style="color:#C084FC">end</span></div>
+            </div>
+          </div>
+          <div style="display:flex;gap:24px;margin-top:20px;flex-wrap:wrap;">
+            <div style="flex:1 1 380px;"><div class="kicker" style="margin-bottom:8px;">Remediation</div><div class="card" style="padding:12px 14px;box-shadow:none;"><div class="mono" style="font-size:12.5px;line-height:1.7;"><span style="color:var(--crit)">- @order = Order.find(params[:id])</span><br><span style="color:var(--ok)">+ @order = current_user.orders.find(params[:id])</span></div></div></div>
+            <div style="flex:1 1 260px;"><div class="kicker" style="margin-bottom:8px;">Validation trail</div><div style="display:flex;flex-direction:column;gap:9px;font-size:12.5px;">
+              <div style="display:flex;gap:8px;align-items:flex-start;"><svg class="check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-top:1px"><path d="M20 6L9 17l-5-5"/></svg><span>Hunter raised candidate from ACX-15 differential</span></div>
+              <div style="display:flex;gap:8px;align-items:flex-start;"><svg class="check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-top:1px"><path d="M20 6L9 17l-5-5"/></svg><span>Triager: no dominating control found</span></div>
+              <div style="display:flex;gap:8px;align-items:flex-start;"><svg class="check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-top:1px"><path d="M20 6L9 17l-5-5"/></svg><span>Validator re-proved the path independently</span></div>
+              <div style="display:flex;gap:8px;align-items:flex-start;"><span style="width:15px;height:15px;border-radius:50%;border:2px solid var(--accent);flex-shrink:0;margin-top:1px;"></span><span class="muted">Live validation available in Env →</span></div>
+            </div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ PATTERNS ============ -->
+    <div class="panel" data-panel="patterns">
+      <div class="side" style="width:346px;">
+        <div style="padding:15px 17px 9px;display:flex;align-items:baseline;justify-content:space-between;"><div style="font-weight:600;font-size:15px;">Pattern library</div><span class="mono muted" style="font-size:11px;">281 canonical</span></div>
+        <div style="padding:0 17px 11px;">
+          <div class="kicker" style="font-size:11px;color:var(--ink3);margin-bottom:8px;">Your pattern sets</div>
+          <div class="card" style="background:var(--tint);border-color:var(--accent-brd);padding:11px 12px;margin-bottom:8px;box-shadow:none;"><div style="display:flex;align-items:center;gap:8px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h6l2 2h8v12H4z"/></svg><span style="font-weight:600;font-size:13px;color:var(--accent-ink)">acme-house-rules</span><span style="flex-grow:1"></span><span class="mono" style="font-size:10.5px;color:var(--accent-ink)">18</span></div><div class="muted" style="font-size:11px;margin-top:4px;color:var(--ink2)">imported folder · 18 cards · validated ✓</div></div>
+          <div style="border:1.5px dashed var(--border);border-radius:8px;padding:11px 12px;display:flex;align-items:center;gap:8px;color:var(--ink2);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#57534E" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span style="font-size:12.5px;font-weight:500;">Import a pattern folder…</span></div>
+        </div>
+        <div class="kicker" style="padding:0 17px 6px;font-size:11px;color:var(--ink3);">Canonical families · 24</div>
+        <div class="scroll" style="flex-grow:1;padding:0 9px;">
+          <div class="navitem sel" style="border-radius:7px;"><span class="mono" style="font-size:11px;font-weight:600;color:var(--accent);width:34px;">ACX</span>Access control<span class="ct">32</span></div>
+          <div class="navitem"><span class="mono" style="font-size:11px;font-weight:600;color:var(--ink2);width:34px;">QIX</span>Query injection<span class="ct">17</span></div>
+          <div class="navitem"><span class="mono" style="font-size:11px;font-weight:600;color:var(--ink2);width:34px;">SX</span>SSRF<span class="ct">11</span></div>
+          <div class="navitem"><span class="mono" style="font-size:11px;font-weight:600;color:var(--ink2);width:34px;">XX</span>Browser XSS<span class="ct">20</span></div>
+          <div class="navitem"><span class="mono" style="font-size:11px;font-weight:600;color:var(--ink2);width:34px;">CIX</span>Command exec<span class="ct">18</span></div>
+          <div class="navitem"><span class="mono" style="font-size:11px;font-weight:600;color:var(--ink2);width:34px;">SMX</span>State machine<span class="ct">14</span></div>
+          <div class="navitem"><span class="mono" style="font-size:11px;font-weight:600;color:var(--ink2);width:34px;">RLX</span>Resource exhaustion<span class="ct">9</span></div>
+        </div>
+      </div>
+      <div class="scroll" style="flex-grow:1;padding:20px 28px;min-width:0;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span class="mono badge" style="background:var(--accent);padding:3px 9px;">ACX-15</span><div style="font-size:20px;font-weight:700;letter-spacing:-.02em;">Object read without ownership scope</div><div style="flex-grow:1"></div><span class="mono chip">→ CWE-639, CWE-284</span></div>
+        <div class="grid2" style="margin-top:18px;max-width:900px;">
+          <div class="card" style="padding:14px 16px;box-shadow:none;"><div style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Invariant / goal</div><div style="font-size:13px;line-height:1.55;">A record read for an actor must be constrained to records that actor is authorised to see.</div></div>
+          <div class="card" style="padding:14px 16px;box-shadow:none;"><div style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Attacker control</div><div style="font-size:13px;line-height:1.55;">The object identifier in the request path or body, freely chosen by any authenticated actor.</div></div>
+          <div class="card" style="padding:14px 16px;box-shadow:none;"><div style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Guard-to-sink differential</div><div style="font-size:13px;line-height:1.55;">Authentication proves <i>who</i>, but the query binds the id with no <i>owner</i> predicate before the read.</div></div>
+          <div class="card" style="padding:14px 16px;box-shadow:none;"><div style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Required proof</div><div style="font-size:13px;line-height:1.55;">A production route reaching the read, an actor with no relationship to the object, and the object returned.</div></div>
+          <div class="card" style="padding:14px 16px;box-shadow:none;"><div style="font-size:11px;font-weight:600;color:var(--crit);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Decisive rejection</div><div style="font-size:13px;line-height:1.55;">The query is already owner-scoped (<span class="mono" style="font-size:11.5px">current_user.orders</span>), or a policy check gates the id.</div></div>
+          <div class="card" style="padding:14px 16px;box-shadow:none;"><div style="font-size:11px;font-weight:600;color:var(--ink2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Overlaps</div><div class="mono" style="font-size:12px;line-height:1.7;">ACX-16 · ACX-22 · SMX-03</div></div>
+        </div>
+        <div class="card" style="margin-top:22px;padding:16px 18px;display:flex;align-items:center;gap:14px;max-width:900px;flex-wrap:wrap;"><div style="flex-grow:1;min-width:200px;"><div style="font-weight:600;font-size:14px;">Scan with a pattern set</div><div class="muted" style="font-size:12.5px;margin-top:3px;color:var(--ink2)">Run the hunt over all 47 features using only the patterns you choose.</div></div><span class="chip" style="padding:8px 13px;">Canonical · 281</span><span class="chip" style="padding:8px 13px;border-color:var(--accent);background:var(--tint);color:var(--accent-ink);font-weight:600;">acme-house-rules · 18</span><button class="btn-primary" onclick="go('assess')">Run custom scan →</button></div>
+      </div>
+    </div>
+
+    <!-- ============ ENV ============ -->
+    <div class="panel" data-panel="env">
+      <div class="scroll" style="flex-grow:1;padding:22px 26px;display:flex;gap:24px;min-width:0;flex-wrap:wrap;">
+        <div style="flex:1 1 380px;display:flex;flex-direction:column;gap:15px;">
+          <div><div style="font-size:17px;font-weight:700;letter-spacing:-.01em;">Test environment</div><div class="muted" style="font-size:12.5px;margin-top:4px;line-height:1.5;color:var(--ink2)">Register a running target to confirm findings dynamically. Static-only until you authorise.</div></div>
+          <div class="card" style="padding:15px;display:flex;flex-direction:column;gap:9px;">
+            <div style="display:flex;align-items:center;gap:10px;"><span style="width:88px;color:var(--ink2);font-size:12.5px;">Base URL</span><span class="mono chip" style="flex-grow:1;text-align:left;">https://staging.acme.test</span></div>
+            <div style="display:flex;align-items:center;gap:10px;"><span style="width:88px;color:var(--ink2);font-size:12.5px;">Auth</span><span class="mono chip" style="flex-grow:1;text-align:left;">Bearer ••••••••3f2a</span></div>
+            <div style="display:flex;align-items:center;gap:10px;"><span style="width:88px;color:var(--ink2);font-size:12.5px;">Header</span><span class="mono chip" style="flex-grow:1;text-align:left;">X-Env: staging</span></div>
+            <div style="display:flex;align-items:center;gap:10px;"><span style="width:88px;color:var(--ink2);font-size:12.5px;">Scope</span><span class="chip" style="flex-grow:1;text-align:left;">*.acme.test · staging only</span></div>
+          </div>
+          <div class="card" style="background:#FFFBEB;border-color:#FDE68A;padding:14px 16px;box-shadow:none;"><div style="display:flex;align-items:center;gap:10px;"><div style="flex-grow:1;"><div style="font-weight:600;font-size:13px;color:#92400E;">Runtime validation authorised</div><div style="font-size:11.5px;color:#92400E;margin-top:2px;">recorded in PROJECT.md · staging · read-only probes</div></div><div style="width:42px;height:24px;border-radius:20px;background:var(--ok);display:flex;align-items:center;padding:0 3px;justify-content:flex-end;"><span style="width:18px;height:18px;border-radius:50%;background:#fff;"></span></div></div></div>
+          <div class="card" style="padding:14px 16px;display:flex;align-items:center;gap:12px;box-shadow:none;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3"/><path d="M13 15h4"/></svg><div style="flex-grow:1;"><div style="font-weight:600;font-size:13px;">PoC runs in a WASM sandbox</div><div class="muted" style="font-size:11.5px;margin-top:2px;color:var(--ink2)">no host filesystem · no egress beyond scope</div></div><span class="pill-ok">isolated</span></div>
+        </div>
+        <div style="flex:1 1 440px;display:flex;flex-direction:column;min-width:0;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;"><span class="badge b-high" style="padding:3px 8px;">F-3 · HIGH</span><div style="font-size:15px;font-weight:600;">Validating: IDOR in Checkout order lookup</div><div style="flex-grow:1"></div><span class="pill-ok">● runtime-confirmed</span></div>
+          <div id="env-live" class="term" style="flex-grow:1;display:flex;flex-direction:column;min-height:340px;">
+            <div class="bar"><span class="sd" style="background:#DC2626"></span><span class="sd" style="background:#D97706"></span><span class="sd" style="background:#16A34A"></span><span class="mono" style="font-size:11px;color:#A8A29E;margin-left:6px;">sandbox · probe as customer B vs customer A's order</span></div>
+            <div class="code mono" style="flex-grow:1;">
+              <div style="color:#818CF8">→ request</div>
+              <div><span style="color:#34D399">GET</span> /orders/<span style="color:#FCD34D">80421</span> HTTP/1.1</div>
+              <div><span style="color:#9CA3AF">Host:</span> staging.acme.test</div>
+              <div><span style="color:#9CA3AF">Authorization:</span> Bearer ••••3f2a  <span style="color:#57534E"># customer B</span></div>
+              <div style="height:10px"></div>
+              <div style="color:#F87171">← response</div>
+              <div>HTTP/1.1 <span style="color:#F87171">200 OK</span></div>
+              <div>{</div>
+              <div>&nbsp;&nbsp;<span style="color:#93C5FD">"id"</span>: 80421,</div>
+              <div>&nbsp;&nbsp;<span style="color:#93C5FD">"customer"</span>: <span style="color:#FCA5A5">"customer-A@acme.test"</span>,  <span style="color:#F87171">← not the caller</span></div>
+              <div>&nbsp;&nbsp;<span style="color:#93C5FD">"card_last4"</span>: <span style="color:#FCA5A5">"4242"</span></div>
+              <div>}</div>
+            </div>
+            <div class="bar" style="border-top:1px solid #292524;border-bottom:0;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34D399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><span style="font-size:12px;color:#D1FAE5;">Reproduced — verdict upgraded <span class="mono">static → runtime-confirmed</span>.</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ MEMORY ============ -->
+    <div class="panel" data-panel="memory">
+      <div class="scroll" style="flex-grow:1;padding:22px 28px;">
+        <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:16px;"><div style="font-size:18px;font-weight:700;letter-spacing:-.01em;">Learning &amp; memory</div><div class="muted" style="font-size:12.5px;color:var(--ink2)">shared across every project — the store improves day by day</div></div>
+        <div class="grid4" style="margin-bottom:20px;">
+          <div class="card stat" style="padding:16px;box-shadow:none;"><div class="n">299</div><div class="muted" style="font-size:12px;margin-top:2px;color:var(--ink2)">patterns in catalog</div><div style="font-size:11px;color:var(--ok);margin-top:6px;font-weight:600;">+18 this month</div></div>
+          <div class="card stat" style="padding:16px;box-shadow:none;"><div class="n">84%</div><div class="muted" style="font-size:12px;margin-top:2px;color:var(--ink2)">triage precision</div><div style="font-size:11px;color:var(--ok);margin-top:6px;font-weight:600;">↑ from 71%</div></div>
+          <div class="card stat" style="padding:16px;box-shadow:none;"><div class="n">1,412</div><div class="muted" style="font-size:12px;margin-top:2px;color:var(--ink2)">accept / reject signals</div><div class="muted" style="font-size:11px;margin-top:6px;font-weight:600;">feeds the router</div></div>
+          <div class="card stat" style="padding:16px;box-shadow:none;"><div class="n">6</div><div class="muted" style="font-size:12px;margin-top:2px;color:var(--ink2)">projects contributing</div><div class="muted" style="font-size:11px;margin-top:6px;font-weight:600;">cross-project recall on</div></div>
+        </div>
+        <div style="display:flex;gap:20px;flex-wrap:wrap;">
+          <div style="flex:1 1 460px;min-width:0;">
+            <div class="kicker" style="margin-bottom:10px;">Learned this cycle · learned-patterns.md</div>
+            <div class="card" style="overflow:hidden;box-shadow:none;">
+              <div style="padding:13px 16px;border-bottom:1px solid var(--border2);"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span class="sd" style="background:var(--ok)"></span><span style="font-weight:600;font-size:13px;">Mass-assignment via nested order params</span><span style="flex-grow:1"></span><span class="mono muted" style="font-size:10.5px;">new · ACX-31</span></div><div class="muted" style="font-size:12px;margin-top:5px;line-height:1.5;color:var(--ink2)">Mined from acme-api F-7 — a distinct missing security decision, promoted to the catalog.</div></div>
+              <div style="padding:13px 16px;border-bottom:1px solid var(--border2);"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span class="sd" style="background:var(--med)"></span><span style="font-weight:600;font-size:13px;">Guard: SameSite + token = no CSRF</span><span style="flex-grow:1"></span><span class="mono muted" style="font-size:10.5px;">guard</span></div><div class="muted" style="font-size:12px;margin-top:5px;line-height:1.5;color:var(--ink2)">Triager rejected CSX-02 3× — now a decisive-rejection control, cuts future noise.</div></div>
+              <div style="padding:13px 16px;"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span class="sd" style="background:var(--info)"></span><span style="font-weight:600;font-size:13px;">Consolidation scheduled</span><span style="flex-grow:1"></span><span class="mono muted" style="font-size:10.5px;">nightly</span></div><div class="muted" style="font-size:12px;margin-top:5px;line-height:1.5;color:var(--ink2)">Dedup cosine &gt; 0.92 · prune stale &gt; 30d · rebuild the recall index.</div></div>
+            </div>
+          </div>
+          <div id="mem-recall" style="flex:1 1 400px;min-width:0;">
+            <div class="kicker" style="margin-bottom:10px;">Recall before scanning</div>
+            <div class="card" style="padding:11px 13px;display:flex;align-items:center;gap:9px;margin-bottom:12px;box-shadow:none;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><span class="mono muted" style="font-size:12px;color:var(--ink2)">idor order lookup</span></div>
+            <div class="card" style="background:var(--tint);border-color:var(--accent-brd);padding:14px;box-shadow:none;"><div style="font-size:11px;font-weight:600;color:var(--accent-ink);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Surfaced from another project</div><div style="display:flex;align-items:center;gap:8px;"><span class="badge b-crit">CRIT</span><span style="font-weight:600;font-size:13px;">Same IDOR shape in payments-svc</span></div><div class="mono" style="font-size:11px;color:var(--ink2);margin-top:5px;">payments-svc · GET /invoices/:id · fixed 3 weeks ago</div><div style="font-size:12px;color:var(--ink2);line-height:1.5;margin-top:8px;">Same missing owner-scope predicate. Check the sibling endpoints flagged there before you scan.</div></div>
+            <div class="card" style="background:var(--bg);padding:12px 14px;margin-top:14px;box-shadow:none;"><div class="muted" style="font-size:11px;margin-bottom:4px;">Source of truth</div><div style="font-size:12px;color:var(--ink2);line-height:1.5;">Files on disk (<span class="mono" style="font-size:11px">learned-patterns.md</span>, <span class="mono" style="font-size:11px">feedback.jsonl</span>). The vector index only accelerates recall — nothing is lost if it's rebuilt.</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="tourwrap" id="tourwrap">
+  <div class="scrim" onclick="tour.end()"></div>
+  <div class="tourcard" role="dialog" aria-label="Walkthrough">
+    <span class="step"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4338CA" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l14 8-14 8z"/></svg><span id="tour-step">Step 1 / 8</span></span>
+    <h3 id="tour-title">—</h3>
+    <p id="tour-body">—</p>
+    <div class="tourbar">
+      <button class="lnk" onclick="tour.end()">Skip</button>
+      <div class="grow"></div><div class="prog" id="tour-prog"></div><div class="grow"></div>
+      <button class="btn" id="tour-back" onclick="tour.prev()">Back</button>
+      <button class="btn-primary" id="tour-next" onclick="tour.next()">Next</button>
+    </div>
+  </div>
+</div>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<script>
+  var current='launcher', mapSubCur='graph';
+  function go(name){ if(tour.active) tour.end(); show(name); }
+  function openMap(){ if(tour.active) tour.end(); show('map'); mapSub('graph'); }
+  function show(name){
+    current=name;
+    document.querySelectorAll('.panel').forEach(function(p){ p.classList.toggle('active', p.dataset.panel===name); });
+    document.querySelectorAll('.tab').forEach(function(t){ t.classList.toggle('active', t.dataset.tab===name); });
+    var c=document.querySelector('.panel.active .scroll'); if(c) c.scrollTop=0;
+  }
+  function mapSub(name){
+    mapSubCur=name;
+    document.querySelectorAll('.msub').forEach(function(b){ b.classList.toggle('on', b.dataset.msub===name); });
+    document.querySelectorAll('.msubpanel').forEach(function(p){ p.classList.toggle('on', p.dataset.msub===name); });
+    var host=document.querySelector('[data-panel="map"] .scroll'); if(host) host.scrollTop=0;
+  }
+
+  var assessSubCur='run';
+  function assessSub(name){ assessSubCur=name;
+    document.querySelectorAll('.asub').forEach(function(b){ b.classList.toggle('on', b.dataset.asub===name); });
+    document.querySelectorAll('.asubpanel').forEach(function(p){ p.classList.toggle('on', p.dataset.asub===name); });
+    var h=document.querySelector('[data-panel="assess"] .portal .scroll'); if(h) h.scrollTop=0;
+  }
+  function setScope(k){
+    document.querySelectorAll('.segbtn').forEach(function(b){ b.classList.toggle('on', b.dataset.scope===k); });
+    document.querySelectorAll('.scopebox').forEach(function(x){ x.classList.toggle('on', x.dataset.scope===k); });
+    updateHint();
+  }
+  function setMode(k){
+    document.querySelectorAll('.mcard').forEach(function(b){ b.classList.toggle('on', b.dataset.mode===k); });
+    document.querySelectorAll('.modebox').forEach(function(x){ x.classList.toggle('on', x.dataset.mode===k); });
+    updateHint();
+  }
+  function updateHint(){
+    var m=document.querySelector('.mcard.on'), s=document.querySelector('.segbtn.on');
+    var mt=m?m.querySelector('.t').textContent.trim():'', st=s?s.textContent.trim():'';
+    var el=document.getElementById('runHint'); if(el) el.textContent=mt+' · '+st;
+  }
+  function runAssess(){ assessSub('run'); }
+  function togglePrompt(){
+    var cb=document.getElementById('promptEnable'); var on=cb&&cb.checked;
+    var body=document.getElementById('promptBody'); if(body) body.classList.toggle('on', on);
+    var t=document.getElementById('askText'); if(t){ t.disabled=!on; if(on) t.focus(); }
+  }
+  function assessFeature(name){ go('assess'); setScope('feature'); var el=document.getElementById('scopeFeatureName'); if(el) el.textContent=name; setMode('pattern'); assessSub('run'); }
+  function assessLead(){ go('assess'); setScope('feature'); setMode('prompt'); assessSub('run'); }
+
+  var STEPS=[
+    {tab:'launcher', target:'#proj-acme', title:'Open a project', body:'Every project runs in its own session and remembers everything on disk. The context window is only a cache — nothing is lost when it fills. Pick provider, model and effort here, then open.'},
+    {tab:'map', sub:'graph', target:'#kgraph', title:'The code becomes a knowledge graph', body:'On open, SecForge maps the codebase into a typed graph — actors, endpoints, auth checks, services, data stores, jobs. Every node and edge cites file:line. The red edge is a coverage gap: an order read that reaches the store with no owner check.'},
+    {tab:'map', sub:'feature', target:'#ledgerhd', title:'codengram structure, in full', body:'Each feature carries codengram’s complete map — the Endpoint/Action Ledger (the ground-truth denominator), authorization map, actor context, same-functionality clusters and honest depth-status. Object-authz is the column that matters.'},
+    {tab:'map', sub:'cons', target:'#conshd', title:'Nothing is silently missing', body:'Consolidation aggregates every feature into the phase1-maps tree: coverage matrices, the ranked Phase 2 review queue (patterns A–H), and a completion gate separating technical from semantic coverage.'},
+    {tab:'assess', asub:'run', target:'#assess-pipeline', title:'Run it your way', body:'Scan one feature or all 47 — by pattern family, by CWE, or by just telling the session in plain English what to look for. Agents fan out: framer → hunters → triager → validator → reporter, and only survivors are promoted.'},
+    {tab:'assess', asub:'matrix', target:'#covmatrix', title:'Everything is tracked', body:'The portal tracks coverage three ways — by feature, by CWE category, and a feature × pattern matrix where every cell carries a verdict, so nothing is silently skipped.'},
+    {tab:'findings', target:'#find-detail', title:'Only real findings land here', body:'Each finding is wired to the exact vulnerable guard, pattern and CWE, with the quoted source, a remediation diff, and the full triage → validation trail behind it.'},
+    {tab:'env', target:'#env-live', title:'Confirm it for real', body:'Register a test target and reproduce the finding live inside a WASM sandbox — static-only until you authorise it. The verdict upgrades from static-confirmed to runtime-confirmed.'},
+    {tab:'memory', target:'#mem-recall', title:'It gets smarter every day', body:'New patterns and false-positive guards accrue to a shared store. Before a scan, recall surfaces the same bug shape you already fixed in another project. Files are the source of truth; the vector index just accelerates it.'}
+  ];
+
+  var tour={
+    active:false, i:0, lastTarget:null,
+    start:function(){ this.active=true; this.i=0; document.getElementById('tourwrap').classList.add('on'); this.render(); },
+    end:function(){ this.active=false; this.clearSpot(); document.getElementById('tourwrap').classList.remove('on'); },
+    next:function(){ if(this.i<STEPS.length-1){ this.i++; this.render(); } else { this.end(); } },
+    prev:function(){ if(this.i>0){ this.i--; this.render(); } },
+    clearSpot:function(){ if(this.lastTarget){ this.lastTarget.classList.remove('spot'); this.lastTarget=null; } },
+    render:function(){
+      var s=STEPS[this.i];
+      show(s.tab); if(s.sub) mapSub(s.sub); if(s.asub) assessSub(s.asub);
+      this.clearSpot();
+      var self=this;
+      setTimeout(function(){
+        var el=document.querySelector(s.target);
+        if(el){ el.classList.add('spot'); self.lastTarget=el;
+          try{ el.scrollIntoView({behavior:'smooth', block:'center', inline:'nearest'}); }catch(e){ el.scrollIntoView(); } }
+      }, 40);
+      document.getElementById('tour-step').textContent='Step '+(this.i+1)+' / '+STEPS.length;
+      document.getElementById('tour-title').textContent=s.title;
+      document.getElementById('tour-body').textContent=s.body;
+      var b=document.getElementById('tour-back'); b.disabled=(this.i===0); b.style.opacity=(this.i===0)?.4:1;
+      document.getElementById('tour-next').textContent=(this.i===STEPS.length-1)?'Finish':'Next';
+      var prog=document.getElementById('tour-prog'); prog.innerHTML='';
+      for(var k=0;k<STEPS.length;k++){ var d=document.createElement('i'); if(k===this.i) d.className='on'; prog.appendChild(d); }
+    }
+  };
+  document.addEventListener('keydown', function(e){
+    if(!tour.active) return;
+    if(e.key==='Escape') tour.end(); else if(e.key==='ArrowRight') tour.next(); else if(e.key==='ArrowLeft') tour.prev();
+  });
+  document.querySelectorAll('.modebox[data-mode="pattern"] .pchip').forEach(function(c){
+    c.addEventListener('click', function(){ c.classList.toggle('on'); });
+  });
+  document.querySelectorAll('.modebox[data-mode="prompt"] .pchip').forEach(function(c){
+    c.addEventListener('click', function(){ var t=document.querySelector('.ask'); if(t) t.value=c.textContent.replace(/[“”]/g,'').trim(); });
+  });
+  var MSEL={
+    features:{el:'mselFeatures',ph:'Search 47 features…',sel:['Checkout','Orders'],opts:[
+      {v:'Checkout',t:'Commerce'},{v:'Cart',t:'Commerce'},{v:'Orders',t:'Commerce'},{v:'Refunds',t:'Commerce'},{v:'Coupons',t:'Commerce'},{v:'Inventory',t:'Commerce'},
+      {v:'Authentication',t:'Identity'},{v:'Sessions & tokens',t:'Identity'},{v:'Password reset',t:'Identity'},{v:'OAuth apps',t:'Identity'},
+      {v:'User management',t:'Admin'},{v:'Roles & permissions',t:'Admin'},{v:'Audit log',t:'Admin'},
+      {v:'Profile',t:'Account'},{v:'Notifications',t:'Account'},{v:'Billing',t:'Account'},
+      {v:'Search',t:'Platform'},{v:'File uploads',t:'Platform'},{v:'Webhooks',t:'Platform'},{v:'Reporting',t:'Platform'}
+    ]},
+    patterns:{el:'mselPatterns',ph:'Search families, CWEs, sets…',sel:['ACX · Access control','acme-house-rules · 18'],opts:[
+      {v:'ACX · Access control',t:'32'},{v:'QIX · Query injection',t:'17'},{v:'SX · SSRF',t:'11'},{v:'XX · Browser XSS',t:'20'},
+      {v:'CIX · Command exec',t:'18'},{v:'SMX · State machine',t:'14'},{v:'RLX · Resource limits',t:'9'},{v:'CRX · Cryptography',t:'12'},{v:'PTX · Path traversal',t:'13'},
+      {v:'CWE-639 · IDOR',t:'cwe'},{v:'CWE-862 · Missing authz',t:'cwe'},{v:'CWE-918 · SSRF',t:'cwe'},{v:'CWE-89 · SQL injection',t:'cwe'},{v:'CWE-770 · Rate limit',t:'cwe'},
+      {v:'acme-house-rules · 18',t:'yours'}
+    ]}
+  };
+  function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  function mselInit(kind){
+    var c=MSEL[kind], root=document.getElementById(c.el); if(!root) return;
+    root.innerHTML='<div class="msel-box" onclick="mselFocus(\''+kind+'\')"><span class="msel-chips" id="'+c.el+'-chips"></span>'
+      +'<input class="msel-input" id="'+c.el+'-inp" placeholder="'+esc(c.ph)+'" oninput="mselFilter(\''+kind+'\')" onfocus="mselShow(\''+kind+'\',true)" onclick="event.stopPropagation()"></div>'
+      +'<div class="msel-menu" id="'+c.el+'-menu" hidden></div>';
+    document.addEventListener('click',function(e){ if(!root.contains(e.target)) mselShow(kind,false); });
+    mselRender(kind);
+  }
+  function mselFocus(kind){ var i=document.getElementById(MSEL[kind].el+'-inp'); if(i)i.focus(); mselShow(kind,true); }
+  function mselShow(kind,s){ var m=document.getElementById(MSEL[kind].el+'-menu'); if(m)m.hidden=!s; }
+  function mselFilter(kind){ mselRender(kind); mselShow(kind,true); }
+  function mselTog(kind,idx){ var c=MSEL[kind], v=c.opts[idx].v, i=c.sel.indexOf(v); if(i>=0)c.sel.splice(i,1); else c.sel.push(v); mselRender(kind); }
+  function mselRender(kind){
+    var c=MSEL[kind];
+    var chips=document.getElementById(c.el+'-chips'); var vals=c.opts.map(function(o){return o.v;});
+    chips.innerHTML=c.sel.map(function(v){ var idx=vals.indexOf(v);
+      return '<span class="msel-chip">'+esc(v)+'<button class="msel-x" onclick="event.stopPropagation();mselTog(\''+kind+'\','+idx+')">×</button></span>'; }).join('');
+    var inp=document.getElementById(c.el+'-inp'); var q=(inp&&inp.value?inp.value:'').toLowerCase();
+    var menu=document.getElementById(c.el+'-menu'); var any=false;
+    menu.innerHTML=c.opts.map(function(o,idx){ if(o.v.toLowerCase().indexOf(q)<0) return ''; any=true; var on=c.sel.indexOf(o.v)>=0;
+      return '<div class="msel-opt'+(on?' sel':'')+'" onclick="mselTog(\''+kind+'\','+idx+')"><span class="ck">'+(on?'<svg width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#fff\" stroke-width=\"3.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M20 6L9 17l-5-5\"/></svg>':'')+'</span><span>'+esc(o.v)+'</span><span class="tag">'+esc(o.t)+'</span></div>'; }).join('');
+    if(!any) menu.innerHTML='<div class="msel-empty">no matches</div>';
+    if(kind==='features'){ var h=document.getElementById('pickHint'); if(h) h.textContent=c.sel.length+' of 47 features selected'; }
+    updateHint();
+  }
+  mselInit('features'); mselInit('patterns');
+  show('launcher');
+</script>
+
+</body>
+</html>
