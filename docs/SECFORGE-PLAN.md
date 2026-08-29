@@ -5,6 +5,11 @@
 > SecForge ships **self-contained** over the Claude Agent SDK + Node stdlib + SQLite; it
 > implements sessions, fan-out, lifecycle and memory itself. See `docs/BACKEND-ARCHITECTURE.md`
 > for the backend/runtime detail.
+>
+> **Implementation note:** the shipped `secforge/` code implements the map, assess and pattern
+> engines as SecForge's own logic. Any reference projects were design inspiration read once at
+> build time only — they are NOT runtime dependencies and are not required to run SecForge.
+> The parts of this plan that describe "reusing" prior work are superseded by that self-contained build.
 
 SecForge is a standalone security-scanning tool. You feed it a source tree; it maps
 the codebase feature-by-feature into a durable knowledge base, then runs targeted or

@@ -3,9 +3,9 @@
 > Status: DRAFT v0.2 · Companion to `docs/SECFORGE-PLAN.md` · Date: 2026-08-29
 >
 > SecForge ships **self-contained**: its only heavy runtime dependency is the **Claude Agent SDK**,
-> alongside the reused codengram stack (`node:sqlite`, `node:http`) and the StaticCodeReview assess
-> engine. It implements sessions, fan-out, lifecycle and memory itself — no external orchestration
-> runtime, no MCP server. The on-disk **store is the source of truth**.
+> over Node stdlib (`node:sqlite`, `node:http`) — everything else is SecForge's own code. It
+> implements the map, assess, sessions, fan-out, lifecycle and memory itself — no external
+> orchestration runtime, no MCP server. The on-disk **store is the source of truth**.
 
 ---
 

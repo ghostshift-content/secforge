@@ -9,7 +9,7 @@ below are live in the skeleton (sessions/store real, engines stubbed) so wiring 
 |---|---|---|---|
 | Launcher → open / resume project | `POST /api/projects` | `session` → `store` | **real** |
 | Launcher → recent projects list | `GET /api/projects` | `store` | **real** |
-| Map tab → knowledge graph | `GET /api/projects/:id/graph` | `map` | stub (Phase 1 = codengram) |
+| Map tab → knowledge graph | `GET /api/projects/:id/graph` | `map` | **live** |
 | Map tab → feature map / ledger / inventories / roles / consolidated | (served from `phase1-maps/` in store) | `map` → `store` | stub (Phase 1) |
 | Assess → run screen → **Run assessment** | `POST /api/sessions/:id/scan?project=` | `session` + `assess` → `orchestrator` + `agents` + `adapters` | wired (engine stub, Phase 2/4) |
 | Assess → scope picker (feature / pick / all) | request body `scope` | `schemas` (SCOPE_KINDS) | **real contract** |

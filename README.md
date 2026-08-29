@@ -41,7 +41,7 @@ packages/
   orchestrator    bounded-concurrency fan-out scheduler
   agents          framer / hunter / triager / validator / reporter roles
   adapters        engine backends (claude-code | codex | kimi | ollama)
-  map             codebase → knowledge graph (vendors codengram, Phase 1)
+  map             codebase → knowledge graph (our own snapshot → inventory → features)
   assess          hunt → triage → validate → report pipeline (Phase 2)
   patterns        canonical + custom patterns, CWE mapping
   memory          self-contained recall over the store
@@ -50,9 +50,19 @@ docs/             SECFORGE-PLAN · BACKEND-ARCHITECTURE · WIRING
 
 ## Status
 
-Phase 0 skeleton: session lifecycle + store are real and durable; the map/assess engines and
-the LLM adapter are shaped stubs wired end to end. See `docs/SECFORGE-PLAN.md` for the roadmap
-and `docs/WIRING.md` for how the UI maps to the API and packages.
+Working v1, end-to-end and self-contained:
+- **Store + sessions** — durable; a scan is a resumable session that rehydrates from disk.
+- **Map** — real deterministic engine (snapshot → inventory → feature graph with `file:line` claims).
+- **Assess** — real deterministic rule engine over the graph → triage → independent validate →
+  findings + a feature × family coverage matrix. No LLM required.
+- **Patterns** — 24 families / 281 canonical cards / 42 CWEs, vendored into the repo.
+- **Memory / Env** — recall + learning; a guarded (static-only by default) test-target validator.
+- **UI** — the workbench served at `/`, wired to the live API (health, projects, patterns,
+  map graph, scan), with designed fallbacks.
+
+Everything is SecForge's own code over Node stdlib + SQLite/files. **Future enhancement**: an
+LLM adapter (Claude Agent SDK / OpenAI-compatible / Ollama) to augment the deterministic hunters,
+and dynamic-validation transport hardening. See `docs/SECFORGE-PLAN.md` and `docs/WIRING.md`.
 
 ## License
 
