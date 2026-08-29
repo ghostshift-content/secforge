@@ -6,6 +6,7 @@
   "main": "src/index.js",
   "exports": "./src/index.js",
   "dependencies": {
+    "@secforge/adapters": "0.0.0",
     "@secforge/patterns": "0.0.0",
     "@secforge/schemas": "0.0.0",
     "@secforge/store": "0.0.0"

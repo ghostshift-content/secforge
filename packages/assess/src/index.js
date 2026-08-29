@@ -1,12 +1,17 @@
 // @secforge/assess — the assessment engine. FRAME -> HUNT (analyze) -> TRIAGE -> VALIDATE ->
 // REPORT over a project's graph, tracking coverage as a feature x family matrix. Deterministic
-// rules only, no LLM: the graph is the only input, Node stdlib the only dependency.
+// rules are the always-reliable base and run unconditionally; an optional LLM-assist HUNT step
+// (gated on `engine`) can add extra candidates on top, but a missing/broken/unavailable adapter
+// must never stop a scan from completing with deterministic findings.
 
 import { ID } from '@secforge/schemas';
 import { readGraph, writeNodes, writeEdges } from '@secforge/store';
 import { jobEnvelope } from '@secforge/schemas';
+import { getAdapter } from '@secforge/adapters';
+import { FAMILIES } from '@secforge/patterns';
 import { analyze, validateCandidate } from './rules.js';
 import { computeCoverage } from './coverage.js';
+import { indexGraph, endpointsOfFeature } from './graph-utils.js';
 
 // Build the fan-out jobs for a run scope (from the run screen). Job count/shape only —
 // analyze() itself runs once over the whole graph; jobs exist for UI progress reporting.
@@ -25,7 +30,7 @@ export function planJobs(scope = {}) {
 
 function slugFor(candidate) { return `${candidate.family}-${candidate.title}`; }
 
-function findingOf(candidate, n) {
+function findingOf(candidate, n, engineUsed) {
   return {
     id: ID.finding(n, slugFor(candidate)),
     family: candidate.family,
@@ -38,6 +43,7 @@ function findingOf(candidate, n) {
     route: candidate.route,
     evidence: candidate.evidence,
     rule: candidate.rule,
+    engine: engineUsed,
     lifecycle: 'terminal',
     outcome: 'vulnerable',
     verification: 'verified',
@@ -46,9 +52,121 @@ function findingOf(candidate, n) {
   };
 }
 
+// ---- optional LLM-assist HUNT step (gated on `engine`) ------------------------------------
+// Deterministic rules.js is the always-on source of truth; this only ever ADDS candidates on
+// top of it, and any adapter failure degrades silently to "no extra candidates".
+const LLM_FAMILIES = new Set(['ACX', 'QIX', 'SX']); // access-control / injection / SSRF only
+const FAMILY_CWE = Object.fromEntries(FAMILIES.map((f) => [f.prefix, f.cwe[0]]));
+const LLM_CAP = 10;
+const LLM_TIMEOUT_MS = 8000;
+const LLM_MANY_FEATURES = 8; // above this, one ask() over a compact summary instead of per-feature
+
+// Belt-and-suspenders timeout: the adapter enforces its own, but a scan must never hang on it.
+// Resolves to null (not a rejection) on error/timeout so callers can treat it as "no answer".
+function withTimeout(promise, ms) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => { if (!settled) { settled = true; resolve(null); } }, ms);
+    Promise.resolve(promise).then(
+      (v) => { if (!settled) { settled = true; clearTimeout(timer); resolve(v); } },
+      () => { if (!settled) { settled = true; clearTimeout(timer); resolve(null); } },
+    );
+  });
+}
+
+function summarizeFeatures(graph) {
+  const idx = indexGraph(graph);
+  const routeIndex = new Map(); // route -> {featureId, endpointId}
+  const summaries = [];
+  for (const feature of graph.nodes.filter((n) => n.type === 'FEATURE')) {
+    const eps = endpointsOfFeature(idx, feature.id);
+    if (!eps.length) continue;
+    for (const ep of eps) {
+      if (ep.data?.route) routeIndex.set(ep.data.route, { featureId: feature.id, endpointId: ep.id });
+    }
+    summaries.push({ name: feature.name, endpoints: eps.map((e) => `${e.data?.method || '?'} ${e.data?.route || e.name}`) });
+  }
+  return { summaries, routeIndex };
+}
+
+function buildPrompt(summaries) {
+  const lines = summaries.map((f) => `- ${f.name}: ${f.endpoints.join(', ') || '(no mapped endpoints)'}`).join('\n');
+  return [
+    'You are a security reviewer scanning mapped features and their HTTP endpoints for additional',
+    'LIKELY access-control, injection, or SSRF issues. For each issue output exactly one line as:',
+    'FAMILY|title|METHOD|ROUTE|severity',
+    'FAMILY must be one of: ACX (access control), QIX (injection), SX (SSRF).',
+    'severity must be one of: low, medium, high, critical.',
+    'Output only such lines, nothing else. If you see nothing likely, output nothing.',
+    '',
+    'Features:',
+    lines,
+  ].join('\n');
+}
+
+function dedupeKey(c) { return `${c.family}::${c.route}`; }
+
+function parseLlmCandidates(text, routeIndex) {
+  if (!text || typeof text !== 'string') return [];
+  const out = [];
+  for (const raw of text.split('\n')) {
+    const parts = raw.trim().split('|').map((p) => p.trim());
+    if (parts.length < 4) continue;
+    const [family, title, method, route, severityRaw] = parts;
+    if (!LLM_FAMILIES.has(family) || !route) continue;
+    const mapped = routeIndex.get(route) || {};
+    out.push({
+      family, cwe: FAMILY_CWE[family], title: title || `${family} issue`,
+      featureId: mapped.featureId || null, endpointId: mapped.endpointId || null,
+      method: (method || '').toUpperCase() || null, route,
+      severity: ['low', 'medium', 'high', 'critical'].includes(severityRaw) ? severityRaw : 'medium',
+      evidence: { file: null, line: null }, rule: 'llm',
+    });
+  }
+  return out;
+}
+
+// Run the bounded LLM-assist HUNT step. Never throws; returns [] on any adapter trouble.
+async function llmAssist(graph, engine, existingCandidates) {
+  if (!engine || engine === 'rules') return [];
+
+  let adapter;
+  try { adapter = getAdapter(engine); } catch { return []; }
+
+  let available = false;
+  try { available = await withTimeout(adapter.available(), LLM_TIMEOUT_MS); } catch { available = false; }
+  if (!available) return [];
+
+  const { summaries, routeIndex } = summarizeFeatures(graph);
+  if (!summaries.length) return [];
+
+  const seen = new Set(existingCandidates.map(dedupeKey));
+  const extra = [];
+  const absorb = (text) => {
+    for (const c of parseLlmCandidates(text, routeIndex)) {
+      const key = dedupeKey(c);
+      if (seen.has(key) || extra.length >= LLM_CAP) continue;
+      seen.add(key);
+      extra.push(c);
+    }
+  };
+
+  try {
+    const batches = summaries.length > LLM_MANY_FEATURES ? [summaries] : summaries.map((s) => [s]);
+    for (const batch of batches) {
+      if (extra.length >= LLM_CAP) break;
+      const text = await withTimeout(adapter.ask(buildPrompt(batch)), LLM_TIMEOUT_MS);
+      absorb(text);
+    }
+  } catch {
+    // fall through — return whatever was gathered before the failure
+  }
+  return extra;
+}
+
 // REPORT stage: persist each surviving candidate as a finding, plus its graph shadow
 // (VULN_CANDIDATE + FINDING nodes, VIOLATES/MAPS_TO_CWE/CANDIDATE_IN/PROMOTED_TO edges).
-async function report(store, projectId, candidates, graph) {
+async function report(store, projectId, candidates, graph, engineUsed) {
   const findings = [];
   const seenNodes = new Set(graph.nodes.map((n) => n.id));
   const newNodes = [];
@@ -58,7 +176,7 @@ async function report(store, projectId, candidates, graph) {
   let n = 0;
   for (const candidate of candidates) {
     n += 1;
-    const finding = findingOf(candidate, n);
+    const finding = findingOf(candidate, n, engineUsed);
     await store.writeFinding(projectId, finding);
     findings.push(finding);
 
@@ -92,18 +210,29 @@ async function report(store, projectId, candidates, graph) {
  * Run an assessment: readGraph -> analyze (HUNT) -> TRIAGE -> VALIDATE -> REPORT.
  * Without store/projectId this degrades to the pure analyze() pass with no persistence
  * (kept for callers that haven't wired a project through yet).
- * @returns {Promise<{jobs:number, candidates:Array, findings:Array, coverage:object|null}>}
+ * The `engine` selects an optional LLM-assist HUNT step layered on top of the deterministic
+ * rules (which always run, regardless of engine, and are the source of truth). 'rules' (the
+ * default) skips the LLM step entirely; any other engine id is resolved via getAdapter() and
+ * used only if available() — an unknown, unavailable, or erroring adapter silently falls back
+ * to deterministic-only, it never fails the run.
+ * @returns {Promise<{jobs:number, candidates:Array, findings:Array, coverage:object|null, engineUsed:string}>}
  */
-export async function runAssessment({ store, projectId, scope = {}, engine, onEvent } = {}) {
+export async function runAssessment({ store, projectId, scope = {}, engine = 'rules', onEvent } = {}) {
   const jobs = planJobs(scope);
   onEvent?.({ stage: 'framer', status: 'done', jobs: jobs.length });
 
   const graph = (store && projectId) ? await readGraph(store, projectId) : { nodes: [], edges: [] };
-  for (const job of jobs) onEvent?.({ stage: 'hunter', job: job.id, feature: job.feature });
+  for (const job of jobs) onEvent?.({ stage: 'hunter', job: job.id, feature: job.feature, engine });
 
   const candidates = analyze(graph, { scope, patterns: scope.patterns });
-  onEvent?.({ stage: 'triager', kept: candidates.length });
-  const triaged = candidates.map((c) => ({ ...c, triaged: true }));
+  const llmExtra = await llmAssist(graph, engine, candidates).catch(() => []);
+  let n = candidates.length;
+  const allCandidates = candidates.concat(
+    llmExtra.map((c) => ({ ...c, id: ID.candidate(++n) })),
+  );
+
+  onEvent?.({ stage: 'triager', kept: allCandidates.length });
+  const triaged = allCandidates.map((c) => ({ ...c, triaged: true }));
 
   onEvent?.({ stage: 'validator', queued: triaged.length });
   const validated = triaged
@@ -113,12 +242,12 @@ export async function runAssessment({ store, projectId, scope = {}, engine, onEv
   let findings = [];
   let coverage = null;
   if (store && projectId) {
-    findings = await report(store, projectId, validated, graph);
+    findings = await report(store, projectId, validated, graph, engine);
     coverage = await computeCoverage(store, projectId);
   }
   onEvent?.({ stage: 'reporter', promoted: findings.length });
 
-  return { jobs: jobs.length, candidates: validated, findings, coverage };
+  return { jobs: jobs.length, candidates: validated, findings, coverage, engineUsed: engine };
 }
 
 export { analyze, validateCandidate, computeCoverage, ID };

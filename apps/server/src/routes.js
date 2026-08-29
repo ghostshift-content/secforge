@@ -9,6 +9,7 @@ import { FAMILIES, loadCanonicalCards, cweCatalog, importCustomFolder } from '@s
 import { mapProject } from '@secforge/map';
 import { learn, recall, crossProjectRecall, stats } from '@secforge/memory';
 import { registerTarget, getTarget, validateFinding } from '@secforge/env';
+import { listEngines } from '@secforge/adapters';
 
 const mgr = new SessionManager();
 const store = new Store();
@@ -29,6 +30,9 @@ export async function handleApi(req, res, url) {
   try {
     // /api/health
     if (parts[0] === 'health') return json(res, 200, { ok: true, service: 'secforge', ts: Date.now() }), true;
+
+    // /api/engines → available model engines (drives the UI model selector); returns a bare array
+    if (parts[0] === 'engines' && method === 'GET') return json(res, 200, await listEngines()), true;
 
     // /api/patterns → family registry (pattern picker);  /api/patterns/cards → 281 canonical cards
     if (parts[0] === 'patterns' && method === 'GET') {

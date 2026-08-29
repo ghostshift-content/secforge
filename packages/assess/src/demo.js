@@ -44,12 +44,13 @@ await writeEdges(store, project.id, edges, { snapshotId: 'snap1' });
 
 const events = [];
 const result = await runAssessment({
-  store, projectId: project.id, scope: { mode: 'all' },
+  store, projectId: project.id, scope: { mode: 'all' }, engine: 'rules',
   onEvent: (e) => events.push(e.stage),
 });
 
 assert.ok(result.findings.length >= 1, 'expected persisted findings');
 assert.deepEqual(events, ['framer', 'hunter', 'triager', 'validator', 'reporter']);
+assert.equal(result.engineUsed, 'rules');
 
 const persisted = await store.listFindings(project.id);
 assert.ok(persisted.length >= 1, 'expected store.listFindings to return persisted findings');
@@ -62,6 +63,13 @@ const vulnCell = coverage.matrix
   .some((cell) => cell.verdict === 'vuln');
 assert.ok(vulnCell, 'expected at least one vuln cell in the coverage matrix');
 assert.ok(coverage.percent >= 0 && coverage.percent <= 100);
+
+// ---- 4. an unknown/unavailable engine must never break the deterministic scan ----
+const unknownEngineResult = await runAssessment({
+  store, projectId: project.id, scope: { mode: 'all' }, engine: 'not-a-real-engine',
+});
+assert.ok(unknownEngineResult.findings.length >= 1, 'expected deterministic findings even with an unknown engine');
+assert.equal(unknownEngineResult.engineUsed, 'not-a-real-engine');
 
 rmSync(dataRoot, { recursive: true, force: true });
 console.log('OK — assess: analyze/runAssessment/computeCoverage all pass');
