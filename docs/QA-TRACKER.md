@@ -32,11 +32,11 @@ map/findings/memory/delete exercised against fixture-app on 127.0.0.1:4770.
 - [x] **S2-9c** Fabricated acme-house-rules pattern set removed from the picker. — 4fb7510
 - [x] **S2-9d** Map "phase1-maps/features/<slug>.md" file chip → real files/endpoints counts. — 4fb7510
 - [x] **S2-9e** Launcher fabricated project-id chips → real project cards only. — 4fb7510
-- [ ] **S2-3** Findings "Export H1" has no handler.
-- [ ] **S2-4** Launcher "Engine for this session" card: inert chips (= C1).
-- [ ] **S2-5** Patterns tab never fetches /api/patterns/cards; no import control (POST /api/patterns/import).
-- [ ] **S2-6** No pause/resume/cancel control in the UI.
-- [ ] **S2-9b** Assess: div-as-search-input; prompt-mode example chips dead; REJ chip dead.
+- [x] **S2-3** Findings "Export H1" → exports the selected finding as a HackerOne-style markdown report. — 5a7f807/e64ad56
+- [x] **S2-4** Launcher engine card → real #engineSelectLauncher wired to the authoritative picker. — e64ad56
+- [x] **S2-5** Patterns → detail pane lists real cards from /api/patterns/cards; import control POSTs /api/patterns/import. — 5a7f807/e64ad56
+- [x] **S2-6** Pause/Resume/Cancel controls in the Assess panel → /api/sessions/:id/(pause|resume|cancel). — e64ad56
+- [x] **S2-9b** Prompt-mode example chips fill the ask box + enable prompt mode; the multiselect search is a real input (was already); REJ chip removed with the fake candidate list. — 5a7f807
 
 ## S3 · HIGH — data integrity
 - [x] **S3-1 (N5)** stale findings served → store.clearFindings() before each scan. — 1b3ab01
@@ -56,9 +56,9 @@ map/findings/memory/delete exercised against fixture-app on 127.0.0.1:4770.
 - [x] **S4-9** header pill / assess line showed acme-api@a1b2c3 → neutral until a project opens, then real. — 4fb7510
 - [x] **S4-10** graph "red edge / COVERAGE_GAP" callout over a live graph → removed. — 4fb7510
 - [x] **S4-11** hardcoded "Authority verified" badge → removed. — 4fb7510
-- [~] **S4-1** By-feature Findings count fixed (C8); 0%-vs-100% coverage formula still to reconcile.
-- [ ] **S4-2** Findings filter chips "All 12/Validated 8/Draft 4" hardcoded & unwired.
-- [ ] **S4-3** Assess scope "api · 9 actions" vs feature's real endpoint count.
+- [x] **S4-1** By-feature "Coverage" column renamed "Pass rate" (assessed pass share) so it no longer collides with map-completeness. — a4f5889
+- [x] **S4-2** Findings filter chips → real, clickable severity filters with live counts. — 5a7f807
+- [x] **S4-3** Assess per-feature scope label shows the feature's real endpoint+job count; "all" from updateScopeLabels. — 5a7f807
 
 ## Earlier cluster
 - [x] C2/C3/C5 engine picker reconciled — 1b3ab01
@@ -71,4 +71,4 @@ map/findings/memory/delete exercised against fixture-app on 127.0.0.1:4770.
 ## S5 · LOW / hygiene
 - [ ] **S5-1** No test coverage on map/assess/adapters/patterns/memory/env/routes.
 - [ ] **S5-2** Dead code: coverageStub() (routes.js), hasAuthzGuard() (graph-utils.js).
-- [ ] **S5-3** README "designed fallbacks" wording understates the (now removed) fabrication; revise.
+- [x] **S5-3** README status revised — every pane renders real data or an explicit empty state; tabs lock until a project opens. — a4f5889

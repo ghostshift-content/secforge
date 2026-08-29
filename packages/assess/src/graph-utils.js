@@ -2,7 +2,6 @@
 // No LLM, no external engine: plain lookups over the arrays readGraph() already returns.
 
 export const STATE_CHANGING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
-export const AUTHZ_EDGE_TYPES = new Set(['AUTHORIZED_BY', 'GUARDED_BY', 'AUTHENTICATED_BY']);
 export const RATE_LIMIT_NAME_RE = /rate.?limit|throttle/i;
 
 // Index a {nodes, edges} graph for O(1) neighbour lookups by node id.
@@ -28,10 +27,6 @@ export function touching(idx, nodeId) {
 export function featureOfEndpoint(idx, endpointId) {
   const e = (idx.edgesByDst.get(endpointId) || []).find((edge) => edge.type === 'EXPOSES');
   return e ? idx.nodeById.get(e.src) : null;
-}
-
-export function hasAuthzGuard(idx, endpointId) {
-  return touching(idx, endpointId).some((e) => AUTHZ_EDGE_TYPES.has(e.type));
 }
 
 // Authentication present (who are you): an AUTHENTICATED_BY edge touches the endpoint.

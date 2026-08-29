@@ -14,7 +14,7 @@ below are live in the skeleton (sessions/store real, engines stubbed) so wiring 
 | Assess → run screen → **Run assessment** | `POST /api/sessions/:id/scan?project=` | `session` + `assess` → `orchestrator` + `agents` + `adapters` | wired (engine stub, Phase 2/4) |
 | Assess → scope picker (feature / pick / all) | request body `scope` | `schemas` (SCOPE_KINDS) | **real contract** |
 | Assess → method (pattern / prompt / full) + pattern picker | request body `scope.method` / `scope.patterns` | `patterns` (families + CWE) | **real registry** |
-| Assess → Live run pipeline (framer→…→reporter) | `GET /api/sessions/:id/stream` (SSE, Phase 2) | `orchestrator` | planned |
+| Assess → Live run pipeline (framer→…→reporter) | `GET /api/sessions/:id/stream` (SSE) | `orchestrator` (deterministic fan-out) | **real** |
 | Assess → By feature / By CWE / Coverage matrix | `GET /api/projects/:id/coverage` | `assess` + `patterns` | stub (Phase 2) |
 | Findings tab | `GET /api/projects/:id/findings` | `store` | **real** |
 | Findings → Validate live | `POST /api/findings/:id/validate` (Phase 4) | sandbox | planned |

@@ -923,7 +923,8 @@
       var sel = document.getElementById(id); if(!sel) return; ensureModelUI(sel);
       var b = sel._sfBadge, m = sel._sfModel; if(!e) return;
       if(e.id==='rules'){ b.textContent='No AI · deterministic'; b.style.cssText+=';background:var(--border2);color:var(--ink2);border:1px solid var(--border)'; m.innerHTML='<option>—</option>'; m.disabled=true; state.model=null; }
-      else if(e.connected!==false){ b.textContent='Connected'; b.style.background='#F0FDF4'; b.style.color='#166534'; b.style.border='1px solid #BBF7D0'; b.title=e.detail||''; m.innerHTML=(e.models||[]).map(function(x){return '<option value="'+esc(x)+'">'+esc(x)+'</option>';}).join('')||'<option>—</option>'; m.disabled=false; if(state.model==null||!(e.models||[]).includes(state.model)) state.model=(e.models&&e.models[0])||null; m.value=state.model||''; }
+      else if(e.connected!==false && e.analysis==='llm'){ b.textContent='Connected'; b.style.background='#F0FDF4'; b.style.color='#166534'; b.style.border='1px solid #BBF7D0'; b.title=e.detail||''; m.innerHTML=(e.models||[]).map(function(x){return '<option value="'+esc(x)+'">'+esc(x)+'</option>';}).join('')||'<option>—</option>'; m.disabled=false; if(state.model==null||!(e.models||[]).includes(state.model)) state.model=(e.models&&e.models[0])||null; m.value=state.model||''; }
+      else if(e.connected!==false){ b.textContent='Connected · analysis not wired'; b.style.background='#FFFBEB'; b.style.color='#92400E'; b.style.border='1px solid #FDE68A'; b.title='Signed in, but this provider’s analysis is not wired yet — the run uses the deterministic rules engine.'; m.innerHTML='<option>rules engine</option>'; m.disabled=true; state.model=null; }
       else { b.textContent='Not connected'; b.style.background='#FFFBEB'; b.style.color='#92400E'; b.style.border='1px solid #FDE68A'; b.title=e.howToConnect||''; m.innerHTML='<option>'+esc(e.howToConnect||'not connected')+'</option>'; m.disabled=true; state.model=null; }
     });
   }
@@ -938,7 +939,7 @@
   function renderEngineSelects(){
     if(!state.engines.length) return; // keep the sample option on fetch failure
     var html = state.engines.map(function(e){
-      var suffix = e.id==='rules' ? '' : (e.connected!==false ? ' ✓' : ' — not connected');
+      var suffix = e.id==='rules' ? '' : (e.connected!==false ? (e.analysis==='llm' ? ' ✓' : ' ✓ (rules)') : ' — not connected');
       return '<option value="'+esc(e.id)+'"'+(e.id===state.engine?' selected':'')+'>'+esc((e.label||e.id)+suffix)+'</option>';
     }).join('');
     SEL_IDS.forEach(function(id){
@@ -952,7 +953,7 @@
     SEL_IDS.forEach(function(id){ var el=document.getElementById(id); if(el && el.value!==sel.value) el.value=sel.value; });
     paintPicker();
     if(state.engine && state.engine!=='rules'){
-      get('/api/engines/'+encodeURIComponent(state.engine)+'/connection').then(function(c){ var e=engineById(state.engine); if(e){ e.connected=c.connected; e.detail=c.detail; } paintPicker(); }).catch(function(){});
+      get('/api/engines/'+encodeURIComponent(state.engine)+'/connection').then(function(c){ var e=engineById(state.engine); if(e){ e.connected=c.connected; e.detail=c.detail; if(c.analysis) e.analysis=c.analysis; } paintPicker(); }).catch(function(){});
     }
   };
 
@@ -1265,11 +1266,39 @@
     if(hdr) hdr.innerHTML = '<span class="sd" style="background:var(--ok);width:9px;height:9px;"></span><div><div style="font-weight:600;font-size:13.5px;">Run complete</div><div class="mono muted" style="font-size:11px;">'+cands.length+' candidate'+(cands.length===1?'':'s')+' · '+finds.length+' finding'+(finds.length===1?'':'s')+'</div></div>';
   }
 
+  // Live pipeline progress via SSE (deterministic fan-out). The POST /scan below is the source
+  // of truth that persists findings/coverage; the stream only animates the stages as they run.
+  var _assessES = null;
+  function startAssessStream(scope){
+    if(!window.EventSource || !state.project || !state.session) return;
+    try{ if(_assessES) _assessES.close(); }catch(e){}
+    var qs = 'project='+encodeURIComponent(state.project.id)+'&mode='+encodeURIComponent(scope.mode||'all');
+    if(scope.feature) qs += '&feature='+encodeURIComponent(scope.feature);
+    var host=document.getElementById('assess-pipeline'); var stages=host?host.querySelectorAll('.stage .st'):[];
+    try{
+      var es = new EventSource('/api/sessions/'+encodeURIComponent(state.session.sessionId)+'/stream?'+qs);
+      _assessES = es;
+      es.onmessage = function(ev){
+        var d; try{ d=JSON.parse(ev.data); }catch(e){ return; }
+        if(d.stage==='framer' && stages[0]) stages[0].textContent='done · '+(d.jobs||0)+' job'+(d.jobs===1?'':'s');
+        else if(d.stage==='hunter' && stages[1]) stages[1].textContent = d.status==='done' ? ((d.candidates!=null?d.candidates:'')+' candidates') : 'hunting…';
+        else if(d.stage==='triager' && stages[2]) stages[2].textContent=(d.kept!=null?d.kept+' kept':'triaging…');
+        else if(d.stage==='validator' && stages[3]) stages[3].textContent=(d.validated!=null?d.validated+' validated':'validating…');
+        else if(d.stage==='reporter' && stages[4]) stages[4].textContent=(d.findings!=null?d.findings+' findings':'reporting…');
+        else if(d.stage==='done'){ try{ es.close(); }catch(e){} _assessES=null; }
+      };
+      es.onerror = function(){ try{ es.close(); }catch(e){} _assessES=null; };
+    }catch(e){}
+  }
+
   var _runAssess = window.runAssess;
   window.runAssess = function(){
     if(typeof _runAssess==='function') _runAssess();
     if(!state.project || !state.session) return;
     var scope = buildScanScope();
+    var hdr = document.getElementById('assessRunHeader');
+    if(hdr) hdr.innerHTML = '<span class="sd" style="background:var(--accent);width:9px;height:9px;"></span><div><div style="font-weight:600;font-size:13.5px;">Running…</div><div class="mono muted" style="font-size:11px;">streaming pipeline progress</div></div>';
+    startAssessStream(scope);
     post('/api/sessions/'+state.session.sessionId+'/scan?project='+state.project.id, { scope: scope, engine: state.engine, model: state.model })
       .then(function(res){
         renderCandidates(res.candidates);

@@ -4,7 +4,8 @@
 
 import { SessionManager } from '@secforge/session';
 import { Store, readGraph } from '@secforge/store';
-import { runAssessment, computeCoverage } from '@secforge/assess';
+import { runAssessment, computeCoverage, analyze, planJobs } from '@secforge/assess';
+import { runAll } from '@secforge/orchestrator';
 import { FAMILIES, loadCanonicalCards, cweCatalog, importCustomFolder } from '@secforge/patterns';
 import { mapProject } from '@secforge/map';
 import { learn, recall, crossProjectRecall, stats } from '@secforge/memory';
@@ -120,6 +121,28 @@ export async function handleApi(req, res, url) {
     if (parts[0] === 'sessions' && parts[1]) {
       const sid = parts[1], action = parts[2];
       if (!project) return json(res, 400, { error: 'missing ?project=' }), true;
+      // GET /api/sessions/:id/stream → SSE live progress of the deterministic assess pipeline.
+      // Rules-only (no LLM) so the stream is fully deterministic. The hunt is fanned out per
+      // feature via the orchestrator for real streamed progress; runAssessment is the source of
+      // truth that persists findings/coverage (same analyze() over the same graph → no drift).
+      if (method === 'GET' && action === 'stream') {
+        res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
+        const send = (event) => res.write(`data: ${JSON.stringify(event)}\n\n`);
+        const scope = normaliseScope({ mode: url.searchParams.get('mode') || 'all', feature: url.searchParams.get('feature') || undefined });
+        const graph = await readGraph(store, project);
+        const jobs = planJobs(scope);
+        send({ stage: 'framer', status: 'done', jobs: jobs.length });
+        await runAll(jobs, async (job) => {
+          send({ stage: 'hunter', status: 'start', job: job.id, feature: job.feature });
+          const jobScope = (job.feature && job.feature !== '<all>') ? { ...scope, mode: 'feature', feature: job.feature } : scope;
+          const found = analyze(graph, { scope: jobScope, patterns: jobScope.patterns });
+          send({ stage: 'hunter', status: 'done', job: job.id, candidates: found.length });
+        });
+        const result = await runAssessment({ store, projectId: project, scope, engine: 'rules',
+          onEvent: (e) => { if (e.stage !== 'framer' && e.stage !== 'hunter') send(e); } });
+        send({ stage: 'done', findings: result.findings.length, coverage: result.coverage?.percent ?? null });
+        return res.end(), true;
+      }
       if (method === 'GET' && !action) return json(res, 200, await mgr.status(project, sid)), true;
       if (method === 'POST' && action === 'pause') return json(res, 200, await mgr.pause(project, sid)), true;
       if (method === 'POST' && action === 'resume') {
@@ -154,14 +177,6 @@ export async function handleApi(req, res, url) {
   } catch (e) {
     return json(res, 500, { error: e.message }), true;
   }
-}
-
-function coverageStub() {
-  return {
-    percent: 0,
-    families: FAMILIES.map((f) => ({ family: f.name, prefix: f.prefix, cwe: f.cwe, state: 'not-run' })),
-    note: 'coverage computed by the assess engine in Phase 2',
-  };
 }
 
 function readBody(req) {
