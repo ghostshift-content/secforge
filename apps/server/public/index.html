@@ -413,8 +413,8 @@
           <div class="scopebox on" data-scope="feature">
             <div class="card" style="box-shadow:none;padding:10px 12px;display:flex;align-items:center;gap:8px;">
               <span class="sd" style="background:var(--ok)"></span>
-              <span style="font-weight:600;font-size:13px;" id="scopeFeatureName">Checkout</span>
-              <span class="mono muted" style="font-size:11px;">· 9 actions</span>
+              <span style="font-weight:600;font-size:13px;" id="scopeFeatureName">—</span>
+              <span class="mono muted" style="font-size:11px;" id="scopeFeatureActions"></span>
             </div>
           </div>
           <div class="scopebox" data-scope="pick">
@@ -422,7 +422,7 @@
             <div class="mono muted" style="font-size:11px;margin-top:7px;" id="pickHint">2 of 47 features selected</div>
           </div>
           <div class="scopebox" data-scope="all">
-            <div class="card" style="box-shadow:none;padding:10px 12px;font-size:12.5px;color:var(--ink2);line-height:1.5;">All <b>47 features</b> · 312 actions — every applicable pattern.</div>
+            <div class="card" style="box-shadow:none;padding:10px 12px;font-size:12.5px;color:var(--ink2);line-height:1.5;">All mapped features — every applicable pattern.</div>
           </div>
         </div>
 
@@ -451,11 +451,11 @@
           <div class="modebox" data-mode="prompt">
             <label class="promptchk"><input type="checkbox" id="promptEnable" onchange="togglePrompt()"> Tell the session what to look for</label>
             <div class="gated" id="promptBody">
-              <textarea class="ask" id="askText" spellcheck="false" disabled>find any place an order or invoice is loaded by id without checking the caller owns it</textarea>
-              <div class="kicker" style="font-size:10px;margin:12px 0 7px;color:var(--ink3)">Examples</div>
+              <textarea class="ask" id="askText" spellcheck="false" placeholder="e.g. find any place an order or invoice is loaded by id without checking the caller owns it" disabled></textarea>
+              <div class="kicker" style="font-size:10px;margin:12px 0 7px;color:var(--ink3)">Examples — click to use</div>
               <div style="display:flex;flex-direction:column;gap:6px;">
-                <div class="pchip" style="text-align:left;cursor:pointer;">“missing rate limit on auth endpoints”</div>
-                <div class="pchip" style="text-align:left;cursor:pointer;">“secrets or PII returned in API responses”</div>
+                <div class="pchip" style="text-align:left;cursor:pointer;" onclick="usePrompt(this)">missing rate limit on auth endpoints</div>
+                <div class="pchip" style="text-align:left;cursor:pointer;" onclick="usePrompt(this)">secrets or PII returned in API responses</div>
               </div>
             </div>
           </div>
@@ -605,25 +605,24 @@
     <!-- ============ FINDINGS ============ -->
     <div class="panel" data-panel="findings">
       <div class="side" style="width:334px;">
-        <div style="padding:12px 15px;border-bottom:1px solid var(--border);display:flex;gap:7px;flex-wrap:wrap;">
-          <span class="chip" style="border-color:var(--accent);background:var(--tint);color:var(--accent-ink);font-weight:600;border-radius:20px;">All 12</span>
-          <span class="chip" style="border-radius:20px;">Validated 8</span><span class="chip" style="border-radius:20px;">Draft 4</span>
+        <div id="findFilters" style="padding:12px 15px;border-bottom:1px solid var(--border);display:flex;gap:7px;flex-wrap:wrap;">
+          <span class="chip findfilter on" data-sev="all" onclick="setFindingFilter('all')" style="border-color:var(--accent);background:var(--tint);color:var(--accent-ink);font-weight:600;border-radius:20px;cursor:pointer;">All 0</span>
+          <span class="chip findfilter" data-sev="critical" onclick="setFindingFilter('critical')" style="border-radius:20px;cursor:pointer;">Crit 0</span>
+          <span class="chip findfilter" data-sev="high" onclick="setFindingFilter('high')" style="border-radius:20px;cursor:pointer;">High 0</span>
+          <span class="chip findfilter" data-sev="medium" onclick="setFindingFilter('medium')" style="border-radius:20px;cursor:pointer;">Med 0</span>
         </div>
         <div class="scroll" style="flex-grow:1;">
-          <div class="navitem sel" style="flex-direction:column;align-items:stretch;gap:5px;padding:11px 15px;border-bottom:1px solid var(--border2);"><div style="display:flex;align-items:center;gap:8px;"><span class="badge b-high">HIGH</span><span class="mono muted" style="font-size:10.5px">F-3</span><span style="flex-grow:1"></span><span style="font-size:10px;color:var(--ok);font-weight:600;">✓ validated</span></div><div style="font-weight:600;font-size:13px;color:var(--accent-ink)">IDOR in Checkout order lookup</div><div class="mono muted" style="font-size:10.5px">CWE-639 · Checkout · GET /orders/:id</div></div>
-          <div class="navitem" style="flex-direction:column;align-items:stretch;gap:5px;padding:11px 15px;border-bottom:1px solid var(--border2);"><div style="display:flex;align-items:center;gap:8px;"><span class="badge b-crit">CRIT</span><span class="mono muted" style="font-size:10.5px">F-1</span><span style="flex-grow:1"></span><span style="font-size:10px;color:var(--ok);font-weight:600;">✓ validated</span></div><div style="font-weight:600;font-size:13px;">SQL injection in report export</div><div class="mono muted" style="font-size:10.5px">CWE-89 · Reporting · GET /reports</div></div>
-          <div class="navitem" style="flex-direction:column;align-items:stretch;gap:5px;padding:11px 15px;border-bottom:1px solid var(--border2);"><div style="display:flex;align-items:center;gap:8px;"><span class="badge b-crit">CRIT</span><span class="mono muted" style="font-size:10.5px">F-2</span><span style="flex-grow:1"></span><span style="font-size:10px;color:var(--med);font-weight:600;">● runtime</span></div><div style="font-weight:600;font-size:13px;">Auth bypass on admin refund</div><div class="mono muted" style="font-size:10.5px">CWE-306 · Admin · POST /admin/refund</div></div>
-          <div class="navitem" style="flex-direction:column;align-items:stretch;gap:5px;padding:11px 15px;border-bottom:1px solid var(--border2);"><div style="display:flex;align-items:center;gap:8px;"><span class="badge b-high">HIGH</span><span class="mono muted" style="font-size:10.5px">F-4</span><span style="flex-grow:1"></span><span style="font-size:10px;color:var(--ink3);font-weight:600;">draft</span></div><div style="font-weight:600;font-size:13px;">SSRF in avatar URL fetch</div><div class="mono muted" style="font-size:10.5px">CWE-918 · Profile · POST /profile/avatar</div></div>
+          <div class="muted" style="padding:18px;text-align:center;font-size:12.5px;">No findings yet.</div>
         </div>
       </div>
       <div style="flex-grow:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;">
         <div style="padding:18px 26px 15px;border-bottom:1px solid var(--border);">
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span id="findHeaderSev" class="badge b-high" style="padding:3px 9px;">HIGH · 7.1</span><div id="findHeaderTitle" style="font-size:20px;font-weight:700;letter-spacing:-.02em;">IDOR in Checkout order lookup</div><div style="flex-grow:1"></div><button class="btn" onclick="exportFinding()">Export H1</button><button id="findValidateBtn" class="btn-primary" onclick="go('env')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>Validate live</button></div>
-          <div id="findHeaderChips" style="display:flex;gap:7px;margin-top:11px;flex-wrap:wrap;"><span class="mono chip">CWE-639</span><span class="mono chip">pattern ACX-15</span><span class="mono chip">feature: Checkout</span><span class="chip" style="background:#F0FDF4;border-color:#BBF7D0;color:#166534;">triaged ✓</span><span class="chip" style="background:#F0FDF4;border-color:#BBF7D0;color:#166534;">validated ✓ (independent)</span><span class="chip" style="background:var(--tint);border-color:var(--accent-brd);color:#3730A3;">static-confirmed</span></div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span id="findHeaderSev" class="badge" style="padding:3px 9px;">—</span><div id="findHeaderTitle" style="font-size:20px;font-weight:700;letter-spacing:-.02em;">No finding selected</div><div style="flex-grow:1"></div><button class="btn" onclick="exportFinding()">Export H1</button><button id="findValidateBtn" class="btn-primary" onclick="go('env')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>Validate live</button></div>
+          <div id="findHeaderChips" style="display:flex;gap:7px;margin-top:11px;flex-wrap:wrap;"></div>
         </div>
         <div id="find-detail" class="scroll" style="flex-grow:1;padding:18px 26px;">
           <div class="kicker" style="margin-bottom:8px;">What happens</div>
-          <div id="findWhatHappens" style="line-height:1.6;max-width:82ch;margin-bottom:18px;"><span class="mono chip">OrdersController#show</span> loads an order by <span class="mono chip">params[:id]</span> behind authentication but never checks that the order belongs to the current user. Any authenticated customer can read any other customer's order — line items, address, card last-4.</div>
+          <div id="findWhatHappens" style="line-height:1.6;max-width:82ch;margin-bottom:18px;"><span class="muted">Run an assessment to produce findings.</span></div>
           <div class="kicker" style="margin-bottom:8px;">Evidence</div>
           <div id="findEvidence" class="card" style="padding:14px 16px;box-shadow:none;max-width:820px;font-size:12.5px;line-height:1.9;"><span class="muted">Select a finding to see its file:line, rule and CWE.</span></div>
           <div class="kicker" style="margin-top:20px;margin-bottom:8px;">Remediation</div>
@@ -637,8 +636,7 @@
       <div class="side" style="width:346px;">
         <div style="padding:15px 17px 9px;display:flex;align-items:baseline;justify-content:space-between;"><div style="font-weight:600;font-size:15px;">Pattern library</div><span class="mono muted" style="font-size:11px;">281 canonical</span></div>
         <div style="padding:0 17px 11px;">
-          <div class="kicker" style="font-size:11px;color:var(--ink3);margin-bottom:8px;">Your pattern sets</div>
-          <div class="card" style="background:var(--tint);border-color:var(--accent-brd);padding:11px 12px;margin-bottom:8px;box-shadow:none;"><div style="display:flex;align-items:center;gap:8px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h6l2 2h8v12H4z"/></svg><span style="font-weight:600;font-size:13px;color:var(--accent-ink)">acme-house-rules</span><span style="flex-grow:1"></span><span class="mono" style="font-size:10.5px;color:var(--accent-ink)">18</span></div><div class="muted" style="font-size:11px;margin-top:4px;color:var(--ink2)">imported folder · 18 cards · validated ✓</div></div>
+          <div class="kicker" style="font-size:11px;color:var(--ink3);margin-bottom:8px;">Import your own pattern set</div>
           <div style="display:flex;gap:6px;">
             <input id="patternImportDir" type="text" placeholder="/path/to/pattern/folder" style="flex-grow:1;height:32px;border:1px solid var(--border);border-radius:6px;padding:0 10px;font-family:inherit;font-size:12px;background:var(--panel);color:var(--ink);">
             <button class="btn-primary" style="padding:5px 12px;font-size:12.5px;" onclick="importPatternFolder()">Import</button>
@@ -657,16 +655,10 @@
         </div>
       </div>
       <div class="scroll" style="flex-grow:1;padding:20px 28px;min-width:0;">
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span class="mono badge" style="background:var(--accent);padding:3px 9px;">ACX-15</span><div style="font-size:20px;font-weight:700;letter-spacing:-.02em;">Object read without ownership scope</div><div style="flex-grow:1"></div><span class="mono chip">→ CWE-639, CWE-284</span></div>
-        <div class="grid2" style="margin-top:18px;max-width:900px;">
-          <div class="card" style="padding:14px 16px;box-shadow:none;"><div style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Invariant / goal</div><div style="font-size:13px;line-height:1.55;">A record read for an actor must be constrained to records that actor is authorised to see.</div></div>
-          <div class="card" style="padding:14px 16px;box-shadow:none;"><div style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Attacker control</div><div style="font-size:13px;line-height:1.55;">The object identifier in the request path or body, freely chosen by any authenticated actor.</div></div>
-          <div class="card" style="padding:14px 16px;box-shadow:none;"><div style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Guard-to-sink differential</div><div style="font-size:13px;line-height:1.55;">Authentication proves <i>who</i>, but the query binds the id with no <i>owner</i> predicate before the read.</div></div>
-          <div class="card" style="padding:14px 16px;box-shadow:none;"><div style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Required proof</div><div style="font-size:13px;line-height:1.55;">A production route reaching the read, an actor with no relationship to the object, and the object returned.</div></div>
-          <div class="card" style="padding:14px 16px;box-shadow:none;"><div style="font-size:11px;font-weight:600;color:var(--crit);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Decisive rejection</div><div style="font-size:13px;line-height:1.55;">The query is already owner-scoped (<span class="mono" style="font-size:11.5px">current_user.orders</span>), or a policy check gates the id.</div></div>
-          <div class="card" style="padding:14px 16px;box-shadow:none;"><div style="font-size:11px;font-weight:600;color:var(--ink2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Overlaps</div><div class="mono" style="font-size:12px;line-height:1.7;">ACX-16 · ACX-22 · SMX-03</div></div>
-        </div>
-        <div class="card" style="margin-top:22px;padding:16px 18px;display:flex;align-items:center;gap:14px;max-width:900px;flex-wrap:wrap;"><div style="flex-grow:1;min-width:200px;"><div style="font-weight:600;font-size:14px;">Scan with a pattern set</div><div class="muted" style="font-size:12.5px;margin-top:3px;color:var(--ink2)">Run the hunt over all 47 features using only the patterns you choose.</div></div><span class="chip" style="padding:8px 13px;">Canonical · 281</span><span class="chip" style="padding:8px 13px;border-color:var(--accent);background:var(--tint);color:var(--accent-ink);font-weight:600;">acme-house-rules · 18</span><button class="btn-primary" onclick="go('assess')">Run custom scan →</button></div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><div id="patternDetailHead" style="font-size:20px;font-weight:700;letter-spacing:-.02em;">Pattern library</div><div style="flex-grow:1"></div><span class="mono muted" style="font-size:12px;">281 canonical cards</span></div>
+        <div class="muted" style="font-size:12.5px;margin-top:6px;">Select a family on the left to list its patterns. Each card is a named security-decision check applied during a run.</div>
+        <div id="patternCards" class="card" style="margin-top:18px;max-width:900px;box-shadow:none;overflow:hidden;"><div class="muted" style="padding:18px;text-align:center;font-size:12.5px;">Loading…</div></div>
+        <div class="card" style="margin-top:22px;padding:16px 18px;display:flex;align-items:center;gap:14px;max-width:900px;flex-wrap:wrap;"><div style="flex-grow:1;min-width:200px;"><div style="font-weight:600;font-size:14px;">Scan with a pattern set</div><div class="muted" style="font-size:12.5px;margin-top:3px;color:var(--ink2)">Pick the pattern families you want in the Assess tab, then run.</div></div><button class="btn-primary" onclick="go('assess')">Go to Assess →</button></div>
       </div>
     </div>
 
@@ -787,6 +779,10 @@
     var el=document.getElementById('runHint'); if(el) el.textContent=mt+' · '+st;
   }
   function runAssess(){ assessSub('run'); }
+  function usePrompt(el){
+    var cb=document.getElementById('promptEnable'); if(cb && !cb.checked){ cb.checked=true; togglePrompt(); }
+    var t=document.getElementById('askText'); if(t){ t.value=(el.textContent||'').trim(); t.focus(); }
+  }
   function togglePrompt(){
     var cb=document.getElementById('promptEnable'); var on=cb&&cb.checked;
     var body=document.getElementById('promptBody'); if(body) body.classList.toggle('on', on);
@@ -843,11 +839,10 @@
       {v:'Profile',t:'Account'},{v:'Notifications',t:'Account'},{v:'Billing',t:'Account'},
       {v:'Search',t:'Platform'},{v:'File uploads',t:'Platform'},{v:'Webhooks',t:'Platform'},{v:'Reporting',t:'Platform'}
     ]},
-    patterns:{el:'mselPatterns',ph:'Search families, CWEs, sets…',sel:['ACX · Access control','acme-house-rules · 18'],opts:[
+    patterns:{el:'mselPatterns',ph:'Search families, CWEs, sets…',sel:[],opts:[
       {v:'ACX · Access control',t:'32'},{v:'QIX · Query injection',t:'17'},{v:'SX · SSRF',t:'11'},{v:'XX · Browser XSS',t:'20'},
       {v:'CIX · Command exec',t:'18'},{v:'SMX · State machine',t:'14'},{v:'RLX · Resource limits',t:'9'},{v:'CRX · Cryptography',t:'12'},{v:'PTX · Path traversal',t:'13'},
-      {v:'CWE-639 · IDOR',t:'cwe'},{v:'CWE-862 · Missing authz',t:'cwe'},{v:'CWE-918 · SSRF',t:'cwe'},{v:'CWE-89 · SQL injection',t:'cwe'},{v:'CWE-770 · Rate limit',t:'cwe'},
-      {v:'acme-house-rules · 18',t:'yours'}
+      {v:'CWE-639 · IDOR',t:'cwe'},{v:'CWE-862 · Missing authz',t:'cwe'},{v:'CWE-918 · SSRF',t:'cwe'},{v:'CWE-89 · SQL injection',t:'cwe'},{v:'CWE-770 · Rate limit',t:'cwe'}
     ]}
   };
   function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
@@ -873,7 +868,7 @@
     menu.innerHTML=c.opts.map(function(o,idx){ if(o.v.toLowerCase().indexOf(q)<0) return ''; any=true; var on=c.sel.indexOf(o.v)>=0;
       return '<div class="msel-opt'+(on?' sel':'')+'" onclick="mselTog(\''+kind+'\','+idx+')"><span class="ck">'+(on?'<svg width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#fff\" stroke-width=\"3.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M20 6L9 17l-5-5\"/></svg>':'')+'</span><span>'+esc(o.v)+'</span><span class="tag">'+esc(o.t)+'</span></div>'; }).join('');
     if(!any) menu.innerHTML='<div class="msel-empty">no matches</div>';
-    if(kind==='features'){ var h=document.getElementById('pickHint'); if(h) h.textContent=c.sel.length+' of 47 features selected'; }
+    if(kind==='features'){ var h=document.getElementById('pickHint'); if(h) h.textContent=c.sel.length+' of '+c.opts.length+' features selected'; }
     updateHint();
   }
   mselInit('features'); mselInit('patterns');
@@ -892,7 +887,9 @@
     projects: [], project: null, session: null,
     engines: [], engine: null, model: null,
     features: [], selectedFeature: null,
-    graph: null, findings: [], coverage: null
+    graph: null, findings: [], coverage: null,
+    findingFilter: 'all', selectedFinding: null,
+    families: [], cards: []
   };
 
   function setBadge(ok){
@@ -1051,6 +1048,7 @@
     var pathEl = document.getElementById('mapFeaturePath'); if(pathEl){ pathEl.textContent = (f.counts?(f.counts.files||0)+' files · '+(f.counts.endpoints||0)+' endpoints':'—'); pathEl.classList.add('muted'); }
     var btn = document.getElementById('assessFeatureBtn'); if(btn) btn.onclick = function(){ assessFeature(f.name); };
     var sfn = document.getElementById('scopeFeatureName'); if(sfn) sfn.textContent = f.name;
+    var sfa = document.getElementById('scopeFeatureActions'); if(sfa){ var na = f.counts ? ((f.counts.endpoints||0)+(f.counts.jobs||0)) : 0; sfa.textContent = '· '+na+' action'+(na===1?'':'s'); }
     renderLedger(f);
   }
 
@@ -1334,10 +1332,28 @@
   }
 
   // ---------- findings ----------
-  function renderFindingsList(list){
+  window.setFindingFilter = function(sev){
+    state.findingFilter = sev;
+    document.querySelectorAll('#findFilters .findfilter').forEach(function(c){
+      var on = c.getAttribute('data-sev')===sev;
+      c.classList.toggle('on', on);
+      c.style.borderColor = on ? 'var(--accent)' : ''; c.style.background = on ? 'var(--tint)' : ''; c.style.color = on ? 'var(--accent-ink)' : ''; c.style.fontWeight = on ? '600' : '';
+    });
+    renderFindingsList(state.findings || []);
+  };
+  function updateFilterCounts(all){
+    var by = function(s){ return all.filter(function(f){ return (f.severity||'').toLowerCase()===s; }).length; };
+    var set = function(sev,label,n){ var el=document.querySelector('#findFilters .findfilter[data-sev="'+sev+'"]'); if(el) el.textContent=label+' '+n; };
+    set('all','All',all.length); set('critical','Crit',by('critical')); set('high','High',by('high')); set('medium','Med',by('medium'));
+  }
+  function renderFindingsList(all){
     var host = document.querySelector('[data-panel="findings"] .side .scroll');
     if(!host) return;
-    if(!list.length){ host.innerHTML = sfEmpty('No findings. Run an assessment from the Assess tab — results land here.'); clearFindingDetail(); return; }
+    updateFilterCounts(all);
+    var filter = state.findingFilter || 'all';
+    var list = filter==='all' ? all : all.filter(function(f){ return (f.severity||'').toLowerCase()===filter; });
+    if(!all.length){ host.innerHTML = sfEmpty('No findings. Run an assessment from the Assess tab — results land here.'); clearFindingDetail(); return; }
+    if(!list.length){ host.innerHTML = '<div class="muted" style="padding:18px;text-align:center;font-size:12.5px;">No '+esc(filter)+' findings.</div>'; return; }
     host.innerHTML = list.map(function(f,i){
       return '<div class="navitem'+(i===0?' sel':'')+'" data-fid="'+esc(f.id)+'" style="flex-direction:column;align-items:stretch;gap:5px;padding:11px 15px;border-bottom:1px solid var(--border2);">'
         + '<div style="display:flex;align-items:center;gap:8px;"><span class="badge '+sevClass(f.severity)+'">'+esc((f.severity||'').toUpperCase())+'</span><span class="mono muted" style="font-size:10.5px">'+esc(f.id)+'</span></div>'
@@ -1464,6 +1480,7 @@
 
   function hydratePatterns(families){
     if(!families || !families.length) return;
+    state.families = families;
     if(typeof MSEL!=='undefined' && MSEL.patterns){
       MSEL.patterns.opts = families.map(function(f){ return { v: f.prefix+' · '+f.name, t: String(f.count) }; });
       MSEL.patterns.sel = MSEL.patterns.sel.filter(function(v){ return MSEL.patterns.opts.some(function(o){ return o.v===v; }); });
@@ -1479,9 +1496,29 @@
         el.addEventListener('click', function(){
           fl.querySelectorAll('[data-fam]').forEach(function(x){ x.classList.remove('sel'); });
           el.classList.add('sel');
+          renderPatternCards(el.getAttribute('data-fam'));
         });
       });
     }
+  }
+
+  // S2-5: the pattern library is real vendored data (/api/patterns/cards). Show the selected
+  // family's actual cards (id + title) rather than a hand-written sample card.
+  function loadPatternCards(){
+    get('/api/patterns/cards').then(function(d){ state.cards = d.cards || []; renderPatternCards(null); }).catch(function(){});
+  }
+  function renderPatternCards(family){
+    var host = document.getElementById('patternCards'); if(!host) return;
+    var cards = state.cards || [];
+    if(!family){ var f0 = (state.families && state.families[0]); family = f0 ? f0.prefix : (cards[0] && cards[0].family); }
+    var head = document.getElementById('patternDetailHead');
+    var fam = (state.families || []).find(function(x){ return x.prefix===family; });
+    if(head) head.textContent = fam ? (fam.prefix+' · '+fam.name) : (family || 'Pattern library');
+    var rows = cards.filter(function(c){ return c.family===family; });
+    if(!rows.length){ host.innerHTML = '<div class="muted" style="padding:18px;text-align:center;font-size:12.5px;">No cards for this family.</div>'; return; }
+    host.innerHTML = rows.map(function(c,i){
+      return '<div style="display:flex;align-items:center;gap:12px;padding:11px 15px;'+(i>0?'border-top:1px solid var(--border2);':'')+'"><span class="mono chip">'+esc(c.id)+'</span><span style="font-weight:500;font-size:13px;">'+esc(c.title)+'</span></div>';
+    }).join('');
   }
 
   function hydrateProjects(projects){
@@ -1569,7 +1606,7 @@
     document.body.classList.add('nav-locked'); window.__sfProject=false; // S1-11: tabs stay locked until a project opens
     get('/api/health').then(function(){ setBadge(true); }).catch(function(){ setBadge(false); });
     loadEngines();
-    get('/api/patterns').then(function(d){ hydratePatterns(d.families); }).catch(function(){});
+    get('/api/patterns').then(function(d){ hydratePatterns(d.families); loadPatternCards(); }).catch(function(){});
     get('/api/projects').then(function(d){ hydrateProjects(d.projects); }).catch(function(){});
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', boot); else boot();
