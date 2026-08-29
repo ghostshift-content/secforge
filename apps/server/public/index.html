@@ -198,12 +198,12 @@
     <div class="brandname">SecForge</div>
     <div class="vr"></div>
     <button class="projpill" onclick="go('launcher')" title="Switch project" style="border-color:var(--border);">
-      <span id="projpillName">acme-api</span><span class="mono" id="projpillId">@ a1b2c3</span>
+      <span id="projpillName">No project</span><span class="mono" id="projpillId"></span>
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#A8A29E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
     </button>
     <span id="liveProjectTag" class="mono muted" style="font-size:11px;display:none;">live: —</span>
     <div style="flex-grow:1"></div>
-    <button class="walkbtn" onclick="tour.start()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l14 8-14 8z"/></svg>Walkthrough</button>
+    <button class="walkbtn" onclick="window.location.href='/demo.html'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l14 8-14 8z"/></svg>Walkthrough</button>
     <div id="live-badge" class="enginepill" style="background:#F0FDF4;border-color:#BBF7D0;" title="backend connection"><span class="sd" style="background:var(--ok)"></span><span class="mono" style="font-size:12px;color:#166534;font-weight:600;">live</span></div>
     <div class="enginepill"><span class="dot"></span><select id="engineSelectTop" class="mono" title="Engine for this session" onchange="onEngineChange(this)" style="border:0;background:transparent;font-size:12px;color:var(--accent-ink);font-weight:600;outline:none;cursor:pointer;appearance:auto;font-family:inherit;"><option selected>Claude · opus · high</option></select></div>
     <div class="avatar"></div>
@@ -232,7 +232,7 @@
             <div class="card" style="border-style:dashed;padding:26px;display:flex;flex-direction:column;align-items:center;gap:13px;text-align:center;">
               <div style="width:46px;height:46px;border-radius:12px;background:var(--tint);display:flex;align-items:center;justify-content:center;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11v5"/><path d="M9.5 13.5L12 11l2.5 2.5"/></svg></div>
               <div style="font-weight:600;">Drop a source folder here</div>
-              <input id="openPathInput" class="mono" value="~/code/acme-api" spellcheck="false" style="font-size:12.5px;color:var(--ink2);background:var(--border2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;width:100%;text-align:left;outline:none;font-family:inherit;">
+              <input id="openPathInput" class="mono" value="" placeholder="/path/to/your/project" spellcheck="false" style="font-size:12.5px;color:var(--ink2);background:var(--border2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;width:100%;text-align:left;outline:none;font-family:inherit;">
               <button class="btn-primary" style="padding:10px 18px;" onclick="openProjectFromInput()">Open &amp; map project</button>
             </div>
             <div class="card" style="padding:15px 17px;">
@@ -246,35 +246,10 @@
           </div>
 
           <div style="flex:1 1 440px;display:flex;flex-direction:column;gap:12px;">
-            <div style="display:flex;align-items:baseline;justify-content:space-between;"><div style="font-size:15px;font-weight:600;">Recent projects</div><div class="mono muted" style="font-size:12px;" id="recent-count">3 sessions saved</div></div>
+            <div style="display:flex;align-items:baseline;justify-content:space-between;"><div style="font-size:15px;font-weight:600;">Recent projects</div><div class="mono muted" style="font-size:12px;" id="recent-count">—</div></div>
             <div id="recent-projects">
-            <button id="proj-acme" class="card" onclick="openMap()" style="text-align:left;border-left:3px solid var(--accent);padding:15px 17px;cursor:pointer;">
-              <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;"><div style="font-weight:600;font-size:15px;">acme-api</div><span class="mono chip">@ a1b2c3</span><span class="pill-ok">● session active</span><div style="flex-grow:1"></div><span style="font-size:12.5px;color:var(--accent);font-weight:600;">Resume →</span></div>
-              <div class="mono muted" style="font-size:11.5px;margin-top:4px;">Ruby on Rails · 1,284 files</div>
-              <div style="display:flex;gap:22px;margin-top:12px;align-items:flex-end;flex-wrap:wrap;">
-                <div><div style="font-size:19px;font-weight:700;">47</div><div class="muted" style="font-size:11px;">features</div></div>
-                <div><div style="font-size:19px;font-weight:700;color:var(--high);">12</div><div class="muted" style="font-size:11px;">findings</div></div>
-                <div><div style="font-size:19px;font-weight:700;">78%</div><div class="muted" style="font-size:11px;">CWE coverage</div></div>
-                <div style="flex-grow:1;min-width:120px;"><div class="bar-track"><div class="bar-fill" style="width:78%"></div></div><div class="muted" style="font-size:11px;margin-top:5px;">last scan 2h ago</div></div>
-              </div>
-            </button>
-            <button class="card" onclick="openMap()" style="text-align:left;padding:15px 17px;cursor:pointer;">
-              <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;"><div style="font-weight:600;font-size:15px;">payments-svc</div><span class="mono chip">@ 9fce20</span><div style="flex-grow:1"></div><span style="font-size:12.5px;color:var(--ink2);font-weight:600;">Resume →</span></div>
-              <div class="mono muted" style="font-size:11.5px;margin-top:4px;">Go · 612 files</div>
-              <div style="display:flex;gap:22px;margin-top:12px;align-items:flex-end;flex-wrap:wrap;">
-                <div><div style="font-size:19px;font-weight:700;">23</div><div class="muted" style="font-size:11px;">features</div></div>
-                <div><div style="font-size:19px;font-weight:700;color:var(--crit);">4</div><div class="muted" style="font-size:11px;">findings</div></div>
-                <div><div style="font-size:19px;font-weight:700;">100%</div><div class="muted" style="font-size:11px;">CWE coverage</div></div>
-                <div style="flex-grow:1;min-width:120px;"><div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--ok)"></div></div><div class="muted" style="font-size:11px;margin-top:5px;">complete · verified</div></div>
-              </div>
-            </button>
-            <button class="card" onclick="openMap()" style="text-align:left;padding:15px 17px;cursor:pointer;">
-              <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;"><div style="font-weight:600;font-size:15px;">mobile-app</div><span class="mono chip">@ 4471aa</span><span class="pill-info">mapping…</span><div style="flex-grow:1"></div><span style="font-size:12.5px;color:var(--ink2);font-weight:600;">Open →</span></div>
-              <div class="mono muted" style="font-size:11.5px;margin-top:4px;">TypeScript · 2,010 files</div>
-              <div style="margin-top:12px;"><div class="bar-track"><div class="bar-fill" style="width:41%;background:var(--info)"></div></div><div class="muted" style="font-size:11px;margin-top:5px;">freezing snapshot · 823 / 2,010 inventoried</div></div>
-            </button>
+              <div class="muted" style="padding:18px;text-align:center;font-size:12.5px;">Loading projects…</div>
             </div>
-            <div class="mono muted" style="font-size:11.5px;text-align:center;border-top:1px dashed var(--border);padding-top:13px;margin-top:2px;">$ secforge open ~/code/acme-api</div>
           </div>
         </div>
       </div>
@@ -310,9 +285,8 @@
         <!-- header + sub-tabs -->
         <div style="padding:15px 24px 0;border-bottom:1px solid var(--border);">
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-            <div id="mapFeatureName" style="font-size:20px;font-weight:700;letter-spacing:-.02em;">Checkout</div>
-            <span class="pill-ok">Authority verified</span>
-            <span id="mapFeaturePath" class="mono chip">phase1-maps/features/checkout.md</span>
+            <div id="mapFeatureName" style="font-size:20px;font-weight:700;letter-spacing:-.02em;">Feature</div>
+            <span id="mapFeaturePath" class="mono chip muted">—</span>
             <div style="flex-grow:1"></div>
             <button id="assessFeatureBtn" class="btn-primary" onclick="assessFeature('Checkout')">Assess this feature →</button>
           </div>
@@ -369,199 +343,47 @@
                 <div class="mono muted" style="font-size:11px;">click any node → feature map</div>
               </div>
             </div>
-            <div class="card" style="margin-top:14px;background:var(--tint);border-color:var(--accent-brd);padding:13px 15px;box-shadow:none;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B91C1C" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9L2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
-              <div style="flex-grow:1;min-width:220px;font-size:12.5px;color:var(--ink2);">The red edge is the lead: <span class="mono" style="font-size:11px">GET /orders/:id</span> reaches the <b>orders</b> store through a <b>COVERAGE_GAP</b> — authenticated, but no <span class="mono" style="font-size:11px">AUTHORIZED_BY</span> to an owner check.</div>
-              <button class="btn-primary" onclick="assessLead()">Assess this lead →</button>
-            </div>
           </div>
 
           <!-- FEATURE MAP -->
           <div class="msubpanel" data-msub="feature" style="padding:14px 24px 26px;">
-            <div class="sechd" style="margin-top:6px"><span class="n">1</span>Feature Identity</div>
-            <div class="grid2" style="margin-top:8px;">
-              <div class="card" style="padding:12px 14px;box-shadow:none;font-size:12.5px;line-height:1.7;"><b>Slug</b> <span class="mono">checkout</span><br><b>Domain</b> Commerce <span class="muted">· feature_category :checkout</span><br><b>Main objects</b> <span class="mono" style="font-size:11px">Order, Cart, Payment</span></div>
-              <div class="card" style="padding:12px 14px;box-shadow:none;font-size:12.5px;line-height:1.7;"><b>Actors</b> customer, admin, system-job<br><b>Abilities</b> <span class="mono" style="font-size:11px">create_order, read_order, refund</span><br><b>Roles</b> → see <span class="mono" style="font-size:11px">roles/role-ability-matrix.md</span></div>
-            </div>
-
-            <div class="sechd"><span class="n">2</span>Endpoint / Action Ledger</div>
+            <div class="sechd" style="margin-top:6px"><span class="n">1</span>Endpoint / Action Ledger</div>
             <div class="muted" style="font-size:12px;margin-bottom:8px;">The ground-truth denominator — one row per route+method / mutation / worker. Object-authz is the point.</div>
             <div id="ledgerhd" class="card" style="overflow-x:auto;box-shadow:none;">
               <table class="grid">
                 <thead><tr><th>Entry Point</th><th>File · Class/Method</th><th>Object Lookup</th><th>Auth Check</th><th>Obj Authz</th><th>Response/State</th><th>Siblings</th><th>Status</th><th>P2</th><th>Gaps</th></tr></thead>
-                <tbody>
-                  <tr><td><span class="mtag m-post">POST</span> <span class="mono">/checkout</span></td><td class="mono muted">checkout_controller.rb#create <span class="muted">:24</span></td><td class="mono">Cart.find(session)</td><td class="mono">authenticate_user</td><td><span class="yes">Yes</span></td><td>Order.create!</td><td>cart-crud</td><td><span class="st-tag st-authz">AuthZ Verified</span></td><td><span class="p2-l">Low</span></td><td>—</td></tr>
-                  <tr style="background:#FFFBEB;"><td><span class="mtag m-get">GET</span> <span class="mono">/orders/:id</span></td><td class="mono muted">orders_controller.rb#show <span class="muted">:41</span></td><td class="mono">Order.find(params[:id])</td><td class="mono">authenticate_user</td><td><span class="no">No</span></td><td>renders order json</td><td>object-read</td><td><span class="st-tag st-traced">Traced</span></td><td><span class="p2-h">High</span></td><td>owner scope not read</td></tr>
-                  <tr><td><span class="mtag m-patch">PATCH</span> <span class="mono">/checkout/:id</span></td><td class="mono muted">checkout_controller.rb#update <span class="muted">:58</span></td><td class="mono">current_user.orders</td><td class="mono">policy: owns_order?</td><td><span class="yes">Yes</span></td><td>updates order</td><td>object-write</td><td><span class="st-tag st-authz">AuthZ Verified</span></td><td><span class="p2-l">Low</span></td><td>—</td></tr>
-                  <tr><td><span class="mtag m-job">JOB</span> <span class="mono">FulfilOrder</span></td><td class="mono muted">jobs/fulfil_order.rb#perform <span class="muted">:9</span></td><td class="mono">Order.find(order_id)</td><td class="muted">system context</td><td><span class="part">parent</span></td><td>marks fulfilled</td><td>async-fulfil</td><td><span class="st-tag st-mapped">Mapped</span></td><td><span class="p2-m">Med</span></td><td>re-auth? not read</td></tr>
-                </tbody>
+                <tbody><tr><td colspan="10" class="muted" style="padding:18px;text-align:center;">Select a feature in the sidebar to load its endpoint ledger.</td></tr></tbody>
               </table>
             </div>
 
-            <div class="sechd"><span class="n">3</span>Authorization Map</div>
-            <div class="card" style="overflow-x:auto;box-shadow:none;">
-              <table class="grid">
-                <thead><tr><th>Action</th><th>Expected permission</th><th>Actual check found</th><th>Object authorized</th><th>File/Method</th><th>Notes</th></tr></thead>
-                <tbody>
-                  <tr><td>read order</td><td class="mono">read_order + owner</td><td class="mono">authenticate_user only</td><td><span class="no">No</span></td><td class="mono muted">orders_controller.rb:41</td><td>owner predicate missing (pattern A)</td></tr>
-                  <tr><td>update order</td><td class="mono">owns_order?</td><td class="mono">owns_order?</td><td><span class="yes">Yes</span></td><td class="mono muted">checkout_controller.rb:58</td><td>ok</td></tr>
-                </tbody>
-              </table>
-            </div>
-
-            <div class="sechd"><span class="n">4</span>Authentication / Actor Context Map</div>
-            <div class="card" style="padding:12px 14px;box-shadow:none;font-size:12.5px;line-height:1.75;">
-              <b>Web</b> — session cookie; <span class="mono" style="font-size:11px">current_user</span> nil for anonymous; no anonymous read paths on checkout.<br>
-              <b>Workers</b> — <span class="mono" style="font-size:11px">FulfilOrder</span> re-loads the order in <b>system context</b> with no per-object re-auth (see ledger).
-            </div>
-
-            <div class="sechd"><span class="n">5</span>Same-Functionality Map <span class="muted" style="font-weight:400;font-size:12px">· review the shared gate once, check every caller</span></div>
-            <div class="card" style="overflow-x:auto;box-shadow:none;">
-              <table class="grid">
-                <thead><tr><th>Functionality pattern</th><th>Similar features</th><th>Shared service/finder</th><th>Notes for Phase 2</th></tr></thead>
-                <tbody>
-                  <tr><td>object read by id</td><td>Orders, Invoices, Tickets</td><td class="mono">find(params[:id])</td><td>same missing-owner shape — check all callers</td></tr>
-                  <tr><td>async fulfilment</td><td>Checkout, Subscriptions</td><td class="mono">FulfilJob base</td><td>system-context re-auth</td></tr>
-                </tbody>
-              </table>
-            </div>
-
-            <div class="sechd"><span class="n">6</span>Coverage Notes</div>
-            <div class="grid2" style="margin-top:8px;">
-              <div class="card" style="padding:12px 14px;box-shadow:none;font-size:12.5px;line-height:1.6;"><b style="color:var(--ok)">AuthZ verified</b> — POST /checkout, PATCH /checkout/:id read to source.<br><b style="color:var(--med)">Needs 2nd pass</b> — GET /orders/:id owner scope, FulfilOrder re-auth.</div>
-              <div class="card" style="padding:12px 14px;box-shadow:none;font-size:12.5px;line-height:1.6;"><b>Assumptions</b> — finder scoping on <span class="mono" style="font-size:11px">Cart.find</span> not line-verified.<br><b>Follow-up for Phase 2</b> — open <span class="mono" style="font-size:11px">orders_controller.rb</span>, <span class="mono" style="font-size:11px">fulfil_order.rb</span>.</div>
-            </div>
+            <div class="card" style="margin-top:16px;padding:12px 14px;box-shadow:none;font-size:12.5px;line-height:1.6;color:var(--ink2);">The authorization map, actor-context map and same-functionality map are read directly from the knowledge graph — the ledger above is the ground truth (each row cites the real file:line the graph recorded). Richer Phase-1 map documents are not generated by the current engine.</div>
           </div>
 
           <!-- INVENTORIES -->
           <div class="msubpanel" data-msub="inv" style="padding:16px 24px 26px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-              <div class="kicker">Object axis · scripted enumeration (no model)</div>
-              <div class="mono muted" style="font-size:11px;">phase1-maps/inventories/ · file:line, one header per file</div>
-            </div>
-            <div class="grid2" style="margin-top:12px;">
-              <div class="card" style="overflow:hidden;box-shadow:none;">
-                <table class="grid">
-                  <thead><tr><th>Inventory list</th><th>Rows</th></tr></thead>
-                  <tbody>
-                    <tr><td class="mono">01_routes_endpoints.txt</td><td class="mono">312</td></tr>
-                    <tr><td class="mono">02_rest_api.txt</td><td class="mono">148</td></tr>
-                    <tr><td class="mono">03_graphql.txt</td><td class="mono">0 — none</td></tr>
-                    <tr><td class="mono">04_workers_jobs.txt</td><td class="mono">37</td></tr>
-                    <tr><td class="mono">05_services_finders_policies.txt</td><td class="mono">204</td></tr>
-                    <tr><td class="mono">06_response_shaping.txt</td><td class="mono">91</td></tr>
-                    <tr><td class="mono">07_downloads_uploads_exports.txt</td><td class="mono">22</td></tr>
-                    <tr><td class="mono">08_search_aggregation.txt</td><td class="mono">44</td></tr>
-                    <tr><td class="mono">09_tokens_actors.txt</td><td class="mono">18</td></tr>
-                    <tr><td class="mono">10_processes_ipc.txt</td><td class="mono">6</td></tr>
-                    <tr><td class="mono">11_datastores_integrations.txt</td><td class="mono">29</td></tr>
-                  </tbody>
-                </table>
-              </div>
-              <div style="display:flex;flex-direction:column;gap:14px;">
-                <div class="card" style="padding:14px 16px;box-shadow:none;">
-                  <div class="kicker" style="margin-bottom:10px;">5-category reconciliation · nothing vanishes</div>
-                  <div style="display:flex;flex-direction:column;gap:9px;font-size:12.5px;">
-                    <div style="display:flex;align-items:center;gap:8px;"><span style="width:130px">Mapped to feature</span><div class="bar-track" style="flex-grow:1"><div class="bar-fill" style="width:82%"></div></div><span class="mono muted" style="font-size:11px">82%</span></div>
-                    <div style="display:flex;align-items:center;gap:8px;"><span style="width:130px">Shared infrastructure</span><div class="bar-track" style="flex-grow:1"><div class="bar-fill" style="width:11%;background:var(--info)"></div></div><span class="mono muted" style="font-size:11px">11%</span></div>
-                    <div style="display:flex;align-items:center;gap:8px;"><span style="width:130px">Not relevant + reason</span><div class="bar-track" style="flex-grow:1"><div class="bar-fill" style="width:5%;background:var(--ink3)"></div></div><span class="mono muted" style="font-size:11px">5%</span></div>
-                    <div style="display:flex;align-items:center;gap:8px;"><span style="width:130px;color:var(--med)">Unclear — gap</span><div class="bar-track" style="flex-grow:1"><div class="bar-fill" style="width:2%;background:var(--med)"></div></div><span class="mono muted" style="font-size:11px">2%</span></div>
-                  </div>
-                </div>
-                <div class="card term" style="box-shadow:none;">
-                  <div class="bar"><span class="mono" style="font-size:11px;color:#A8A29E">01_routes_endpoints.txt</span></div>
-                  <div class="code mono" style="font-size:11.5px;line-height:1.7;">
-                    <div><span style="color:#57534E"># app/config/routes.rb</span></div>
-                    <div><span style="color:#93C5FD">24</span>:  post <span style="color:#FCD34D">'/checkout'</span> =&gt; <span style="color:#A5B4FC">'checkout#create'</span></div>
-                    <div><span style="color:#93C5FD">41</span>:  get  <span style="color:#FCD34D">'/orders/:id'</span> =&gt; <span style="color:#A5B4FC">'orders#show'</span></div>
-                    <div><span style="color:#93C5FD">58</span>:  patch <span style="color:#FCD34D">'/checkout/:id'</span> =&gt; <span style="color:#A5B4FC">'checkout#update'</span></div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <div class="kicker">Source inventories</div>
+            <div id="invBody" class="card" style="margin-top:12px;padding:22px;text-align:center;box-shadow:none;"><div class="muted" style="font-size:12.5px;max-width:420px;margin:0 auto;line-height:1.5;">Per-file source inventories are not generated by the current mapping engine. The mapped files and endpoints are shown in the graph and the feature ledger.</div></div>
           </div>
 
           <!-- ROLES -->
           <div class="msubpanel" data-msub="roles" style="padding:16px 24px 26px;">
-            <div class="kicker">Subject axis · who can act · phase1-maps/roles/</div>
-            <div class="sechd" style="margin-top:12px;"><span class="n">A</span>Actor catalog &amp; ladder</div>
-            <div class="card" style="overflow-x:auto;box-shadow:none;">
-              <table class="grid">
-                <thead><tr><th>Actor</th><th>Kind</th><th>Auth mechanism</th><th>Ladder</th><th>Source of truth</th></tr></thead>
-                <tbody>
-                  <tr><td>anonymous</td><td>human</td><td>none</td><td>0</td><td class="mono muted">—</td></tr>
-                  <tr><td>customer</td><td>human</td><td>session cookie</td><td>1</td><td class="mono muted">models/user.rb:12</td></tr>
-                  <tr><td>admin</td><td>human</td><td>session + 2FA</td><td>3</td><td class="mono muted">models/user.rb:44</td></tr>
-                  <tr><td>fulfilment-bot</td><td>token</td><td>PAT · scope <span class="mono" style="font-size:11px">orders:write</span></td><td>2</td><td class="mono muted">config/tokens.yml:7</td></tr>
-                </tbody>
-              </table>
-            </div>
-            <div class="sechd"><span class="n">B</span>Role → ability matrix <span class="muted" style="font-weight:400;font-size:12px">· closes blocker ROLE-1</span></div>
-            <div class="card" style="overflow-x:auto;box-shadow:none;">
-              <table class="grid">
-                <thead><tr><th>Ability</th><th>customer</th><th>admin</th><th>fulfilment-bot</th><th>Wiring</th></tr></thead>
-                <tbody>
-                  <tr><td class="mono">create_order</td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td>—</td><td class="mono muted">CartPolicy</td></tr>
-                  <tr><td class="mono">read_order</td><td><span class="yes">✓ own</span></td><td><span class="yes">✓ all</span></td><td>—</td><td class="mono muted">OrderPolicy</td></tr>
-                  <tr><td class="mono">refund</td><td>—</td><td><span class="yes">✓</span></td><td>—</td><td class="mono muted">AdminPolicy</td></tr>
-                  <tr><td class="mono">fulfil</td><td>—</td><td>—</td><td><span class="yes">✓</span></td><td class="mono muted">token scope</td></tr>
-                </tbody>
-              </table>
-            </div>
+            <div class="kicker">Actors &amp; roles</div>
+            <div id="rolesBody" class="card" style="margin-top:12px;padding:22px;text-align:center;box-shadow:none;"><div class="muted" style="font-size:12.5px;max-width:420px;margin:0 auto;line-height:1.5;">Actor and role-ability maps render here when the graph contains ACTOR and ROLE nodes. The current mapping engine does not yet emit them.</div></div>
           </div>
 
           <!-- CONSOLIDATED -->
           <div class="msubpanel" data-msub="cons" style="padding:16px 24px 26px;">
-            <div style="display:flex;gap:22px;flex-wrap:wrap;">
-              <div style="flex:1 1 300px;min-width:0;">
-                <div class="kicker" style="margin-bottom:10px;">phase1-maps/ artifact tree</div>
-                <div id="conshd" class="card tree" style="padding:14px 16px;box-shadow:none;">
-                  <div><span class="d">phase1-maps/</span></div>
-                  <div>├─ <span class="f">README.md</span> <span class="c">· target, method, depth ladder, queue</span></div>
-                  <div>├─ <span class="d">inventories/</span> <span class="c">· 00_MANIFEST + 01..11</span></div>
-                  <div>├─ <span class="d">roles/</span> <span class="c">· role-structure, role-ability-matrix</span></div>
-                  <div>├─ <span class="d">features/</span> <span class="c">· 47 × &lt;slug&gt;.md</span></div>
-                  <div>└─ <span class="d">consolidated/</span></div>
-                  <div>&nbsp;&nbsp;&nbsp;├─ <span class="f">00_INDEX.md</span> <span class="c">· 21 required outputs</span></div>
-                  <div>&nbsp;&nbsp;&nbsp;├─ <span class="f">feature_coverage_matrix.md</span></div>
-                  <div>&nbsp;&nbsp;&nbsp;├─ <span class="f">source_inventory_coverage_matrix.md</span></div>
-                  <div>&nbsp;&nbsp;&nbsp;├─ <span class="f">same_functionality_cross_feature_map.md</span></div>
-                  <div>&nbsp;&nbsp;&nbsp;├─ <span class="f">phase2_review_queue.md</span></div>
-                  <div>&nbsp;&nbsp;&nbsp;└─ <span class="f">phase1_completion_gate.md</span></div>
+            <div class="kicker">Consolidated coverage</div>
+            <div class="grid2" style="margin-top:12px;">
+              <div class="card" style="padding:16px;box-shadow:none;">
+                <div class="kicker" style="margin-bottom:10px;">Coverage</div>
+                <div id="consCoverage" style="display:flex;flex-direction:column;gap:9px;font-size:12.5px;">
+                  <div style="display:flex;align-items:center;gap:8px;"><span style="width:150px">Technical coverage</span><div class="bar-track" style="flex-grow:1"><div id="consTechBar" class="bar-fill" style="width:0%"></div></div><span id="consTech" class="mono muted" style="font-size:11px">0%</span></div>
+                  <div style="display:flex;align-items:center;gap:8px;"><span style="width:150px">Semantic coverage</span><div class="bar-track" style="flex-grow:1"><div id="consSemBar" class="bar-fill" style="width:0%;background:var(--info)"></div></div><span id="consSem" class="mono muted" style="font-size:11px">0%</span></div>
                 </div>
-                <div class="kicker" style="margin:18px 0 10px;">Phase 2 review queue · patterns A–H</div>
-                <div class="card" style="overflow:hidden;box-shadow:none;">
-                  <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;font-size:12.5px;"><span class="p2-h">A</span><span style="font-weight:600">Parent-only authz on object read</span><span style="flex-grow:1"></span><span class="mono muted" style="font-size:11px">GET /orders/:id</span></div>
-                  <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;font-size:12.5px;border-top:1px solid var(--border2)"><span class="p2-m">B</span><span style="font-weight:600">Route vs enforced permission divergence</span><span style="flex-grow:1"></span><span class="mono muted" style="font-size:11px">admin/*</span></div>
-                  <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;font-size:12.5px;border-top:1px solid var(--border2)"><span class="p2-m">G</span><span style="font-weight:600">Worker runs in system context</span><span style="flex-grow:1"></span><span class="mono muted" style="font-size:11px">FulfilOrder</span></div>
-                </div>
+                <div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border);font-size:11.5px;color:var(--ink3);line-height:1.5;">Mapping, not vulnerability hunting. Coverage means the map is complete — not that every vulnerability was found.</div>
               </div>
-
-              <div style="flex:1 1 300px;min-width:0;">
-                <div class="kicker" style="margin-bottom:10px;">Feature coverage matrix</div>
-                <div class="card" style="overflow-x:auto;box-shadow:none;">
-                  <table class="grid">
-                    <thead><tr><th>Feature</th><th>Ledger rows</th><th>Traced</th><th>AuthZ verified</th></tr></thead>
-                    <tbody>
-                      <tr><td>Checkout</td><td class="mono">9</td><td class="mono">9</td><td class="mono">7</td></tr>
-                      <tr><td>Cart</td><td class="mono">6</td><td class="mono">6</td><td class="mono">6</td></tr>
-                      <tr><td>Orders</td><td class="mono">11</td><td class="mono">8</td><td class="mono">4</td></tr>
-                      <tr><td>Authentication</td><td class="mono">7</td><td class="mono">7</td><td class="mono">7</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-
-                <div class="kicker" style="margin:18px 0 10px;">Phase 1 completion gate</div>
-                <div class="card" style="padding:14px 16px;box-shadow:none;">
-                  <div style="display:flex;flex-direction:column;gap:9px;font-size:12.5px;">
-                    <div style="display:flex;align-items:center;gap:8px;"><svg class="check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Technical coverage — 100% of inventory reconciled</div>
-                    <div style="display:flex;align-items:center;gap:8px;"><span style="width:15px;height:15px;border-radius:50%;border:2px solid var(--med);"></span>Semantic coverage — 96% mapped to features</div>
-                    <div style="display:flex;align-items:center;gap:8px;"><svg class="check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Every ledger row has an honest depth-status</div>
-                    <div style="display:flex;align-items:center;gap:8px;color:var(--ink2)"><span style="width:15px;height:15px;border-radius:50%;border:2px solid var(--med);"></span>2 blockers open — see completion gate</div>
-                  </div>
-                  <div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border);font-size:11.5px;color:var(--ink3);line-height:1.5;">Mapping, not vulnerability hunting. 100% coverage means the map is complete — not that every vulnerability was found.</div>
-                </div>
-              </div>
+              <div class="card" style="padding:22px;text-align:center;box-shadow:none;display:flex;align-items:center;justify-content:center;"><div class="muted" style="font-size:12.5px;max-width:340px;line-height:1.5;">The consolidated review queue and per-artifact documents are not generated by the current engine. Findings from a run appear in the Findings tab.</div></div>
             </div>
           </div>
 
@@ -577,7 +399,7 @@
       <div class="runcfg">
         <div style="padding:16px 18px 2px;">
           <div style="font-size:16px;font-weight:700;letter-spacing:-.01em;">New assessment run</div>
-          <div class="mono muted" style="font-size:11.5px;margin-top:3px;">acme-api @ a1b2c3 · session-07</div>
+          <div id="assessSessionLine" class="mono muted" style="font-size:11.5px;margin-top:3px;">no project open</div>
         </div>
 
         <!-- scope -->
@@ -667,31 +489,24 @@
 
           <!-- LIVE RUN -->
           <div class="asubpanel on" data-asub="run" style="padding:18px 24px;">
-            <div class="card" style="box-shadow:none;padding:12px 15px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px;">
-              <span class="sd" style="background:var(--accent);width:9px;height:9px;"></span>
-              <div><div style="font-weight:600;font-size:13.5px;">Run #a1b2c3-07 · Checkout · pattern ACX</div><div class="mono muted" style="font-size:11px;">started 40s ago · 5 hunters · 3 candidates</div></div>
-              <div style="flex-grow:1"></div>
-              <div class="bar-track" style="width:150px;"><div class="bar-fill" style="width:62%"></div></div>
-              <span class="mono muted" style="font-size:11px;">62%</span>
+            <div id="assessRunHeader" class="card" style="box-shadow:none;padding:12px 15px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px;">
+              <span class="sd" style="background:var(--ink3);width:9px;height:9px;"></span>
+              <div><div style="font-weight:600;font-size:13.5px;">No run in progress</div><div class="mono muted" style="font-size:11px;">Choose a scope and engine, then Run — results stream in below.</div></div>
             </div>
             <div class="kicker" style="margin:0 0 11px;">Pipeline · framer → hunters → triager → validator → reporter</div>
             <div id="assess-pipeline" style="display:flex;align-items:stretch;gap:9px;flex-wrap:wrap;">
-          <div class="stage"><h4><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Question-framer</h4><p>Scoped to a forbidden actor × resource × action tuple.</p><div class="st" style="color:var(--ok)">done · 1 job</div></div>
+          <div class="stage"><h4>Question-framer</h4><p>Scoped to a forbidden actor × resource × action tuple.</p><div class="st muted">—</div></div>
           <div style="display:flex;align-items:center;color:var(--ink3)">→</div>
-          <div class="stage"><h4><span class="sd" style="background:var(--accent)"></span>Hunters <span class="muted" style="font-weight:400;font-size:10px;">×5</span></h4><p>One agent per action group. Differential engine, 5 ledgers.</p><div class="st" style="color:var(--accent)">3 candidates</div></div>
+          <div class="stage"><h4>Hunters</h4><p>One agent per action group. Differential engine.</p><div class="st muted">—</div></div>
           <div style="display:flex;align-items:center;color:var(--ink3)">→</div>
-          <div class="stage"><h4><span class="sd" style="background:var(--med)"></span>Triager</h4><p>Real vs bogus. Applies decisive-rejection controls.</p><div class="st" style="color:var(--ink2)">2 kept · 1 rejected</div></div>
+          <div class="stage"><h4>Triager</h4><p>Real vs bogus. Applies decisive-rejection controls.</p><div class="st muted">—</div></div>
           <div style="display:flex;align-items:center;color:var(--ink3)">→</div>
-          <div class="stage" style="opacity:.55"><h4><span class="sd" style="background:var(--ink3)"></span>Validator</h4><p>Independent re-proof. Cannot validate its own work.</p><div class="st muted">queued · 2</div></div>
+          <div class="stage"><h4>Validator</h4><p>Independent re-proof. Cannot validate its own work.</p><div class="st muted">—</div></div>
           <div style="display:flex;align-items:center;color:var(--ink3)">→</div>
-          <div class="stage" style="opacity:.55"><h4><span class="sd" style="background:var(--ink3)"></span>Reporter</h4><p>Freezes validated records into Findings.</p><div class="st muted">waiting</div></div>
+          <div class="stage"><h4>Reporter</h4><p>Freezes validated records into Findings.</p><div class="st muted">—</div></div>
         </div>
-        <div class="kicker" style="margin:22px 0 11px;">Candidates streaming in</div>
-        <div id="candidateList" class="card" style="overflow:hidden;box-shadow:none;">
-          <div style="display:flex;align-items:center;gap:12px;padding:12px 15px;flex-wrap:wrap;"><span class="badge b-high">HIGH</span><span style="font-weight:600;font-size:13.5px;">Broken object-level authz on order lookup</span><span class="mono muted" style="font-size:11px;">ACX-15 · CWE-639</span><div style="flex-grow:1"></div><span class="mono guard-warn">GET /orders/:id</span><span class="muted" style="font-size:11px;">triaged ✓ → validating</span></div>
-          <div style="display:flex;align-items:center;gap:12px;padding:12px 15px;border-top:1px solid var(--border2);flex-wrap:wrap;"><span class="badge b-med">MED</span><span style="font-weight:600;font-size:13.5px;">Coupon apply missing rate limit</span><span class="mono muted" style="font-size:11px;">RLX-04 · CWE-770</span><div style="flex-grow:1"></div><span class="mono guard-warn">POST /checkout/coupon</span><span class="muted" style="font-size:11px;">triaged ✓ → validating</span></div>
-          <div style="display:flex;align-items:center;gap:12px;padding:12px 15px;border-top:1px solid var(--border2);opacity:.6;flex-wrap:wrap;"><span class="chip" style="font-weight:700;">REJ</span><span style="font-weight:500;font-size:13.5px;text-decoration:line-through;">CSRF on checkout submit</span><span class="mono muted" style="font-size:11px;">CSX-02</span><div style="flex-grow:1"></div><span class="muted" style="font-size:11px;">rejected — SameSite=strict + token</span></div>
-        </div>
+        <div class="kicker" style="margin:22px 0 11px;">Candidates</div>
+        <div id="candidateList" class="card" style="overflow:hidden;box-shadow:none;"><div class="muted" style="padding:16px;text-align:center;font-size:12.5px;">No candidates yet — run an assessment.</div></div>
           </div>
 
           <!-- BY FEATURE -->
@@ -803,25 +618,10 @@
         <div id="find-detail" class="scroll" style="flex-grow:1;padding:18px 26px;">
           <div class="kicker" style="margin-bottom:8px;">What happens</div>
           <div id="findWhatHappens" style="line-height:1.6;max-width:82ch;margin-bottom:18px;"><span class="mono chip">OrdersController#show</span> loads an order by <span class="mono chip">params[:id]</span> behind authentication but never checks that the order belongs to the current user. Any authenticated customer can read any other customer's order — line items, address, card last-4.</div>
-          <div class="kicker" style="margin-bottom:8px;">Vulnerable source · snapshot a1b2c3</div>
-          <div class="term" style="max-width:820px;">
-            <div class="bar"><span class="sd" style="background:#57534E"></span><span class="mono" style="font-size:11px;color:#A8A29E">app/controllers/orders_controller.rb</span></div>
-            <div class="code mono">
-              <div><span style="color:#57534E">40</span>&nbsp;&nbsp;<span style="color:#C084FC">def</span> <span style="color:#93C5FD">show</span></div>
-              <div style="background:#3F1D1D;margin:0 -14px;padding:0 14px;"><span style="color:#57534E">41</span>&nbsp;&nbsp;&nbsp;&nbsp;@order = <span style="color:#93C5FD">Order</span>.find(params[<span style="color:#FCA5A5">:id</span>])&nbsp;&nbsp;<span style="color:#F87171"># ← no owner scope</span></div>
-              <div><span style="color:#57534E">42</span>&nbsp;&nbsp;&nbsp;&nbsp;render <span style="color:#FCA5A5">json:</span> @order</div>
-              <div><span style="color:#57534E">43</span>&nbsp;&nbsp;<span style="color:#C084FC">end</span></div>
-            </div>
-          </div>
-          <div style="display:flex;gap:24px;margin-top:20px;flex-wrap:wrap;">
-            <div style="flex:1 1 380px;"><div class="kicker" style="margin-bottom:8px;">Remediation</div><div class="card" style="padding:12px 14px;box-shadow:none;"><div class="mono" style="font-size:12.5px;line-height:1.7;"><span style="color:var(--crit)">- @order = Order.find(params[:id])</span><br><span style="color:var(--ok)">+ @order = current_user.orders.find(params[:id])</span></div></div></div>
-            <div style="flex:1 1 260px;"><div class="kicker" style="margin-bottom:8px;">Validation trail</div><div style="display:flex;flex-direction:column;gap:9px;font-size:12.5px;">
-              <div style="display:flex;gap:8px;align-items:flex-start;"><svg class="check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-top:1px"><path d="M20 6L9 17l-5-5"/></svg><span>Hunter raised candidate from ACX-15 differential</span></div>
-              <div style="display:flex;gap:8px;align-items:flex-start;"><svg class="check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-top:1px"><path d="M20 6L9 17l-5-5"/></svg><span>Triager: no dominating control found</span></div>
-              <div style="display:flex;gap:8px;align-items:flex-start;"><svg class="check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-top:1px"><path d="M20 6L9 17l-5-5"/></svg><span>Validator re-proved the path independently</span></div>
-              <div style="display:flex;gap:8px;align-items:flex-start;"><span style="width:15px;height:15px;border-radius:50%;border:2px solid var(--accent);flex-shrink:0;margin-top:1px;"></span><span class="muted">Live validation available in Env →</span></div>
-            </div></div>
-          </div>
+          <div class="kicker" style="margin-bottom:8px;">Evidence</div>
+          <div id="findEvidence" class="card" style="padding:14px 16px;box-shadow:none;max-width:820px;font-size:12.5px;line-height:1.9;"><span class="muted">Select a finding to see its file:line, rule and CWE.</span></div>
+          <div class="kicker" style="margin-top:20px;margin-bottom:8px;">Remediation</div>
+          <div id="findRemediation" class="card" style="padding:12px 14px;box-shadow:none;max-width:820px;font-size:12.5px;line-height:1.6;"><span class="muted">Remediation guidance from the matched rule appears here.</span></div>
         </div>
       </div>
     </div>
@@ -865,34 +665,19 @@
       <div class="scroll" style="flex-grow:1;padding:22px 26px;display:flex;gap:24px;min-width:0;flex-wrap:wrap;">
         <div style="flex:1 1 380px;display:flex;flex-direction:column;gap:15px;">
           <div><div style="font-size:17px;font-weight:700;letter-spacing:-.01em;">Test environment</div><div class="muted" style="font-size:12.5px;margin-top:4px;line-height:1.5;color:var(--ink2)">Register a running target to confirm findings dynamically. Static-only until you authorise.</div></div>
-          <div id="envConfigCard" class="card" style="padding:15px;display:flex;flex-direction:column;gap:9px;">
-            <div style="display:flex;align-items:center;gap:10px;"><span style="width:88px;color:var(--ink2);font-size:12.5px;">Base URL</span><span class="mono chip" style="flex-grow:1;text-align:left;">https://staging.acme.test</span></div>
-            <div style="display:flex;align-items:center;gap:10px;"><span style="width:88px;color:var(--ink2);font-size:12.5px;">Auth</span><span class="mono chip" style="flex-grow:1;text-align:left;">Bearer ••••••••3f2a</span></div>
-            <div style="display:flex;align-items:center;gap:10px;"><span style="width:88px;color:var(--ink2);font-size:12.5px;">Header</span><span class="mono chip" style="flex-grow:1;text-align:left;">X-Env: staging</span></div>
-            <div style="display:flex;align-items:center;gap:10px;"><span style="width:88px;color:var(--ink2);font-size:12.5px;">Scope</span><span class="chip" style="flex-grow:1;text-align:left;">*.acme.test · staging only</span></div>
+          <div id="envConfigCard" class="card" style="padding:15px;display:flex;flex-direction:column;gap:10px;">
+            <div style="display:flex;align-items:center;gap:10px;"><span style="width:78px;color:var(--ink2);font-size:12.5px;">Base URL</span><input id="envBaseUrl" type="text" placeholder="https://target.example.test" style="flex-grow:1;height:32px;border:1px solid var(--border);border-radius:6px;padding:0 10px;font-family:inherit;font-size:12.5px;background:var(--panel);color:var(--ink);"></div>
+            <div style="display:flex;align-items:center;gap:10px;"><span style="width:78px;color:var(--ink2);font-size:12.5px;">Scope</span><input id="envScope" type="text" placeholder="allowed hosts, comma-separated" style="flex-grow:1;height:32px;border:1px solid var(--border);border-radius:6px;padding:0 10px;font-family:inherit;font-size:12.5px;background:var(--panel);color:var(--ink);"></div>
+            <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink2);cursor:pointer;"><input id="envAuthorise" type="checkbox" style="width:15px;height:15px;">I am authorised to test this target</label>
+            <div style="display:flex;gap:8px;align-items:center;"><button class="btn-primary" onclick="registerEnvTarget()">Register target</button><span id="envSaveMsg" class="muted" style="font-size:11.5px;"></span></div>
           </div>
-          <div class="card" style="background:#FFFBEB;border-color:#FDE68A;padding:14px 16px;box-shadow:none;"><div style="display:flex;align-items:center;gap:10px;"><div style="flex-grow:1;"><div style="font-weight:600;font-size:13px;color:#92400E;">Runtime validation authorised</div><div style="font-size:11.5px;color:#92400E;margin-top:2px;">recorded in PROJECT.md · staging · read-only probes</div></div><div style="width:42px;height:24px;border-radius:20px;background:var(--ok);display:flex;align-items:center;padding:0 3px;justify-content:flex-end;"><span style="width:18px;height:18px;border-radius:50%;background:#fff;"></span></div></div></div>
-          <div class="card" style="padding:14px 16px;display:flex;align-items:center;gap:12px;box-shadow:none;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3"/><path d="M13 15h4"/></svg><div style="flex-grow:1;"><div style="font-weight:600;font-size:13px;">PoC runs in a WASM sandbox</div><div class="muted" style="font-size:11.5px;margin-top:2px;color:var(--ink2)">no host filesystem · no egress beyond scope</div></div><span class="pill-ok">isolated</span></div>
+          <div id="envAuthState" class="card" style="background:var(--border2);border-color:var(--border);padding:14px 16px;box-shadow:none;"><div style="display:flex;align-items:center;gap:10px;"><span class="sd" style="background:var(--ink3)"></span><div style="flex-grow:1;"><div style="font-weight:600;font-size:13px;">Static-only — no target authorised</div><div class="muted" style="font-size:11.5px;margin-top:2px;">Dynamic validation runs only after you register a target and explicitly authorise it. Nothing is authorised until then.</div></div></div></div>
+          <div class="card" style="padding:14px 16px;display:flex;align-items:center;gap:12px;box-shadow:none;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3"/><path d="M13 15h4"/></svg><div style="flex-grow:1;"><div style="font-weight:600;font-size:13px;">Probes are static-only by default</div><div class="muted" style="font-size:11.5px;margin-top:2px;color:var(--ink2)">SSRF-guarded · loopback &amp; link-local blocked · no probe until you authorise</div></div><span class="pill-ok">guarded</span></div>
         </div>
         <div style="flex:1 1 440px;display:flex;flex-direction:column;min-width:0;">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;"><span class="badge b-high" style="padding:3px 8px;">F-3 · HIGH</span><div style="font-size:15px;font-weight:600;">Validating: IDOR in Checkout order lookup</div><div style="flex-grow:1"></div><span class="pill-ok">● runtime-confirmed</span></div>
-          <div id="env-live" class="term" style="flex-grow:1;display:flex;flex-direction:column;min-height:340px;">
-            <div class="bar"><span class="sd" style="background:#DC2626"></span><span class="sd" style="background:#D97706"></span><span class="sd" style="background:#16A34A"></span><span class="mono" style="font-size:11px;color:#A8A29E;margin-left:6px;">sandbox · probe as customer B vs customer A's order</span></div>
-            <div class="code mono" style="flex-grow:1;">
-              <div style="color:#818CF8">→ request</div>
-              <div><span style="color:#34D399">GET</span> /orders/<span style="color:#FCD34D">80421</span> HTTP/1.1</div>
-              <div><span style="color:#9CA3AF">Host:</span> staging.acme.test</div>
-              <div><span style="color:#9CA3AF">Authorization:</span> Bearer ••••3f2a  <span style="color:#57534E"># customer B</span></div>
-              <div style="height:10px"></div>
-              <div style="color:#F87171">← response</div>
-              <div>HTTP/1.1 <span style="color:#F87171">200 OK</span></div>
-              <div>{</div>
-              <div>&nbsp;&nbsp;<span style="color:#93C5FD">"id"</span>: 80421,</div>
-              <div>&nbsp;&nbsp;<span style="color:#93C5FD">"customer"</span>: <span style="color:#FCA5A5">"customer-A@acme.test"</span>,  <span style="color:#F87171">← not the caller</span></div>
-              <div>&nbsp;&nbsp;<span style="color:#93C5FD">"card_last4"</span>: <span style="color:#FCA5A5">"4242"</span></div>
-              <div>}</div>
-            </div>
-            <div class="bar" style="border-top:1px solid #292524;border-bottom:0;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34D399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><span style="font-size:12px;color:#D1FAE5;">Reproduced — verdict upgraded <span class="mono">static → runtime-confirmed</span>.</span></div>
+          <div class="kicker" style="margin-bottom:12px;">Live validation</div>
+          <div id="env-live" class="card" style="flex-grow:1;display:flex;align-items:center;justify-content:center;min-height:340px;box-shadow:none;">
+            <div class="muted" style="text-align:center;max-width:320px;font-size:12.5px;line-height:1.55;padding:20px;">No live validation has been run. Register an authorised target, then use <b>Validate live</b> on a finding. SecForge only probes a target you have explicitly authorised.</div>
           </div>
         </div>
       </div>
@@ -903,24 +688,22 @@
       <div class="scroll" style="flex-grow:1;padding:22px 28px;">
         <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:16px;"><div style="font-size:18px;font-weight:700;letter-spacing:-.01em;">Learning &amp; memory</div><div class="muted" style="font-size:12.5px;color:var(--ink2)">shared across every project — the store improves day by day</div></div>
         <div class="grid4" style="margin-bottom:20px;">
-          <div class="card stat" style="padding:16px;box-shadow:none;"><div class="n">299</div><div class="muted" style="font-size:12px;margin-top:2px;color:var(--ink2)">patterns in catalog</div><div style="font-size:11px;color:var(--ok);margin-top:6px;font-weight:600;">+18 this month</div></div>
-          <div class="card stat" style="padding:16px;box-shadow:none;"><div class="n">84%</div><div class="muted" style="font-size:12px;margin-top:2px;color:var(--ink2)">triage precision</div><div style="font-size:11px;color:var(--ok);margin-top:6px;font-weight:600;">↑ from 71%</div></div>
-          <div class="card stat" style="padding:16px;box-shadow:none;"><div class="n">1,412</div><div class="muted" style="font-size:12px;margin-top:2px;color:var(--ink2)">accept / reject signals</div><div class="muted" style="font-size:11px;margin-top:6px;font-weight:600;">feeds the router</div></div>
-          <div class="card stat" style="padding:16px;box-shadow:none;"><div class="n">6</div><div class="muted" style="font-size:12px;margin-top:2px;color:var(--ink2)">projects contributing</div><div class="muted" style="font-size:11px;margin-top:6px;font-weight:600;">cross-project recall on</div></div>
+          <div class="card stat" style="padding:16px;box-shadow:none;"><div class="n" id="memPatterns">0</div><div class="muted" style="font-size:12px;margin-top:2px;color:var(--ink2)">patterns in catalog</div></div>
+          <div class="card stat" style="padding:16px;box-shadow:none;"><div class="n" id="memSignals">0</div><div class="muted" style="font-size:12px;margin-top:2px;color:var(--ink2)">accept / reject signals</div></div>
+          <div class="card stat" style="padding:16px;box-shadow:none;"><div class="n" id="memProjects">0</div><div class="muted" style="font-size:12px;margin-top:2px;color:var(--ink2)">projects contributing</div></div>
         </div>
         <div style="display:flex;gap:20px;flex-wrap:wrap;">
           <div style="flex:1 1 460px;min-width:0;">
-            <div class="kicker" style="margin-bottom:10px;">Learned this cycle · learned-patterns.md</div>
-            <div class="card" style="overflow:hidden;box-shadow:none;">
-              <div style="padding:13px 16px;border-bottom:1px solid var(--border2);"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span class="sd" style="background:var(--ok)"></span><span style="font-weight:600;font-size:13px;">Mass-assignment via nested order params</span><span style="flex-grow:1"></span><span class="mono muted" style="font-size:10.5px;">new · ACX-31</span></div><div class="muted" style="font-size:12px;margin-top:5px;line-height:1.5;color:var(--ink2)">Mined from acme-api F-7 — a distinct missing security decision, promoted to the catalog.</div></div>
-              <div style="padding:13px 16px;border-bottom:1px solid var(--border2);"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span class="sd" style="background:var(--med)"></span><span style="font-weight:600;font-size:13px;">Guard: SameSite + token = no CSRF</span><span style="flex-grow:1"></span><span class="mono muted" style="font-size:10.5px;">guard</span></div><div class="muted" style="font-size:12px;margin-top:5px;line-height:1.5;color:var(--ink2)">Triager rejected CSX-02 3× — now a decisive-rejection control, cuts future noise.</div></div>
-              <div style="padding:13px 16px;"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span class="sd" style="background:var(--info)"></span><span style="font-weight:600;font-size:13px;">Consolidation scheduled</span><span style="flex-grow:1"></span><span class="mono muted" style="font-size:10.5px;">nightly</span></div><div class="muted" style="font-size:12px;margin-top:5px;line-height:1.5;color:var(--ink2)">Dedup cosine &gt; 0.92 · prune stale &gt; 30d · rebuild the recall index.</div></div>
-            </div>
+            <div class="kicker" style="margin-bottom:10px;">Learned patterns · learned-patterns.md</div>
+            <div id="memLearned" class="card" style="overflow:hidden;box-shadow:none;"><div class="muted" style="padding:16px;text-align:center;font-size:12.5px;">Nothing learned yet. Patterns promoted from confirmed findings appear here.</div></div>
           </div>
           <div id="mem-recall" style="flex:1 1 400px;min-width:0;">
             <div class="kicker" style="margin-bottom:10px;">Recall before scanning</div>
-            <div class="card" style="padding:11px 13px;display:flex;align-items:center;gap:9px;margin-bottom:12px;box-shadow:none;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><span class="mono muted" style="font-size:12px;color:var(--ink2)">idor order lookup</span></div>
-            <div class="card" style="background:var(--tint);border-color:var(--accent-brd);padding:14px;box-shadow:none;"><div style="font-size:11px;font-weight:600;color:var(--accent-ink);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Surfaced from another project</div><div style="display:flex;align-items:center;gap:8px;"><span class="badge b-crit">CRIT</span><span style="font-weight:600;font-size:13px;">Same IDOR shape in payments-svc</span></div><div class="mono" style="font-size:11px;color:var(--ink2);margin-top:5px;">payments-svc · GET /invoices/:id · fixed 3 weeks ago</div><div style="font-size:12px;color:var(--ink2);line-height:1.5;margin-top:8px;">Same missing owner-scope predicate. Check the sibling endpoints flagged there before you scan.</div></div>
+            <div style="display:flex;gap:8px;margin-bottom:12px;">
+              <input id="memRecallInput" type="text" placeholder="Search memory (e.g. idor order lookup)…" onkeydown="if(event.key==='Enter')runRecall()" style="flex-grow:1;height:34px;border:1px solid var(--border);border-radius:8px;padding:0 12px;font-family:inherit;font-size:13px;background:var(--panel);color:var(--ink);">
+              <button class="btn-primary" onclick="runRecall()">Recall</button>
+            </div>
+            <div id="memRecallResult" class="card" style="padding:14px;box-shadow:none;"><div class="muted" style="font-size:12.5px;">Enter a query to search learned patterns and cross-project memory.</div></div>
             <div class="card" style="background:var(--bg);padding:12px 14px;margin-top:14px;box-shadow:none;"><div class="muted" style="font-size:11px;margin-bottom:4px;">Source of truth</div><div style="font-size:12px;color:var(--ink2);line-height:1.5;">Files on disk (<span class="mono" style="font-size:11px">learned-patterns.md</span>, <span class="mono" style="font-size:11px">feedback.jsonl</span>). The vector index only accelerates recall — nothing is lost if it's rebuilt.</div></div>
           </div>
         </div>
@@ -948,10 +731,16 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>body.nav-locked .tab{opacity:.4;pointer-events:none;filter:grayscale(1);}</style>
 
 <script>
   var current='launcher', mapSubCur='graph';
-  function go(name){ if(tour.active) tour.end(); show(name); }
+  var PROJECT_TABS={map:1,assess:1,findings:1,patterns:1,env:1,memory:1};
+  function go(name){ if(tour.active) tour.end();
+    // S1-11: the project-scoped tabs are unreachable until a project is actually open,
+    // so no one lands on a findings/map/etc. screen for a codebase they never selected.
+    if(PROJECT_TABS[name] && !window.__sfProject){ show('launcher'); var i=document.getElementById('openPathInput'); if(i){ i.focus(); } return; }
+    show(name); }
   function openMap(){ if(tour.active) tour.end(); show('map'); mapSub('graph'); }
   function show(name){
     current=name;
@@ -996,21 +785,13 @@
   function assessFeature(name){ go('assess'); setScope('feature'); var el=document.getElementById('scopeFeatureName'); if(el) el.textContent=name; setMode('pattern'); assessSub('run'); }
   function assessLead(){ go('assess'); setScope('feature'); setMode('prompt'); assessSub('run'); }
 
-  var STEPS=[
-    {tab:'launcher', target:'#proj-acme', title:'Open a project', body:'Every project runs in its own session and remembers everything on disk. The context window is only a cache — nothing is lost when it fills. Pick provider, model and effort here, then open.'},
-    {tab:'map', sub:'graph', target:'#kgraph', title:'The code becomes a knowledge graph', body:'On open, SecForge maps the codebase into a typed graph — actors, endpoints, auth checks, services, data stores, jobs. Every node and edge cites file:line. The red edge is a coverage gap: an order read that reaches the store with no owner check.'},
-    {tab:'map', sub:'feature', target:'#ledgerhd', title:'The full feature map', body:'Each feature carries its complete map — the Endpoint/Action Ledger (the ground-truth denominator), authorization map, actor context, same-functionality clusters and honest depth-status. Object-authz is the column that matters.'},
-    {tab:'map', sub:'cons', target:'#conshd', title:'Nothing is silently missing', body:'Consolidation aggregates every feature into the phase1-maps tree: coverage matrices, the ranked Phase 2 review queue (patterns A–H), and a completion gate separating technical from semantic coverage.'},
-    {tab:'assess', asub:'run', target:'#assess-pipeline', title:'Run it your way', body:'Scan one feature or all 47 — by pattern family, by CWE, or by just telling the session in plain English what to look for. Agents fan out: framer → hunters → triager → validator → reporter, and only survivors are promoted.'},
-    {tab:'assess', asub:'matrix', target:'#covmatrix', title:'Everything is tracked', body:'The portal tracks coverage three ways — by feature, by CWE category, and a feature × pattern matrix where every cell carries a verdict, so nothing is silently skipped.'},
-    {tab:'findings', target:'#find-detail', title:'Only real findings land here', body:'Each finding is wired to the exact vulnerable guard, pattern and CWE, with the quoted source, a remediation diff, and the full triage → validation trail behind it.'},
-    {tab:'env', target:'#env-live', title:'Confirm it for real', body:'Register a test target and reproduce the finding live inside a WASM sandbox — static-only until you authorise it. The verdict upgrades from static-confirmed to runtime-confirmed.'},
-    {tab:'memory', target:'#mem-recall', title:'It gets smarter every day', body:'New patterns and false-positive guards accrue to a shared store. Before a scan, recall surfaces the same bug shape you already fixed in another project. Files are the source of truth; the vector index just accelerates it.'}
-  ];
+  // The guided walkthrough lives at /demo.html (the Walkthrough button opens it). This in-page
+  // tour is retired; STEPS is empty so tour.start() is inert if ever called.
+  var STEPS=[];
 
   var tour={
     active:false, i:0, lastTarget:null,
-    start:function(){ this.active=true; this.i=0; document.getElementById('tourwrap').classList.add('on'); this.render(); },
+    start:function(){ if(!STEPS.length){ window.location.href='/demo.html'; return; } this.active=true; this.i=0; document.getElementById('tourwrap').classList.add('on'); this.render(); },
     end:function(){ this.active=false; this.clearSpot(); document.getElementById('tourwrap').classList.remove('on'); },
     next:function(){ if(this.i<STEPS.length-1){ this.i++; this.render(); } else { this.end(); } },
     prev:function(){ if(this.i>0){ this.i--; this.render(); } },
@@ -1094,6 +875,7 @@
 (function(){
   function get(p){ return fetch(p).then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); }); }
   function post(p,body){ return fetch(p,{method:'POST',headers:{'content-type':'application/json'},body:body?JSON.stringify(body):undefined}).then(function(r){ return r.json(); }); }
+  function del(p){ return fetch(p,{method:'DELETE'}).then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); }); }
   function esc(s){ return String(s==null?'':s).replace(/[&<>"'\/]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','/':'&#x2F;'}[c];}); }
 
   var state = {
@@ -1109,6 +891,10 @@
     if(ok){ el.style.background='#F0FDF4'; el.style.borderColor='#BBF7D0'; if(dot) dot.style.background='var(--ok)'; if(txt){ txt.textContent='live'; txt.style.color='#166534'; } }
     else  { el.style.background='var(--border2)'; el.style.borderColor='var(--border)'; if(dot) dot.style.background='var(--ink3)'; if(txt){ txt.textContent='offline'; txt.style.color='var(--ink3)'; } }
   }
+
+  // Honest empty state — replaces the designed sample so a real (possibly empty) project
+  // never shows fabricated content. Used wherever a renderer used to bail "keep the sample".
+  function sfEmpty(msg){ return '<div class="card" style="margin:14px;padding:22px;text-align:center;box-shadow:none;background:var(--border2);border-color:var(--border);"><div class="muted" style="font-size:12.5px;line-height:1.5;max-width:380px;margin:0 auto;">'+esc(msg)+'</div></div>'; }
 
   // ---------- engine / provider / model picker (single authoritative picker) ----------
   function engineById(id){ return state.engines.find(function(e){ return e.id===id; }) || null; }
@@ -1168,6 +954,8 @@
     var i = document.getElementById('projpillId'); if(i) i.textContent = '@ '+String(project.id).slice(0,8);
     var t = document.getElementById('liveProjectTag');
     if(t){ t.textContent = 'live: '+project.name; t.style.display = 'inline'; }
+    var sl = document.getElementById('assessSessionLine');
+    if(sl) sl.textContent = project.name+' @ '+String(project.id).slice(2,8)+(state.session?' · '+String(state.session.sessionId).slice(0,8):'');
   }
 
   function openProject(sourceRoot){
@@ -1175,6 +963,7 @@
     return post('/api/projects', { sourceRoot: sourceRoot }).then(function(d){
       if(!d || !d.project) throw new Error('open failed');
       state.project = d.project; state.session = d.session;
+      window.__sfProject=true; document.body.classList.remove('nav-locked'); // S1-11: unlock the chrome now a real project is open
       if(typeof show==='function'){ show('map'); if(typeof mapSub==='function') mapSub('graph'); }
       setLiveIndicator(d.project);
       return post('/api/projects/'+d.project.id+'/map').catch(function(){ return null; });
@@ -1201,19 +990,35 @@
     openProject(p.sourceRoot);
   };
 
+  window.forgetProject = function(id, btn){
+    if(!id) return;
+    if(!window.confirm('Forget this project? Its map, findings and run history are permanently removed from the store.')) return;
+    if(btn){ btn.disabled=true; btn.textContent='…'; }
+    del('/api/projects/'+encodeURIComponent(id)).then(function(){
+      if(state.project && state.project.id===id){ state.project=null; state.session=null; window.__sfProject=false; document.body.classList.add('nav-locked'); show('launcher'); }
+      return get('/api/projects');
+    }).then(function(d){ hydrateProjects(d.projects); }).catch(function(){ if(btn){ btn.disabled=false; btn.textContent='Forget'; } });
+  };
+
   // ---------- map: feature sidebar + ledger ----------
   function applyMapResult(mapRes){
     state.features = (mapRes && mapRes.features) || [];
     renderFeatureSidebar();
     hydrateFeatureMsel();
     updateScopeLabels();
+    var cov = (mapRes && mapRes.coverage) || {};
+    var tech = Math.round((cov.technical||0)*100), sem = Math.round((cov.semantic||0)*100);
+    var tb=document.getElementById('consTechBar'), sb=document.getElementById('consSemBar');
+    setText('consTech', tech+'%'); setText('consSem', sem+'%');
+    if(tb) tb.style.width=tech+'%'; if(sb) sb.style.width=sem+'%';
   }
 
   function renderFeatureSidebar(){
     var label = document.getElementById('featureQueueLabel');
     if(label) label.textContent = 'Feature queue · '+state.features.length;
     var host = document.querySelector('[data-panel="map"] .side .scroll');
-    if(!host || !state.features.length) return; // keep the designed sample
+    if(!host) return;
+    if(!state.features.length){ host.innerHTML = sfEmpty('No features mapped yet. Map found nothing to break this source tree into — check that the project path points at real source.'); return; }
     host.innerHTML = '<div class="grouplbl">Features</div>' + state.features.map(function(f){
       var n = f.counts ? (f.counts.endpoints||0) : 0;
       return '<div class="navitem" data-fid="'+esc(f.id)+'"><span class="sd" style="background:var(--ok)"></span>'+esc(f.name)+'<span class="ct">'+n+'</span></div>';
@@ -1232,7 +1037,7 @@
       el.classList.toggle('sel', el.getAttribute('data-fid')===String(id));
     });
     var nameEl = document.getElementById('mapFeatureName'); if(nameEl) nameEl.textContent = f.name;
-    var pathEl = document.getElementById('mapFeaturePath'); if(pathEl) pathEl.textContent = 'phase1-maps/features/'+(f.slug||f.name.toLowerCase())+'.md';
+    var pathEl = document.getElementById('mapFeaturePath'); if(pathEl){ pathEl.textContent = (f.counts?(f.counts.files||0)+' files · '+(f.counts.endpoints||0)+' endpoints':'—'); pathEl.classList.add('muted'); }
     var btn = document.getElementById('assessFeatureBtn'); if(btn) btn.onclick = function(){ assessFeature(f.name); };
     var sfn = document.getElementById('scopeFeatureName'); if(sfn) sfn.textContent = f.name;
     renderLedger(f);
@@ -1274,7 +1079,7 @@
     if(!tbody || !state.graph) return; // graph not loaded yet — leave sample rows
     var node = findFeatureNode(f);
     var eps = node ? endpointsForFeature(node.id) : [];
-    if(!eps.length) return; // keep sample rows when nothing resolves
+    if(!eps.length){ tbody.innerHTML = '<tr><td colspan="10" class="muted" style="padding:18px;text-align:center;">No endpoints resolved for this feature.</td></tr>'; return; }
     tbody.innerHTML = eps.map(function(ep){
       var method = (ep.data && ep.data.method) || '—';
       var route = (ep.data && ep.data.route) || ep.name || '';
@@ -1305,7 +1110,8 @@
 
   function renderGraphSvg(){
     var g = state.graph, host = document.getElementById('kgraph');
-    if(!g || !host || !g.nodes || !g.nodes.length) return; // keep the sample svg
+    if(!host) return;
+    if(!g || !g.nodes || !g.nodes.length){ var old0=host.querySelector('svg.gsvg'); if(old0) old0.outerHTML = sfEmpty('No graph yet. Nothing has been mapped for this project.'); return; }
     var colW=155, nodeW=132, nodeH=34, padX=25, padY=20, rowGap=14;
     var byCol = {}; GRAPH_COLS.forEach(function(t){ byCol[t]=[]; });
     var extra = [];
@@ -1424,7 +1230,8 @@
   }
 
   function renderCandidates(cands){
-    var host = document.getElementById('candidateList'); if(!host || !cands || !cands.length) return;
+    var host = document.getElementById('candidateList'); if(!host) return;
+    if(!cands || !cands.length){ host.innerHTML = '<div class="muted" style="padding:16px;text-align:center;font-size:12.5px;">Run produced no candidates.</div>'; return; }
     host.innerHTML = cands.map(function(c,i){
       var border = i>0 ? 'border-top:1px solid var(--border2);' : '';
       return '<div style="display:flex;align-items:center;gap:12px;padding:12px 15px;'+border+'flex-wrap:wrap;">'
@@ -1440,8 +1247,13 @@
     var host = document.getElementById('assess-pipeline'); if(!host) return;
     var cands = res.candidates || [], finds = res.findings || [];
     var stages = host.querySelectorAll('.stage .st');
+    if(stages[0]) stages[0].textContent = 'done';
     if(stages[1]) stages[1].textContent = cands.length+' candidates';
     if(stages[2]) stages[2].textContent = finds.length+' kept · '+Math.max(cands.length-finds.length,0)+' rejected';
+    if(stages[3]) stages[3].textContent = finds.length+' validated';
+    if(stages[4]) stages[4].textContent = finds.length+' findings';
+    var hdr = document.getElementById('assessRunHeader');
+    if(hdr) hdr.innerHTML = '<span class="sd" style="background:var(--ok);width:9px;height:9px;"></span><div><div style="font-weight:600;font-size:13.5px;">Run complete</div><div class="mono muted" style="font-size:11px;">'+cands.length+' candidate'+(cands.length===1?'':'s')+' · '+finds.length+' finding'+(finds.length===1?'':'s')+'</div></div>';
   }
 
   var _runAssess = window.runAssess;
@@ -1513,7 +1325,8 @@
   // ---------- findings ----------
   function renderFindingsList(list){
     var host = document.querySelector('[data-panel="findings"] .side .scroll');
-    if(!host || !list.length) return; // keep the designed sample
+    if(!host) return;
+    if(!list.length){ host.innerHTML = sfEmpty('No findings. Run an assessment from the Assess tab — results land here.'); clearFindingDetail(); return; }
     host.innerHTML = list.map(function(f,i){
       return '<div class="navitem'+(i===0?' sel':'')+'" data-fid="'+esc(f.id)+'" style="flex-direction:column;align-items:stretch;gap:5px;padding:11px 15px;border-bottom:1px solid var(--border2);">'
         + '<div style="display:flex;align-items:center;gap:8px;"><span class="badge '+sevClass(f.severity)+'">'+esc((f.severity||'').toUpperCase())+'</span><span class="mono muted" style="font-size:10.5px">'+esc(f.id)+'</span></div>'
@@ -1530,18 +1343,33 @@
     renderFindingDetail(list[0]);
   }
 
+  function clearFindingDetail(){
+    var sev=document.getElementById('findHeaderSev'); if(sev){ sev.textContent='—'; sev.className='badge'; }
+    var t=document.getElementById('findHeaderTitle'); if(t) t.textContent='No finding selected';
+    var chips=document.getElementById('findHeaderChips'); if(chips) chips.innerHTML='';
+    var what=document.getElementById('findWhatHappens'); if(what) what.innerHTML='<span class="muted">Run an assessment to produce findings.</span>';
+    var ev=document.getElementById('findEvidence'); if(ev) ev.innerHTML='<span class="muted">Select a finding to see its evidence.</span>';
+    var rem=document.getElementById('findRemediation'); if(rem) rem.innerHTML='<span class="muted">—</span>';
+  }
   function renderFindingDetail(f){
-    if(!f) return;
+    if(!f){ clearFindingDetail(); return; }
     var sevEl = document.getElementById('findHeaderSev');
     if(sevEl){ sevEl.textContent = (f.severity||'').toUpperCase(); sevEl.className = 'badge '+sevClass(f.severity); }
     var titleEl = document.getElementById('findHeaderTitle'); if(titleEl) titleEl.textContent = f.title||'';
     var chipsEl = document.getElementById('findHeaderChips');
     if(chipsEl) chipsEl.innerHTML = '<span class="mono chip">'+esc(f.cwe||'')+'</span><span class="mono chip">'+esc(f.rule||f.method||'')+'</span><span class="mono chip">feature: '+esc(f.feature||'')+'</span>';
+    var loc = f.evidence ? (esc(f.evidence.file)+':'+esc(String(f.evidence.line))) : '—';
     var whatEl = document.getElementById('findWhatHappens');
-    if(whatEl){
-      var loc = f.evidence ? (esc(f.evidence.file)+':'+f.evidence.line) : '—';
-      whatEl.innerHTML = 'Family <b>'+esc(f.family||'')+'</b> on <span class="mono chip">'+esc(f.route||'')+'</span>. Evidence: <span class="mono chip">'+loc+'</span>. Rule: <span class="mono chip">'+esc(f.rule||'—')+'</span>.';
-    }
+    if(whatEl) whatEl.innerHTML = esc(f.description || (f.title||'')) ;
+    var evEl = document.getElementById('findEvidence');
+    if(evEl) evEl.innerHTML =
+        '<div><span class="muted" style="display:inline-block;width:90px;">Location</span><span class="mono chip">'+loc+'</span></div>'
+      + '<div><span class="muted" style="display:inline-block;width:90px;">Route</span><span class="mono chip">'+esc(f.route||'—')+'</span></div>'
+      + '<div><span class="muted" style="display:inline-block;width:90px;">Rule</span><span class="mono chip">'+esc(f.rule||f.method||'—')+'</span></div>'
+      + '<div><span class="muted" style="display:inline-block;width:90px;">CWE</span><span class="mono chip">'+esc(f.cwe||'—')+'</span> <span class="mono chip">'+esc(f.family||'')+'</span></div>'
+      + '<div><span class="muted" style="display:inline-block;width:90px;">Confidence</span><span class="mono chip">'+esc(f.confidence||'static')+'</span></div>';
+    var remEl = document.getElementById('findRemediation');
+    if(remEl) remEl.innerHTML = f.remediation ? esc(f.remediation) : '<span class="muted">No remediation text recorded for this rule.</span>';
     var btn = document.getElementById('findValidateBtn');
     if(btn) btn.onclick = function(){ validateFinding(f.id); };
   }
@@ -1569,17 +1397,18 @@
   // ---------- patterns ----------
   function projectCard(p){
     var short = esc(p.id).replace('p_','@ ').slice(0,10);
-    return '<button class="card" data-pid="'+esc(p.id)+'" style="text-align:left;padding:15px 17px;cursor:pointer;">'
+    return '<div class="card" style="padding:15px 17px;">'
       + '<div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;"><div style="font-weight:600;font-size:15px;">'+esc(p.name)+'</div>'
       + '<span class="mono chip">'+short+'</span><div style="flex-grow:1"></div>'
-      + '<span style="font-size:12.5px;color:var(--accent);font-weight:600;">Open &rarr;</span></div>'
-      + '<div class="mono muted" style="font-size:11.5px;margin-top:4px;">'+esc(p.sourceRoot||'')+'</div></button>';
+      + '<button class="btn" data-del="'+esc(p.id)+'" title="Forget this project" style="font-size:12px;padding:4px 10px;">Forget</button>'
+      + '<button class="btn-primary" data-pid="'+esc(p.id)+'" style="font-size:12.5px;padding:5px 12px;">Open &rarr;</button></div>'
+      + '<div class="mono muted" style="font-size:11.5px;margin-top:4px;">'+esc(p.sourceRoot||'')+'</div></div>';
   }
 
   function hydratePatterns(families){
     if(!families || !families.length) return;
     if(typeof MSEL!=='undefined' && MSEL.patterns){
-      MSEL.patterns.opts = families.map(function(f){ return { v: f.prefix+' · '+f.name, t: String(f.count) }; }).concat([{ v:'acme-house-rules · 18', t:'yours' }]);
+      MSEL.patterns.opts = families.map(function(f){ return { v: f.prefix+' · '+f.name, t: String(f.count) }; });
       MSEL.patterns.sel = MSEL.patterns.sel.filter(function(v){ return MSEL.patterns.opts.some(function(o){ return o.v===v; }); });
       if(!MSEL.patterns.sel.length) MSEL.patterns.sel = [MSEL.patterns.opts[0].v];
       if(typeof mselRender==='function') mselRender('patterns');
@@ -1601,50 +1430,86 @@
   function hydrateProjects(projects){
     state.projects = projects || [];
     var host = document.getElementById('recent-projects');
-    if(!host || !projects || !projects.length) return; // keep designed sample when the store is empty
+    if(!host) return;
+    if(!projects || !projects.length){ host.innerHTML = sfEmpty('No projects yet. Enter a source path above and open it to start a scan.'); var c0=document.getElementById('recent-count'); if(c0) c0.textContent='0 projects'; return; }
     host.innerHTML = projects.map(projectCard).join('');
-    host.querySelectorAll('button.card[data-pid]').forEach(function(b){
+    host.querySelectorAll('[data-pid]').forEach(function(b){
       b.addEventListener('click', function(){ openLiveProject(b.getAttribute('data-pid')); });
+    });
+    host.querySelectorAll('[data-del]').forEach(function(b){
+      b.addEventListener('click', function(){ forgetProject(b.getAttribute('data-del'), b); });
     });
     var c = document.getElementById('recent-count'); if(c) c.textContent = projects.length+' project'+(projects.length===1?'':'s');
   }
 
   // ---------- memory ----------
+  function setText(id,v){ var e=document.getElementById(id); if(e) e.textContent=v; }
   function refreshMemory(){
     if(!state.project) return Promise.resolve();
     return get('/api/projects/'+state.project.id+'/memory').then(function(d){
-      if(d.stats){
-        var nums = document.querySelectorAll('[data-panel="memory"] .grid4 .stat .n');
-        if(nums[0] && typeof d.stats.patterns==='number') nums[0].textContent = d.stats.patterns;
-        if(nums[2] && typeof d.stats.feedbackSignals==='number') nums[2].textContent = d.stats.feedbackSignals;
-        if(nums[3] && typeof d.stats.projects==='number') nums[3].textContent = d.stats.projects;
-      }
-      var hits = d.recall && d.recall.hits ? d.recall.hits : [];
-      if(hits.length){
-        var box = document.querySelector('#mem-recall .card[style*="background:var(--tint)"]');
-        if(box){
-          var h = hits[0];
-          box.innerHTML = '<div style="font-size:11px;font-weight:600;color:var(--accent-ink);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Recalled</div>'
-            + '<div style="font-weight:600;font-size:13px;">'+esc(h.title || h.name || 'match')+'</div>';
-        }
+      var s = d.stats || {};
+      setText('memPatterns', typeof s.patterns==='number' ? s.patterns : 0);
+      setText('memSignals', typeof s.feedbackSignals==='number' ? s.feedbackSignals : 0);
+      setText('memProjects', typeof s.projects==='number' ? s.projects : 0);
+      var learned = s.learned || d.learned || [];
+      var host = document.getElementById('memLearned');
+      if(host && learned.length){
+        host.innerHTML = learned.map(function(p){
+          return '<div style="padding:13px 16px;border-bottom:1px solid var(--border2);"><div style="font-weight:600;font-size:13px;">'+esc(p.title||p.name||'pattern')+'</div>'
+            + (p.note ? '<div class="muted" style="font-size:12px;margin-top:4px;line-height:1.5;">'+esc(p.note)+'</div>' : '')+'</div>';
+        }).join('');
       }
     }).catch(function(){});
   }
+  window.runRecall = function(){
+    if(!state.project) return;
+    var inp = document.getElementById('memRecallInput'); var q = inp ? inp.value.trim() : '';
+    var out = document.getElementById('memRecallResult'); if(!out) return;
+    if(!q){ out.innerHTML = '<div class="muted" style="font-size:12.5px;">Enter a query to search learned patterns and cross-project memory.</div>'; return; }
+    out.innerHTML = '<div class="muted" style="font-size:12.5px;">Searching…</div>';
+    get('/api/projects/'+state.project.id+'/memory?q='+encodeURIComponent(q)).then(function(d){
+      var hits = (d.recall && d.recall.hits) ? d.recall.hits : [];
+      var cross = d.cross || [];
+      if(!hits.length && !cross.length){ out.innerHTML = '<div class="muted" style="font-size:12.5px;">No matches in memory for “'+esc(q)+'”.</div>'; return; }
+      var html = hits.map(function(h){ return '<div style="font-weight:600;font-size:13px;margin-bottom:4px;">'+esc(h.title||h.name||'match')+'</div>'; }).join('');
+      html += cross.map(function(c){ return '<div style="font-size:12px;color:var(--ink2);margin-top:6px;">'+esc((c.project||'')+' · '+(c.title||c.name||''))+'</div>'; }).join('');
+      out.innerHTML = html;
+    }).catch(function(){ out.innerHTML = '<div class="muted" style="font-size:12.5px;">Recall failed.</div>'; });
+  };
 
   // ---------- env ----------
+  function applyEnvTarget(t){
+    var u=document.getElementById('envBaseUrl'), s=document.getElementById('envScope'), a=document.getElementById('envAuthorise');
+    if(u) u.value = t ? (t.baseUrl||'') : '';
+    if(s) s.value = t ? (t.scope||[]).join(', ') : '';
+    if(a) a.checked = !!(t && t.authorized);
+    var st=document.getElementById('envAuthState');
+    if(st){
+      var authed = !!(t && t.authorized);
+      st.querySelector('div > div:first-child').textContent = authed ? 'Authorised — dynamic validation enabled' : 'Static-only — no target authorised';
+      var dot=st.querySelector('.sd'); if(dot) dot.style.background = authed ? 'var(--ok)' : 'var(--ink3)';
+    }
+  }
   function refreshEnv(){
     if(!state.project) return Promise.resolve();
-    return get('/api/projects/'+state.project.id+'/env').then(function(d){
-      if(!d || !d.target) return; // keep the designed sample
-      var t = d.target;
-      var box = document.getElementById('envConfigCard'); if(!box) return;
-      var rows = box.children;
-      if(rows[0]){ var u = rows[0].querySelector('.chip'); if(u) u.textContent = t.baseUrl||''; }
-      if(rows[3]){ var s = rows[3].querySelector('.chip'); if(s) s.textContent = (t.scope||[]).join(', '); }
-    }).catch(function(){});
+    return get('/api/projects/'+state.project.id+'/env').then(function(d){ applyEnvTarget(d && d.target); }).catch(function(){});
   }
+  window.registerEnvTarget = function(){
+    if(!state.project) return;
+    var u=document.getElementById('envBaseUrl'), s=document.getElementById('envScope'), a=document.getElementById('envAuthorise');
+    var msg=document.getElementById('envSaveMsg');
+    var baseUrl = u ? u.value.trim() : '';
+    if(!baseUrl){ if(msg) msg.textContent='Base URL is required.'; return; }
+    var scope = s && s.value.trim() ? s.value.split(',').map(function(x){return x.trim();}).filter(Boolean) : [];
+    var body = { baseUrl: baseUrl, scope: scope, authorized: !!(a && a.checked) };
+    if(msg) msg.textContent='Saving…';
+    post('/api/projects/'+state.project.id+'/env', body).then(function(t){
+      applyEnvTarget(t); if(msg) msg.textContent='Registered'+(t && t.authorized?' · authorised':' · static-only');
+    }).catch(function(){ if(msg) msg.textContent='Save failed.'; });
+  };
 
   function boot(){
+    document.body.classList.add('nav-locked'); window.__sfProject=false; // S1-11: tabs stay locked until a project opens
     get('/api/health').then(function(){ setBadge(true); }).catch(function(){ setBadge(false); });
     loadEngines();
     get('/api/patterns').then(function(d){ hydratePatterns(d.families); }).catch(function(){});

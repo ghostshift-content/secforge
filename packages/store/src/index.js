@@ -33,7 +33,9 @@ export class Store {
   // Resolve or create a project for a source tree. Idempotent by source path.
   async openProject({ sourceRoot, name }) {
     if (!sourceRoot || typeof sourceRoot !== 'string') throw new Error('sourceRoot is required');
-    const abs = path.resolve(sourceRoot);
+    let raw = sourceRoot.trim();
+    if (raw === '~' || raw.startsWith('~/')) raw = path.join(os.homedir(), raw.slice(1)); // expand ~ (S1-6)
+    const abs = path.resolve(raw);
     // Optional confinement for hardened / multi-user deployments: SECFORGE_ALLOW_ROOT limits
     // which trees may be opened+scanned, mitigating arbitrary-path reads via the HTTP API.
     const allow = process.env.SECFORGE_ALLOW_ROOT;
@@ -105,6 +107,17 @@ export class Store {
   // removed rules or an earlier candidate ordering survive in the store.
   async clearFindings(projectIdVal) {
     try { await fs.rm(path.join(this.projectDir(projectIdVal), 'assess', 'findings'), { recursive: true, force: true }); } catch { /* nothing to clear */ }
+  }
+
+  // Forget a project entirely — removes its whole store directory (graph, findings, runs, env,
+  // events). Idempotent: deleting an unknown id is a no-op. Confined to this.root.
+  async deleteProject(projectIdVal) {
+    if (!projectIdVal || typeof projectIdVal !== 'string' || projectIdVal.includes('/') || projectIdVal.includes('..')) {
+      throw new Error('invalid project id');
+    }
+    const dir = this.projectDir(projectIdVal);
+    await fs.rm(dir, { recursive: true, force: true });
+    return { deleted: projectIdVal };
   }
 }
 

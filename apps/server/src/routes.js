@@ -82,6 +82,11 @@ export async function handleApi(req, res, url) {
       if (method === 'POST') { const r = await mgr.open(body); return json(res, 201, r), true; }
     }
 
+    // DELETE /api/projects/:id → forget a project (S2-7)
+    if (parts[0] === 'projects' && parts.length === 2 && method === 'DELETE') {
+      return json(res, 200, await store.deleteProject(parts[1])), true;
+    }
+
     // /api/projects/:id/(findings|coverage|graph|memory|env)
     if (parts[0] === 'projects' && parts.length === 3 && method === 'GET') {
       const pid = parts[1], sub = parts[2];
@@ -101,7 +106,7 @@ export async function handleApi(req, res, url) {
       const proj = (await store.listProjects()).find((p) => p.id === pid);
       if (!proj) return json(res, 404, { error: 'no such project' }), true;
       const result = await mapProject({ sourceRoot: proj.sourceRoot, store, projectId: pid });
-      return json(res, 200, result), true;
+      return json(res, result.status === 'ERROR' ? 400 : 200, result), true;
     }
 
     // POST /api/projects/:id/(memory|env)

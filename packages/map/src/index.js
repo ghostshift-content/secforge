@@ -194,6 +194,13 @@ function buildGraph(inventory) {
  */
 export async function mapProject({ sourceRoot, store, projectId, onProgress } = {}) {
   if (!sourceRoot || !store || !projectId) throw new Error('mapProject requires sourceRoot, store, projectId');
+  // Refuse to "map" a path that isn't a real directory — otherwise walk() swallows the readdir
+  // error and returns status:MAPPED with 0 nodes, and the UI fabricates a graph for a repo that
+  // is not on disk (S1-6).
+  let _st; try { _st = fs.statSync(sourceRoot); } catch { _st = null; }
+  if (!_st || !_st.isDirectory()) {
+    return { status: 'ERROR', error: 'source path does not exist or is not a directory', sourceRoot, features: [], coverage: { technical: 0, semantic: 0 }, nodeCount: 0, edgeCount: 0 };
+  }
 
   onProgress?.({ phase: 'snapshot', pct: 0 });
   const manifest = buildManifest(sourceRoot);

@@ -83,3 +83,19 @@ describe('findings', () => {
     await assert.doesNotReject(fs.access(file));
   });
 });
+
+describe('deleteProject', () => {
+  test('removes the project dir; unknown id is a no-op; rejects traversal', async () => {
+    const sourceRoot = path.join(tmpRoot, 'src-del');
+    const project = await store.openProject({ sourceRoot, name: 'DEL' });
+    await assert.doesNotReject(fs.access(store.projectDir(project.id)));
+
+    await store.deleteProject(project.id);
+    await assert.rejects(fs.access(store.projectDir(project.id))); // gone
+    assert.equal((await store.listProjects()).some((p) => p.id === project.id), false);
+
+    await assert.doesNotReject(store.deleteProject(project.id)); // idempotent
+    await assert.rejects(store.deleteProject('../evil')); // path-traversal guard
+    await assert.rejects(store.deleteProject('a/b'));
+  });
+});
