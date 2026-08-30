@@ -15,3 +15,17 @@ coverage/
 .ruv-swarm/
 .hive-mind/
 .swarm/
+
+# ruflo / claude-flow build-tooling scratch — NEVER part of the product
+.claude/
+.claude-flow/
+.ruflo/
+.ruvector/
+.ruv-swarm/
+.hive-mind/
+.swarm/
+agentdb.rvf
+agentdb.rvf.lock
+ruvector.db
+*.rvf
+*.rvf.lock

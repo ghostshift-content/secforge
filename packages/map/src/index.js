@@ -11,7 +11,7 @@ import { ID } from '@secforge/schemas';
 // Relative import: packages/store's package.json "exports" only opens its root ("."), so a bare
 // '@secforge/store/graph' specifier is blocked by Node's package encapsulation. A direct relative
 // path reaches the file without needing to touch store's package.json.
-import { writeNodes, writeEdges, neighbourhood } from '../../store/src/graph.js';
+import { writeNodes, writeEdges, writeReconciliation, neighbourhood } from '../../store/src/graph.js';
 import { profileRepo, extractInventories, inventoryMeta } from '@secforge/inventories';
 import { deterministicSemanticPlan, buildGraph, makeEvidenceVerifier, validateOntology, planClusters } from '@secforge/recon';
 import { getAdapter } from '@secforge/adapters';
@@ -42,7 +42,12 @@ async function walk(dir, base, out, depth = 0) {
   return out;
 }
 
-async function buildManifest(sourceRoot) {
+// Reads each file's full buffer once (to hash it) AND freezes that SAME buffer to
+// tmpDir/source/<rel> — zero extra reads, no TOCTOU window between "hash" and "freeze"
+// (Phase A §1). Replaces the old buildManifest, which only hashed.
+async function buildManifestAndFreeze(sourceRoot, tmpDir) {
+  const srcOut = path.join(tmpDir, 'source');
+  await fsp.mkdir(srcOut, { recursive: true }); // zero-file repos still produce an (empty) source/
   const manifest = [];
   let total = 0;
   const rels = (await walk(sourceRoot, sourceRoot, [])).sort();
@@ -58,6 +63,9 @@ async function buildManifest(sourceRoot) {
     if (buf.subarray(0, 8000).includes(0)) continue; // binary heuristic: NUL byte in the head
     total += stat.size;
     manifest.push({ path: rel, bytes: stat.size, sha256: crypto.createHash('sha256').update(buf).digest('hex') });
+    const dest = path.join(srcOut, rel);
+    await fsp.mkdir(path.dirname(dest), { recursive: true });
+    await fsp.writeFile(dest, buf); // freeze exactly what we hashed
   }
   return { manifest, truncated: truncatedFiles || total >= MAX_TOTAL_BYTES };
 }
@@ -72,7 +80,7 @@ function persistSnapshot(store, projectId, snapshotId, manifest) {
   fs.renameSync(manifestFile + '.tmp', manifestFile);
   const snapFile = path.join(dir, 'snapshot.json');
   const bytes = manifest.reduce((s, m) => s + m.bytes, 0);
-  fs.writeFileSync(snapFile + '.tmp', JSON.stringify({ content_hash: snapshotId, file_count: manifest.length, bytes }, null, 2));
+  fs.writeFileSync(snapFile + '.tmp', JSON.stringify({ content_hash: snapshotId, file_count: manifest.length, bytes, source_frozen: true }, null, 2));
   fs.renameSync(snapFile + '.tmp', snapFile);
 }
 
@@ -393,20 +401,33 @@ export async function mapProject({ sourceRoot, store, projectId, onProgress, eng
   }
 
   onProgress?.({ phase: 'snapshot', pct: 0 });
-  const { manifest, truncated } = await buildManifest(sourceRoot);
+  // Build-then-rename (mirrors codengram's ingestion/index.js:139-142): snapshotId is only known
+  // AFTER the walk (it's a hash of the manifest), so we can't write straight into
+  // snapshots/<snapshotId>/ — build into a private tmp dir under snapshots/ first.
+  const tmpDir = path.join(store.projectDir(projectId), 'snapshots', `.building-${process.pid}-${crypto.randomBytes(6).toString('hex')}`);
+  const { manifest, truncated } = await buildManifestAndFreeze(sourceRoot, tmpDir);
   // O-2: never report a successful map of a tree we read nothing from. An empty manifest is only
   // honest for a genuinely empty directory; if the root has entries we couldn't read (permissions)
   // or nothing we could inventory, that is an ERROR — not "MAPPED · 0 findings" reading as clean.
   if (manifest.length === 0) {
     let entries; try { entries = await fsp.readdir(sourceRoot); } catch { entries = null; }
-    if (entries === null) {
-      return { status: 'ERROR', error: 'source directory is not readable (permission denied)', sourceRoot, features: [], coverage: { technical: 0, semantic: 0 }, nodeCount: 0, edgeCount: 0 };
-    }
-    if (entries.length > 0) {
-      return { status: 'ERROR', error: 'read 0 files from a non-empty directory — check read permissions or that it contains supported source files', sourceRoot, features: [], coverage: { technical: 0, semantic: 0 }, nodeCount: 0, edgeCount: 0 };
+    const err = entries === null ? 'source directory is not readable (permission denied)'
+      : entries.length > 0 ? 'read 0 files from a non-empty directory — check read permissions or that it contains supported source files' : null;
+    if (err) {
+      fs.rmSync(tmpDir, { recursive: true, force: true }); // orphaned empty tmp dir, never left behind
+      return { status: 'ERROR', error: err, sourceRoot, features: [], coverage: { technical: 0, semantic: 0 }, nodeCount: 0, edgeCount: 0 };
     }
   }
   const snapshotId = hashManifest(manifest);
+  const snapshotDir = path.join(store.projectDir(projectId), 'snapshots', snapshotId);
+  if (fs.existsSync(path.join(snapshotDir, 'source'))) {
+    // Content-addressed dedup: identical source already frozen under this snapshotId — one-line
+    // version of codengram's existing.source_frozen dedup (ingestion/index.js:156). ponytail: this
+    // directory-exists check is the whole optimization; no need for a snapshot.json pre-read too.
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  } else {
+    fs.renameSync(tmpDir, snapshotDir); // atomic — the directory appears fully-formed
+  }
   persistSnapshot(store, projectId, snapshotId, manifest);
   onProgress?.({ phase: 'snapshot', pct: 25 });
 
@@ -449,6 +470,7 @@ export async function mapProject({ sourceRoot, store, projectId, onProgress, eng
   onProgress?.({ phase: 'persist', pct: 90 });
   await writeNodes(store, projectId, graph.nodes, { snapshotId });
   await writeEdges(store, projectId, graph.edges, { snapshotId });
+  await writeReconciliation(store, projectId, graph.reconciliation, { snapshotId });
   await store.appendEvent(projectId, { type: 'map.completed', features: graph.features.length });
   onProgress?.({ phase: 'persist', pct: 100 });
 

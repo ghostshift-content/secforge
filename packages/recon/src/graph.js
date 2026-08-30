@@ -7,6 +7,61 @@ import { deterministicSemanticPlan, validateLeadPlan, INVENTORY_KEYS, INFRA_KIND
 
 const titleize = (s) => String(s).replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 const claim = (file, line, method = 'grep', confidence = 'medium') => ({ file, line: line || 1, method, confidence });
+
+// ── reconciliation coverage ledger (Phase A §2) ──────────────────────────────────────────────
+// A short human label for a reconciliation row's `entry` field — best-effort, display only.
+function reconLabel(row) {
+  if (row.entry != null) return String(row.entry).slice(0, 120);
+  if (row.name != null) return String(row.name).slice(0, 120);
+  if (row.route != null) return `${row.method || ''} ${row.route}`.trim();
+  if (row.role != null) return row.action ? `${row.role}->${row.action}` : row.role;
+  if (row.action != null) return row.resource ? `${row.action}:${row.resource}` : row.action;
+  return null;
+}
+const reconOf = (kind, row, status, feature_id) => ({ file: row.file ?? null, line: row.line ?? null, kind, entry: reconLabel(row), status, feature_id });
+
+// Every node id reachable forward from some FEATURE node, mapped to (one of) that feature's id.
+// Used to re-check a legacy structural row (ENDPOINT/SERVICE/JOB/DATA_STORE/AUTHN/AUTHZ) that the
+// new-surface pipeline (or bridgeLegacySurfaces) already turned into a real, feature-reachable
+// node under a DIFFERENT id path than the raw legacy row itself — so it isn't double-reported as
+// a gap. ARCH_CLUSTER-owned nodes are deliberately excluded (not a FEATURE root), matching
+// buildArchitecture's own "technical cluster, not a confirmed feature" stance.
+function featureReachableMap(nodes, edges) {
+  const bySrc = new Map();
+  for (const e of edges) { if (!bySrc.has(e.src)) bySrc.set(e.src, []); bySrc.get(e.src).push(e); }
+  const owner = new Map();
+  for (const n of nodes) {
+    if (n.type !== 'FEATURE') continue;
+    const seen = new Set([n.id]);
+    const queue = [n.id];
+    while (queue.length) {
+      const cur = queue.shift();
+      for (const e of bySrc.get(cur) || []) {
+        if (seen.has(e.dst)) continue;
+        seen.add(e.dst);
+        if (!owner.has(e.dst)) owner.set(e.dst, n.id);
+        queue.push(e.dst);
+      }
+    }
+  }
+  return owner;
+}
+
+// Best-effort node id(s) a legacy structural row's real-world surface would land under once
+// bridged/re-extracted by the new pipeline — mirrors nodeForRow's own id builders for each kind.
+// Not exhaustive (AUTHN/AUTHZ have no single deterministic bridge): a row whose candidate ids all
+// miss just stays an honest UNCLEAR_COVERAGE_GAP, same as before this fix.
+function candidateNodeIds(row) {
+  switch (row.kind) {
+    case 'ENDPOINT': return row.method && row.route ? [ID.endpoint(row.method, row.route)] : [];
+    case 'SERVICE': return [ID.scoped('service', row.file)];
+    case 'JOB': return [ID.scoped('job', row.file, row.line, row.name)];
+    case 'DATA_STORE': return [ID.scoped('model', row.file)];
+    case 'AUTHN': return [ID.scoped('token', row.file, row.line), ID.scoped('authcheck', row.file, 'actor'), ID.scoped('rails-authn', row.file, row.line)];
+    case 'AUTHZ': return [ID.scoped('authcheck', row.file), ID.scoped('authcheck', row.file, 'actor')];
+    default: return [];
+  }
+}
 // A path segment shaped like an id (drives GraphQL Query→ENDPOINT arg-in-route synthesis, §2/§7).
 const ID_ARG_RE = /^(id|.*_id|.*Id)$/;
 
@@ -229,24 +284,30 @@ function buildOntology(g, ontology, features) {
 }
 
 // ── ARCH_CLUSTER (fail-closed / partial-coverage architecture, never FEATURE) ────────────────
-function buildArchitecture(g, clusters) {
+function buildArchitecture(g, clusters, reconciliation) {
   for (const c of clusters) {
     const clusterId = ID.scoped('arch', c.domain, c.slug);
     g.addNode({ type: 'ARCH_CLUSTER', id: clusterId, name: c.name, data: { domain: c.domain, slug: c.slug, technical: true, unverified: true, row_count: c.rows.length, planning_method: c.planning_method || 'module-cohesion',
       note: 'technical cluster derived from directory structure — NOT a confirmed business feature' } });
-    for (const { kind, row } of c.rows) nodeForRow(g, clusterId, kind, row);
+    for (const { kind, row } of c.rows) {
+      nodeForRow(g, clusterId, kind, row);
+      // Not FEATURE-reachable (ARCH_CLUSTER is an unconfirmed technical cluster, per its own
+      // node data comment above) — an honest coverage gap, not MAPPED_TO_FEATURE.
+      reconciliation.push(reconOf(kind, row, 'UNCLEAR_COVERAGE_GAP', null));
+    }
   }
 }
 
 // project-level infra: processes_ipc → PROCESS (CONTAINS); datastores_integrations → DATA_STORE
 // (CONTAINS) / INTEGRATION (USES_INTEGRATION). Never per-feature — see design §2 rationale.
-function buildInfra(g, projectId, inventories) {
+function buildInfra(g, projectId, inventories, reconciliation) {
   for (const kind of INFRA_KINDS) for (const row of inventories[kind] || []) {
     const type = kind === 'datastores_integrations' ? (row.detail === 'datastore' ? 'DATA_STORE' : 'INTEGRATION') : 'PROCESS';
     const id = ID.scoped(type.toLowerCase(), row.file, row.line, row.entry);
     g.addNode({ id, type, name: String(row.entry || '').slice(0, 60), data: { file: row.file, line: row.line } });
     g.addEdge(type === 'INTEGRATION' ? 'USES_INTEGRATION' : 'CONTAINS', projectId, id);
     g.addClaim(id, claim(row.file, row.line));
+    reconciliation.push(reconOf(kind, row, 'SHARED_INFRASTRUCTURE', null));
   }
 }
 
@@ -347,6 +408,12 @@ export function buildGraph({ inventories = {}, clusters = null, ontology = null,
 
   const endpointsByFile = new Map();
   const noteEndpoint = (nodeId, file) => { const t = endpointsByFile.get(file) || new Set(); t.add(nodeId); endpointsByFile.set(file, t); };
+  // Reconciliation universe MUST match persistInventory's inventory.jsonl exactly (Phase A §2):
+  // every FEATURE_KINDS row lands in exactly one of `features`/`archClusters` (guaranteed by
+  // deterministicSemanticPlan/validateLeadPlan), every INFRA_KINDS row is processed unconditionally
+  // by buildInfra, and every legacyRow gets its own entry below — so the count is exact by
+  // construction, not by re-deriving persistInventory's logic here.
+  const reconciliation = [];
 
   const railsAuth = railsControllerAuth(inventories);
   const endpointRows = []; // { nodeId, row, isGraphql } — auth-wired in a SECOND pass (below), once
@@ -363,10 +430,11 @@ export function buildGraph({ inventories = {}, clusters = null, ontology = null,
         noteEndpoint(nodeId, row.file);
         endpointRows.push({ nodeId, row, isGraphql: kind === 'graphql' });
       }
+      reconciliation.push(reconOf(kind, row, nodeId ? 'MAPPED_TO_FEATURE' : 'UNCLEAR_COVERAGE_GAP', nodeId ? featId : null));
     }
   }
   for (const { nodeId, row, isGraphql } of endpointRows) wireEndpointAuth(g, nodeId, row, inventories, isGraphql, railsAuth);
-  buildArchitecture(g, archClusters);
+  buildArchitecture(g, archClusters, reconciliation);
   // ARCH_CLUSTER-anchored endpoints still get §7 auth wiring (a partially-mapped or blocked run
   // must not silently under-report ACX findings just because no ontology confirmed the feature).
   for (const c of archClusters) for (const { kind, row } of c.rows) {
@@ -382,8 +450,25 @@ export function buildGraph({ inventories = {}, clusters = null, ontology = null,
   }
 
   if (ontology) buildOntology(g, ontology, features);
-  buildInfra(g, projectId, inventories);
+  buildInfra(g, projectId, inventories, reconciliation);
   wireLegacyIdentity(g, legacyRows, endpointsByFile);
 
-  return { nodes: [...g.nodes.values()], edges: g.edges, features, coverage: coverage(inventories, features, archClusters) };
+  // legacyRows: every row gets exactly one reconciliation entry, unconditionally (matches
+  // persistInventory's own unconditional legacyRows.map(...) line, map/src/index.js:282).
+  // ACTOR/ROLE/PERMISSION/ROLE_CHECK/ROLE_GRANTS are project-wide identity vocabulary wired by
+  // wireLegacyIdentity above (no single owning feature) → SHARED_INFRASTRUCTURE. ENDPOINT/SERVICE/
+  // JOB/DATA_STORE/AUTHN/AUTHZ are structural rows superseded by the new-surface pipeline (bridged
+  // forward by bridgeLegacySurfaces, or by §7's body-scoped auth logic) — most of these DO already
+  // have a real, feature-reachable node under the bridged/new-surface id, just not the raw legacy
+  // row's own id, so re-check via candidateNodeIds before calling it a gap. Only a row whose
+  // surface truly produced no feature-reachable node stays UNCLEAR_COVERAGE_GAP.
+  const LEGACY_IDENTITY_KINDS = new Set(['ACTOR', 'ROLE', 'PERMISSION', 'ROLE_CHECK', 'ROLE_GRANTS']);
+  const featureOwner = featureReachableMap([...g.nodes.values()], g.edges);
+  for (const row of legacyRows) {
+    if (LEGACY_IDENTITY_KINDS.has(row.kind)) { reconciliation.push(reconOf(row.kind, row, 'SHARED_INFRASTRUCTURE', null)); continue; }
+    const featureId = candidateNodeIds(row).map((id) => featureOwner.get(id)).find(Boolean) || null;
+    reconciliation.push(reconOf(row.kind, row, featureId ? 'MAPPED_TO_FEATURE' : 'UNCLEAR_COVERAGE_GAP', featureId));
+  }
+
+  return { nodes: [...g.nodes.values()], edges: g.edges, features, coverage: coverage(inventories, features, archClusters), reconciliation };
 }

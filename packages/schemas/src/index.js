@@ -22,6 +22,16 @@ export const EDGE_TYPES = Object.freeze([
   'CANDIDATE_IN', 'VIOLATES', 'GUARDED_BY', 'MAPS_TO_CWE', 'PROMOTED_TO', 'VALIDATED_BY', 'COVERS',
 ]);
 
+// Reconciliation coverage ledger (Phase A §2): did every mapper inventory row land somewhere
+// traceable — a feature, shared infra, or an honest gap. Distinct from assess/coverage.js's
+// feature×vuln-family assessment matrix.
+export const RECONCILIATION_STATUS = Object.freeze([
+  'MAPPED_TO_FEATURE',       // row produced a node reachable from exactly one FEATURE
+  'SHARED_INFRASTRUCTURE',   // row produced a node under buildInfra() (PROJECT-level PROCESS/DATA_STORE/INTEGRATION), or project-wide identity vocabulary
+  'UNCLEAR_COVERAGE_GAP',    // row was extracted but didn't resolve to a FEATURE-reachable or infra node
+  'UNRECONCILED',            // placeholder only — must never survive a completed mapProject run
+]);
+
 export const CONFIDENCE = Object.freeze(['high', 'medium', 'low']);
 export const PROVENANCE_METHODS = Object.freeze(['grep', 'ast', 'symbol-index', 'manifest', 'config', 'repo-level', 'generated', 'llm-map']);
 

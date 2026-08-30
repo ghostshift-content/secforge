@@ -8,6 +8,7 @@
     "@secforge/session": "*",
     "@secforge/store": "*",
     "@secforge/schemas": "*",
-    "@secforge/orchestrator": "*"
+    "@secforge/orchestrator": "*",
+    "@secforge/retrieval": "0.0.0"
   }
 }

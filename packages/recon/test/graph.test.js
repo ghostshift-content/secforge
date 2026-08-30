@@ -30,7 +30,7 @@ describe('buildGraph() — node/edge types from a hand-built inventory', () => {
   });
   const ontology = { features: [{ name: 'Orders', slug: 'orders', domain: 'core', include_paths: ['orders_controller', 'order.rb', 'order_service.rb', 'export_job'] }] };
 
-  const { nodes, edges, features, coverage } = buildGraph({ inventories, ontology, project, snapshotId: 's1' });
+  const { nodes, edges, features, coverage, reconciliation } = buildGraph({ inventories, ontology, project, snapshotId: 's1' });
 
   test('produces PROJECT, DOMAIN, FEATURE nodes and CONTAINS wiring', () => {
     assert.equal(byType(nodes, 'PROJECT').length, 1);
@@ -93,6 +93,15 @@ describe('buildGraph() — node/edge types from a hand-built inventory', () => {
     assert.ok(coverage.feature_count >= 1);
     assert.ok(coverage.semantic_coverage > 0);
   });
+
+  test('reconciliation: one row per inventory row, zero UNRECONCILED', () => {
+    // 1 routes_endpoints + 1 workers_jobs + 2 services_finders_policies (feature-bearing) +
+    // 2 datastores_integrations + 1 processes_ipc (infra) = 7.
+    assert.equal(reconciliation.length, 7);
+    assert.equal(reconciliation.filter((r) => r.status === 'UNRECONCILED').length, 0);
+    assert.equal(reconciliation.filter((r) => r.status === 'MAPPED_TO_FEATURE').length, 4);
+    assert.equal(reconciliation.filter((r) => r.status === 'SHARED_INFRASTRUCTURE').length, 3);
+  });
 });
 
 describe('buildGraph() — GraphQL row synthesizes an ENDPOINT the rule engine can use', () => {
@@ -150,7 +159,7 @@ describe('buildGraph() — §7 refinement 1: Rails AUTHN is class-level, AUTHZ s
     ],
   });
   const ontology = { features: [{ name: 'Expenses', slug: 'expenses', domain: 'core', include_paths: ['expenses_controller'] }] };
-  const { nodes, edges } = buildGraph({ inventories, ontology, project, snapshotId: 's1' });
+  const { nodes, edges, features, reconciliation } = buildGraph({ inventories, ontology, project, snapshotId: 's1' });
   const show = nodes.find((n) => n.type === 'ENDPOINT' && n.data.route === '/expenses/:id');
   const download = nodes.find((n) => n.type === 'ENDPOINT' && n.data.route === '/expenses/:id/download_receipt');
 
@@ -163,6 +172,21 @@ describe('buildGraph() — §7 refinement 1: Rails AUTHN is class-level, AUTHZ s
   test('only show (whose body contains the authorize call) gets AUTHORIZED_BY — download_receipt is the IDOR', () => {
     assert.ok(edges.some((e) => e.type === 'AUTHORIZED_BY' && e.src === show.id));
     assert.equal(edges.some((e) => e.type === 'AUTHORIZED_BY' && e.src === download.id), false);
+  });
+
+  // Phase A §2 reconciliation ledger — both endpoint rows land MAPPED_TO_FEATURE, tied to the
+  // Expenses feature id (auth outcome is orthogonal: reconciliation proves the row was TRACED
+  // somewhere, not that it was found safe).
+  test('reconciliation: both endpoint rows are MAPPED_TO_FEATURE with the Expenses feature_id', () => {
+    assert.equal(features.length, 1);
+    const expensesId = nodes.find((n) => n.type === 'FEATURE' && n.name === 'Expenses').id;
+    const showRecon = reconciliation.find((r) => r.line === 10 && r.kind === 'routes_endpoints');
+    const downloadRecon = reconciliation.find((r) => r.line === 20 && r.kind === 'routes_endpoints');
+    assert.ok(showRecon && downloadRecon);
+    assert.equal(showRecon.status, 'MAPPED_TO_FEATURE');
+    assert.equal(downloadRecon.status, 'MAPPED_TO_FEATURE');
+    assert.equal(showRecon.feature_id, expensesId);
+    assert.equal(downloadRecon.feature_id, expensesId);
   });
 });
 

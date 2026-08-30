@@ -5,7 +5,8 @@
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import { SessionManager } from '@secforge/session';
-import { Store, readGraph } from '@secforge/store';
+import { Store, readGraph, readReconciliation, reconciliationCounts } from '@secforge/store';
+import { buildFeedForward, answer } from '@secforge/retrieval';
 import { runAssessment, computeCoverage, analyze, planJobs, buildReport } from '@secforge/assess';
 import { runAll } from '@secforge/orchestrator';
 import { FAMILIES, loadCanonicalCards, cweCatalog, importCustomFolder } from '@secforge/patterns';
@@ -138,6 +139,18 @@ export async function handleApi(req, res, url) {
       // PHASE4 §4: never send the decrypted authHeader/extraHeaders to the browser on a read —
       // only what the UI needs to render state (baseUrl/scope/authorized) plus a boolean.
       if (sub === 'env') return json(res, 200, { target: redactTarget(await getTarget(store, pid)) }), true;
+      // Phase A: coverage PROVEN (not estimated) — the reconciliation ledger's counts + every row
+      // that did NOT land in a feature or shared infra, listed by name (an honest gap surface).
+      if (sub === 'reconciliation') {
+        const rows = await readReconciliation(store, pid);
+        return json(res, 200, {
+          counts: await reconciliationCounts(store, pid),
+          gaps: rows.filter((r) => r.status !== 'MAPPED_TO_FEATURE' && r.status !== 'SHARED_INFRASTRUCTURE'),
+        }), true;
+      }
+      // Phase A: model-free, fully-cited answer over the feature-context store. coverageGap:true
+      // when nothing matches — never a guessed answer.
+      if (sub === 'answer') return json(res, 200, await answer(store, pid, url.searchParams.get('q') || '')), true;
       // GET /api/projects/:id/inventory → the full heuristic inventory.jsonl from the current
       // snapshot, grouped by kind. Same graph/current.json → snapshot resolution as
       // packages/assess/src/decorate.js's loadManifest() — not a new pointer mechanism.
@@ -152,6 +165,15 @@ export async function handleApi(req, res, url) {
         for (const r of rows) counts[r.kind] = (counts[r.kind] || 0) + 1;
         return json(res, 200, { rows, counts }), true;
       }
+    }
+
+    // GET /api/projects/:id/features/:fid/context → the full per-feature dossier a future scan
+    // consumes: endpoints/auth/data stores/roles + cited code excerpts + depth, wrapped with the
+    // grounding preamble. ok:false (coverage gap) is a shaped 200 body, matching this file's
+    // convention (findings/inventory degrade to empty rather than 404).
+    if (parts[0] === 'projects' && parts.length === 5 && parts[2] === 'features' && parts[4] === 'context' && method === 'GET') {
+      const fid = decodeURIComponent(parts[3]);
+      return json(res, 200, await buildFeedForward(store, parts[1], fid)), true;
     }
 
     // GET /api/projects/:id/report?format=h1|md|json → whole-assessment report, read-only.

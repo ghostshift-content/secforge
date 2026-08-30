@@ -1,0 +1,11 @@
+{
+  "name": "@secforge/retrieval",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "exports": "./src/index.js",
+  "dependencies": {
+    "@secforge/store": "0.0.0"
+  }
+}

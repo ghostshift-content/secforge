@@ -6,7 +6,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { Store } from '@secforge/store';
-import { writeNodes, writeEdges, readGraph, neighbourhood } from '../src/graph.js';
+import { writeNodes, writeEdges, readGraph, neighbourhood, writeReconciliation, readReconciliation, reconciliationCounts } from '../src/graph.js';
 
 let tmpRoot;
 let store;
@@ -236,6 +236,63 @@ describe('graph: legacy JSONL lazy import', () => {
 
     // .jsonl files are left on disk, untouched.
     await assert.doesNotReject(fs.access(path.join(graphDir, 'nodes.jsonl')));
+  });
+});
+
+describe('reconciliation: round-trip, dedupe, unknown-status rejection', () => {
+  test('writeReconciliation + readReconciliation round-trips; reconciliationCounts sums by status', async () => {
+    const { id: pid } = await freshProject('recon-rt');
+    const sid = 'snap-1';
+    await writeNodes(store, pid, [n('feature:foo')], { snapshotId: sid });
+    const rows = [
+      { file: 'a.rb', line: 1, kind: 'ENDPOINT', entry: 'GET /a', status: 'MAPPED_TO_FEATURE', feature_id: 'feature:foo' },
+      { file: 'b.rb', line: 2, kind: 'DATA_STORE', entry: 'B', status: 'SHARED_INFRASTRUCTURE', feature_id: null },
+      { file: 'c.rb', line: 3, kind: 'AUTHN', entry: null, status: 'UNCLEAR_COVERAGE_GAP', feature_id: null },
+    ];
+    await writeReconciliation(store, pid, rows, { snapshotId: sid });
+
+    const read = await readReconciliation(store, pid, sid);
+    assert.equal(read.length, 3);
+    assert.deepEqual(read.map((r) => r.status).sort(), ['MAPPED_TO_FEATURE', 'SHARED_INFRASTRUCTURE', 'UNCLEAR_COVERAGE_GAP']);
+    const mapped = read.find((r) => r.status === 'MAPPED_TO_FEATURE');
+    assert.equal(mapped.file, 'a.rb');
+    assert.equal(mapped.line, 1);
+    assert.equal(mapped.feature_id, 'feature:foo');
+
+    const counts = await reconciliationCounts(store, pid, sid);
+    assert.deepEqual(counts, { MAPPED_TO_FEATURE: 1, SHARED_INFRASTRUCTURE: 1, UNCLEAR_COVERAGE_GAP: 1 });
+  });
+
+  test('rejects an unknown status', async () => {
+    const { id: pid } = await freshProject('recon-badstatus');
+    const sid = 'snap-1';
+    await writeNodes(store, pid, [n('a')], { snapshotId: sid });
+    await assert.rejects(
+      writeReconciliation(store, pid, [{ file: 'x.rb', line: 1, kind: 'ENDPOINT', entry: 'x', status: 'NOT_A_STATUS', feature_id: null }], { snapshotId: sid }),
+      /unknown status/,
+    );
+  });
+
+  test('writing the same reconciliation universe twice does not duplicate rows (dedupe by id, last wins)', async () => {
+    const { id: pid } = await freshProject('recon-dedupe');
+    const sid = 'snap-1';
+    await writeNodes(store, pid, [n('a')], { snapshotId: sid });
+    const row = { file: 'a.rb', line: 1, kind: 'ENDPOINT', entry: 'GET /a', status: 'UNCLEAR_COVERAGE_GAP', feature_id: null };
+    await writeReconciliation(store, pid, [row, { ...row, status: 'MAPPED_TO_FEATURE', feature_id: 'feature:a' }], { snapshotId: sid });
+    const read = await readReconciliation(store, pid, sid);
+    assert.equal(read.length, 1, 'same file/line/kind/entry -> same id -> deduped, last wins');
+    assert.equal(read[0].status, 'MAPPED_TO_FEATURE');
+  });
+
+  test('a full-replace write shrinks the set, same as insertRows for nodes/edges', async () => {
+    const { id: pid } = await freshProject('recon-shrink');
+    const sid = 'snap-1';
+    await writeNodes(store, pid, [n('a')], { snapshotId: sid });
+    const three = ['a', 'b', 'c'].map((x) => ({ file: `${x}.rb`, line: 1, kind: 'ENDPOINT', entry: x, status: 'UNCLEAR_COVERAGE_GAP', feature_id: null }));
+    await writeReconciliation(store, pid, three, { snapshotId: sid });
+    assert.equal((await readReconciliation(store, pid, sid)).length, 3);
+    await writeReconciliation(store, pid, [three[0]], { snapshotId: sid });
+    assert.equal((await readReconciliation(store, pid, sid)).length, 1);
   });
 });
 

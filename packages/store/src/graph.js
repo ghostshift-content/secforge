@@ -7,7 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { promises as fsp } from 'node:fs';
 import fs from 'node:fs';
 import path from 'node:path';
-import { NODE_TYPES, EDGE_TYPES } from '@secforge/schemas';
+import { NODE_TYPES, EDGE_TYPES, RECONCILIATION_STATUS, ID } from '@secforge/schemas';
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS meta (
@@ -35,6 +35,18 @@ CREATE TABLE IF NOT EXISTS edges (
 CREATE INDEX IF NOT EXISTS idx_nodes_snapshot_type ON nodes (snapshot_id, type);
 CREATE INDEX IF NOT EXISTS idx_edges_snapshot_src   ON edges (snapshot_id, src);
 CREATE INDEX IF NOT EXISTS idx_edges_snapshot_dst   ON edges (snapshot_id, dst);
+CREATE TABLE IF NOT EXISTS reconciliation (
+  snapshot_id TEXT NOT NULL,
+  id          TEXT NOT NULL,
+  kind        TEXT NOT NULL,
+  file        TEXT,
+  line        INTEGER,
+  entry       TEXT,
+  status      TEXT NOT NULL,
+  feature_id  TEXT,
+  PRIMARY KEY (snapshot_id, id)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_recon_snapshot_status ON reconciliation (snapshot_id, status);
 `;
 
 // One DatabaseSync per project, cached by absolute file path (keyed by path, not by Store
@@ -224,6 +236,38 @@ export async function neighbourhood(store, projectId, nodeId, snapshotId) {
     .all(sid, ...ids)
     .map(mapNodeRow);
   return { nodes, edges: touching };
+}
+
+// ---- reconciliation coverage ledger (Phase A §2) -------------------------------------------
+// Fourth, parallel table + its own three functions — writeNodes/writeEdges/readGraph/
+// neighbourhood above are untouched. Same DELETE-then-INSERT full-replace-per-snapshot,
+// dedupe-by-id-last-wins pattern as insertNodes/insertEdges.
+const reconCols = ['id', 'kind', 'file', 'line', 'entry', 'status', 'feature_id'];
+const reconRows = (rows) => rows.map((r) => [
+  ID.scoped('recon', r.file, r.line, r.kind, r.entry), r.kind, r.file ?? null, r.line ?? null,
+  r.entry ?? null, r.status, r.feature_id ?? null,
+]);
+
+export async function writeReconciliation(store, projectId, rows, { snapshotId } = {}) {
+  for (const r of rows) if (!RECONCILIATION_STATUS.includes(r.status)) throw new Error(`reconciliation: unknown status "${r.status}"`);
+  const db = await ensureDb(store, projectId);
+  const sid = resolveSnapshotId(db, projectId, snapshotId);
+  writeRows(db, 'reconciliation', reconCols, sid, reconRows(rows));
+}
+
+export async function readReconciliation(store, projectId, snapshotId) {
+  const db = await ensureDb(store, projectId);
+  const sid = resolveSnapshotId(db, projectId, snapshotId);
+  return db.prepare('SELECT id, kind, file, line, entry, status, feature_id FROM reconciliation WHERE snapshot_id = ?').all(sid);
+}
+
+export async function reconciliationCounts(store, projectId, snapshotId) {
+  const db = await ensureDb(store, projectId);
+  const sid = resolveSnapshotId(db, projectId, snapshotId);
+  return Object.fromEntries(
+    db.prepare('SELECT status, COUNT(*) n FROM reconciliation WHERE snapshot_id = ? GROUP BY status').all(sid)
+      .map((r) => [r.status, r.n]),
+  );
 }
 
 // ---- legacy JSONL import (one-time, lazy) --------------------------------------------------

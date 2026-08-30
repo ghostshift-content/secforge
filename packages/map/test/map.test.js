@@ -4,7 +4,9 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { Store, readGraph } from '@secforge/store';
+import {
+  Store, readGraph, readReconciliation, reconciliationCounts, snapshotSourceDir, readFrozenSourceLines,
+} from '@secforge/store';
 import { mapProject } from '@secforge/map';
 
 let tmpRoot, store, pid;
@@ -207,5 +209,120 @@ describe('ACTOR/ROLE/PERMISSION extraction + inventory persistence', () => {
     const actorNodes = graph.nodes.filter((n) => n.type === 'ACTOR');
     assert.equal(actorNodes.length, 1);
     assert.equal(actorNodes[0].name, 'SomeAuthWrapper', 'devise signal attributes to its own enclosing class, not Order');
+  });
+});
+
+// Phase A §1 (source freezing) + §2 (reconciliation ledger), acceptance test plan: a live
+// mapProject() run over a small Rails-shaped fixture (ExpensesController: `show` — authorized;
+// `download_receipt` — authenticated but NOT authorized, the planted IDOR — same shape as
+// packages/recon/test/graph.test.js's reference fixture), exercising the full pipeline
+// (walk -> freeze -> inventory -> buildGraph -> writeReconciliation), not the isolated unit graph.
+describe('Phase A: source freezing + reconciliation ledger (real mapProject run)', () => {
+  let src, pid, sid, result;
+
+  before(async () => {
+    src = path.join(tmpRoot, 'expenses-proj');
+    await fs.mkdir(path.join(src, 'app', 'controllers'), { recursive: true });
+    await fs.mkdir(path.join(src, 'config'), { recursive: true });
+    await fs.writeFile(path.join(src, 'app', 'controllers', 'application_controller.rb'),
+      'class ApplicationController < ActionController::Base\n  before_action :authenticate_user!\nend\n');
+    await fs.writeFile(path.join(src, 'app', 'controllers', 'expenses_controller.rb'), [
+      'class ExpensesController < ApplicationController',
+      '  def show',
+      '    @expense = Expense.find(params[:id])',
+      '    authorize @expense',
+      '    render json: @expense',
+      '  end',
+      '',
+      '  def download_receipt',
+      '    @expense = Expense.find(params[:id])',
+      '    send_file @expense.receipt_path',
+      '  end',
+      'end',
+      '',
+    ].join('\n'));
+    await fs.writeFile(path.join(src, 'config', 'routes.rb'), [
+      'Rails.application.routes.draw do',
+      '  resources :expenses, only: [:show] do',
+      '    member do',
+      '      get :download_receipt',
+      '    end',
+      '  end',
+      'end',
+      '',
+    ].join('\n'));
+
+    const project = await store.openProject({ sourceRoot: src, name: 'EXPENSES' });
+    pid = project.id;
+    result = await mapProject({ sourceRoot: src, store, projectId: pid });
+    sid = result.snapshotId;
+    assert.equal(result.status, 'MAPPED');
+  });
+
+  test('source is frozen to disk, and snapshot.json says so', async () => {
+    const sourceDir = snapshotSourceDir(store, pid, sid);
+    await assert.doesNotReject(fs.access(sourceDir));
+    const frozenControllerText = await fs.readFile(path.join(sourceDir, 'app', 'controllers', 'expenses_controller.rb'), 'utf8');
+    assert.match(frozenControllerText, /def download_receipt/);
+
+    const snapFile = path.join(store.projectDir(pid), 'snapshots', sid, 'snapshot.json');
+    const snap = JSON.parse(await fs.readFile(snapFile, 'utf8'));
+    assert.equal(snap.source_frozen, true);
+  });
+
+  test('readFrozenSourceLines returns the right lines, and null for a file outside the manifest', async () => {
+    const excerpt = await readFrozenSourceLines(store, pid, sid, 'app/controllers/expenses_controller.rb', 8, 8);
+    assert.equal(excerpt, '  def download_receipt');
+    assert.equal(await readFrozenSourceLines(store, pid, sid, 'no/such/file.rb', 1, 2), null);
+  });
+
+  test('reconciliation row count === inventory.jsonl line count, zero UNRECONCILED', async () => {
+    const invFile = path.join(store.projectDir(pid), 'snapshots', sid, 'inventory.jsonl');
+    const invLines = (await fs.readFile(invFile, 'utf8')).split('\n').filter(Boolean);
+
+    const recon = await readReconciliation(store, pid, sid);
+    assert.equal(recon.length, invLines.length);
+
+    const counts = await reconciliationCounts(store, pid, sid);
+    assert.equal(counts.UNRECONCILED || 0, 0);
+    // every row is accounted for by name (file/line/kind), never silently dropped
+    for (const r of recon) assert.ok(r.kind, 'every reconciliation row carries its inventory kind');
+  });
+
+  test('download_receipt and show land MAPPED_TO_FEATURE, tied to the owning FEATURE id', async () => {
+    const graph = await readGraph(store, pid, sid);
+    const download = graph.nodes.find((n) => n.type === 'ENDPOINT' && n.data.route === '/expenses/:id/download_receipt');
+    const show = graph.nodes.find((n) => n.type === 'ENDPOINT' && n.data.route === '/expenses/:id');
+    assert.ok(download && show, 'both endpoints were mapped');
+
+    const featureOf = (epId) => graph.edges.find((e) => e.type === 'EXPOSES' && e.dst === epId)?.src;
+    const downloadFeatureId = featureOf(download.id);
+    const showFeatureId = featureOf(show.id);
+    assert.ok(downloadFeatureId && showFeatureId);
+    assert.equal(graph.nodes.find((n) => n.id === downloadFeatureId)?.type, 'FEATURE');
+
+    const recon = await readReconciliation(store, pid, sid);
+    const downloadRecon = recon.find((r) => r.file === 'app/controllers/expenses_controller.rb' && r.line === download.data.line);
+    const showRecon = recon.find((r) => r.file === 'app/controllers/expenses_controller.rb' && r.line === show.data.line);
+    assert.ok(downloadRecon && showRecon);
+    assert.equal(downloadRecon.status, 'MAPPED_TO_FEATURE');
+    assert.equal(showRecon.status, 'MAPPED_TO_FEATURE');
+    assert.equal(downloadRecon.feature_id, downloadFeatureId);
+    assert.equal(showRecon.feature_id, showFeatureId);
+
+    // the planted IDOR: download_receipt is authenticated but NOT authorized.
+    assert.ok(graph.edges.some((e) => e.type === 'AUTHENTICATED_BY' && e.src === download.id));
+    assert.equal(graph.edges.some((e) => e.type === 'AUTHORIZED_BY' && e.src === download.id), false);
+    assert.ok(graph.edges.some((e) => e.type === 'AUTHORIZED_BY' && e.src === show.id));
+  });
+
+  test('frozen citations survive live mutation: overwriting the live source does not change what was frozen', async () => {
+    const before = await readFrozenSourceLines(store, pid, sid, 'app/controllers/expenses_controller.rb', 8, 8);
+    assert.equal(before, '  def download_receipt');
+
+    await fs.writeFile(path.join(src, 'app', 'controllers', 'expenses_controller.rb'), '# gutted\n');
+
+    const after = await readFrozenSourceLines(store, pid, sid, 'app/controllers/expenses_controller.rb', 8, 8);
+    assert.equal(after, before, 'frozen source is unaffected by a live-tree mutation');
   });
 });

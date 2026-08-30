@@ -139,4 +139,6 @@ export class Store {
 
 export { projectId, ID };
 // Graph layer (nodes/edges/claims) — re-exported so consumers reach it via @secforge/store.
-export { writeNodes, writeEdges, readGraph, neighbourhood, closeDb } from './graph.js';
+export { writeNodes, writeEdges, readGraph, neighbourhood, closeDb, writeReconciliation, readReconciliation, reconciliationCounts } from './graph.js';
+// Frozen-source layer (Phase A §1) — re-exported alongside the graph layer.
+export { snapshotSourceDir, readFrozenSourceLines } from './source.js';
