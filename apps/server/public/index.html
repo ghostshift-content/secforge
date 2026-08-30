@@ -628,6 +628,8 @@
           <div id="findEvidence" class="card" style="padding:14px 16px;box-shadow:none;max-width:820px;font-size:12.5px;line-height:1.9;"><span class="muted">Select a finding to see its file:line, rule and CWE.</span></div>
           <div class="kicker" style="margin-top:20px;margin-bottom:8px;">Remediation</div>
           <div id="findRemediation" class="card" style="padding:12px 14px;box-shadow:none;max-width:820px;font-size:12.5px;line-height:1.6;"><span class="muted">Remediation guidance from the matched rule appears here.</span></div>
+          <div class="kicker" style="margin-top:20px;margin-bottom:8px;">Validation trail</div>
+          <div id="findValidation" class="card" style="padding:12px 14px;box-shadow:none;max-width:820px;font-size:12.5px;line-height:1.6;"><span class="muted">—</span></div>
         </div>
       </div>
     </div>
@@ -1480,6 +1482,7 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
     var what=document.getElementById('findWhatHappens'); if(what) what.innerHTML='<span class="muted">Run an assessment to produce findings.</span>';
     var ev=document.getElementById('findEvidence'); if(ev) ev.innerHTML='<span class="muted">Select a finding to see its evidence.</span>';
     var rem=document.getElementById('findRemediation'); if(rem) rem.innerHTML='<span class="muted">—</span>';
+    var val=document.getElementById('findValidation'); if(val) val.innerHTML='<span class="muted">—</span>';
     var vn=document.getElementById('findValidateNote'); if(vn) vn.textContent='';
   }
   function snippetHtml(s, evLine){
@@ -1521,6 +1524,9 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
       + snippetHtml(f.snippet, f.evidence && f.evidence.line);
     var remEl = document.getElementById('findRemediation');
     if(remEl) remEl.innerHTML = f.remediation ? esc(f.remediation) : '<span class="muted">No remediation text recorded for this rule.</span>';
+    // P3-5: honest validation trail — a deterministic rule match, NOT an independent agent re-proof.
+    var valEl = document.getElementById('findValidation');
+    if(valEl) valEl.innerHTML = 'Detected deterministically by rule <span class="mono chip">'+esc(f.rule||'—')+'</span> · '+esc(f.assessment_mode||'static_confirmed')+'. No independent agent re-proof was performed — this is a static match over the knowledge graph, not a runtime-confirmed exploit. Use <b>Validate live</b> above to probe an authorised target.';
     var btn = document.getElementById('findValidateBtn');
     if(btn) btn.onclick = function(){ validateFinding(f.id); };
   }
