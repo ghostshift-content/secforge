@@ -1312,7 +1312,7 @@
         else if(d.stage==='hunter' && stages[1]) stages[1].textContent = d.status==='done' ? ((d.candidates!=null?d.candidates:'')+' candidates') : 'hunting…';
         else if(d.stage==='triager' && stages[2]) stages[2].textContent=(d.kept!=null?d.kept+' kept':'triaging…');
         else if(d.stage==='validator' && stages[3]) stages[3].textContent=(d.validated!=null?d.validated+' validated':'validating…');
-        else if(d.stage==='reporter' && stages[4]) stages[4].textContent=(d.findings!=null?d.findings+' findings':'reporting…');
+        else if(d.stage==='reporter' && stages[4]) stages[4].textContent=((d.promoted!=null?d.promoted:d.findings)!=null?(d.promoted!=null?d.promoted:d.findings)+' findings':'reporting…');
         else if(d.stage==='done'){ try{ es.close(); }catch(e){} _assessES=null; }
       };
       es.onerror = function(){ try{ es.close(); }catch(e){} _assessES=null; };

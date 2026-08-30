@@ -11,6 +11,8 @@ let tmpRoot;
 
 before(async () => {
   tmpRoot = path.join(os.tmpdir(), 'sf-test-' + crypto.randomBytes(4).toString('hex'));
+  // openProject now validates the path is a real directory; create the ones these tests open.
+  for (let i = 1; i <= 6; i++) await fs.mkdir(path.join(tmpRoot, 'proj-' + i), { recursive: true });
 });
 
 after(async () => {

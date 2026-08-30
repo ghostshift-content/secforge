@@ -10,36 +10,50 @@ import { ID } from '@secforge/schemas';
 // path reaches the file without needing to touch store's package.json.
 import { writeNodes, writeEdges, neighbourhood } from '../../store/src/graph.js';
 
+const fsp = fs.promises;
 const SKIP_DIR = new Set(['node_modules', '.git', 'dist', 'vendor', 'build', 'coverage', '.next', 'out']);
 const MAX_BYTES = 1_000_000; // ponytail: flat cap, not a size histogram — raise if real repos need it
+// Bounds so mapping a huge (or root) tree can't hang the single-threaded server. P0-1.
+const MAX_FILES = 25_000;
+const MAX_DEPTH = 24;
+const MAX_TOTAL_BYTES = 500_000_000; // 500MB read budget across the whole manifest
 const slugify = (s) => String(s).toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 // ---------- SNAPSHOT ----------
-function walk(dir, base, out) {
+// Async (fs.promises) so each await yields the event loop — a big tree slows mapping but never
+// blocks health/other routes. Bounded by MAX_FILES and MAX_DEPTH so it can't run away.
+async function walk(dir, base, out, depth = 0) {
+  if (depth > MAX_DEPTH || out.length >= MAX_FILES) return out;
   let entries;
-  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return out; }
+  try { entries = await fsp.readdir(dir, { withFileTypes: true }); } catch { return out; }
   for (const e of entries) {
+    if (out.length >= MAX_FILES) break;
     if (e.isSymbolicLink()) continue;
     const full = path.join(dir, e.name);
-    if (e.isDirectory()) { if (!SKIP_DIR.has(e.name)) walk(full, base, out); continue; }
+    if (e.isDirectory()) { if (!SKIP_DIR.has(e.name)) await walk(full, base, out, depth + 1); continue; }
     out.push(path.relative(base, full).split(path.sep).join('/'));
   }
   return out;
 }
 
-function buildManifest(sourceRoot) {
+async function buildManifest(sourceRoot) {
   const manifest = [];
-  for (const rel of walk(sourceRoot, sourceRoot, []).sort()) {
+  let total = 0;
+  const rels = (await walk(sourceRoot, sourceRoot, [])).sort();
+  const truncatedFiles = rels.length >= MAX_FILES;
+  for (const rel of rels) {
+    if (total >= MAX_TOTAL_BYTES) break;
     const abs = path.join(sourceRoot, rel);
     let stat;
-    try { stat = fs.statSync(abs); } catch { continue; }
+    try { stat = await fsp.stat(abs); } catch { continue; }
     if (!stat.isFile() || stat.size > MAX_BYTES) continue;
     let buf;
-    try { buf = fs.readFileSync(abs); } catch { continue; }
+    try { buf = await fsp.readFile(abs); } catch { continue; }
     if (buf.subarray(0, 8000).includes(0)) continue; // binary heuristic: NUL byte in the head
+    total += stat.size;
     manifest.push({ path: rel, bytes: stat.size, sha256: crypto.createHash('sha256').update(buf).digest('hex') });
   }
-  return manifest;
+  return { manifest, truncated: truncatedFiles || total >= MAX_TOTAL_BYTES };
 }
 
 const hashManifest = (manifest) => crypto.createHash('sha256').update(JSON.stringify(manifest)).digest('hex');
@@ -83,9 +97,9 @@ const matchDataStore = (line) =>
 const AUTHN_RE = /before_action\s+:authenticate|authenticate_user!?|\blogin_required\b|requires?_login|requireAuth|ensureAuthenticated|isAuthenticated|passport\.authenticate|@login_required|@requires_auth|\[Authorize\]|verify(?:_?token|Token)|AuthGuard/i;
 const AUTHZ_RE = /\bauthorize!?\b|\bcan\?|\bpolicy\b|\bowns?_|\bowner\b|current_user\.\w+\.(?:find|where)|@PreAuthorize|\bPundit\b|authorize_resource|cancancan/i;
 
-function scanFile(sourceRoot, rel) {
+async function scanFile(sourceRoot, rel) {
   let text;
-  try { text = fs.readFileSync(path.join(sourceRoot, rel), 'utf8'); } catch { return []; }
+  try { text = await fsp.readFile(path.join(sourceRoot, rel), 'utf8'); } catch { return []; }
   const rows = [];
   const lines = text.split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
@@ -197,19 +211,24 @@ export async function mapProject({ sourceRoot, store, projectId, onProgress } = 
   // Refuse to "map" a path that isn't a real directory — otherwise walk() swallows the readdir
   // error and returns status:MAPPED with 0 nodes, and the UI fabricates a graph for a repo that
   // is not on disk (S1-6).
+  const resolvedRoot = path.resolve(sourceRoot);
+  if (resolvedRoot === path.parse(resolvedRoot).root) {
+    return { status: 'ERROR', error: 'refusing to map a filesystem root', sourceRoot, features: [], coverage: { technical: 0, semantic: 0 }, nodeCount: 0, edgeCount: 0 };
+  }
   let _st; try { _st = fs.statSync(sourceRoot); } catch { _st = null; }
   if (!_st || !_st.isDirectory()) {
     return { status: 'ERROR', error: 'source path does not exist or is not a directory', sourceRoot, features: [], coverage: { technical: 0, semantic: 0 }, nodeCount: 0, edgeCount: 0 };
   }
 
   onProgress?.({ phase: 'snapshot', pct: 0 });
-  const manifest = buildManifest(sourceRoot);
+  const { manifest, truncated } = await buildManifest(sourceRoot);
   const snapshotId = hashManifest(manifest);
   persistSnapshot(store, projectId, snapshotId, manifest);
   onProgress?.({ phase: 'snapshot', pct: 25 });
 
   onProgress?.({ phase: 'inventory', pct: 25 });
-  const inventory = manifest.flatMap((m) => scanFile(sourceRoot, m.path));
+  const inventory = [];
+  for (const m of manifest) inventory.push(...await scanFile(sourceRoot, m.path));
   onProgress?.({ phase: 'inventory', pct: 50 });
 
   onProgress?.({ phase: 'features', pct: 50 });
@@ -229,6 +248,7 @@ export async function mapProject({ sourceRoot, store, projectId, onProgress } = 
     status: 'MAPPED',
     snapshotId,
     features,
+    truncated, // true if the tree hit MAX_FILES / byte budget and was only partially mapped
     coverage: { technical, semantic: 0 }, // ponytail: semantic/LLM coverage lands with the AI mapping pass
     nodeCount: nodes.length,
     edgeCount: edges.length,

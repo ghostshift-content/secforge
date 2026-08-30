@@ -12,6 +12,8 @@ let store;
 before(async () => {
   tmpRoot = path.join(os.tmpdir(), 'sf-test-' + crypto.randomBytes(4).toString('hex'));
   store = new Store(tmpRoot);
+  // openProject now validates the path is a real directory; create the ones these tests open.
+  for (const n of ['src-a', 'src-b', 'src-c', 'src-d', 'src-del']) await fs.mkdir(path.join(tmpRoot, n), { recursive: true });
 });
 
 after(async () => {
@@ -28,6 +30,17 @@ describe('Store.openProject', () => {
     const projects = await store.listProjects();
     const matches = projects.filter((p) => p.id === first.id);
     assert.equal(matches.length, 1);
+  });
+
+  test('rejects a nonexistent path, a file, and a filesystem root (P1-1)', async () => {
+    await assert.rejects(store.openProject({ sourceRoot: path.join(tmpRoot, 'no-such-dir') }), /existing directory/);
+    const file = path.join(tmpRoot, 'a-file.txt');
+    await fs.writeFile(file, 'x');
+    await assert.rejects(store.openProject({ sourceRoot: file }), /existing directory/);
+    await assert.rejects(store.openProject({ sourceRoot: '/' }), /filesystem root/);
+    // and none of those created a project record
+    const names = (await store.listProjects()).map((p) => p.name);
+    assert.equal(names.includes('a-file.txt'), false);
   });
 });
 

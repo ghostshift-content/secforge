@@ -12,6 +12,11 @@ function targetFile(store, projectId) { return path.join(envDir(store, projectId
 // stays off until a human explicitly flips it on for this project.
 export async function registerTarget(store, projectId, { baseUrl, authHeader, extraHeaders, scope, authorized = false }) {
   if (!baseUrl) throw new Error('registerTarget(): baseUrl is required');
+  // P1-2: only http/https targets. Reject javascript:, file:, data:, and non-URLs — a bad scheme
+  // here becomes a stored-XSS/SSRF vector the moment the value is rendered or fetched.
+  let parsed;
+  try { parsed = new URL(baseUrl); } catch { throw new Error('registerTarget(): baseUrl must be a valid http(s) URL'); }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error('registerTarget(): baseUrl must use http or https');
   const target = {
     baseUrl,
     authHeader: authHeader || null,

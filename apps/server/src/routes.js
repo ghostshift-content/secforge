@@ -16,6 +16,10 @@ import { SCOPE_KINDS, RUN_METHODS } from '@secforge/schemas';
 const mgr = new SessionManager();
 const store = new Store();
 
+// One writing scan per project at a time (P0-2e). The SSE stream is read-only, so it never
+// contends; this only serialises the authoritative POST /scan writers.
+const activeScans = new Set();
+
 const json = (res, code, body) => {
   res.writeHead(code, { 'content-type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -89,7 +93,10 @@ export async function handleApi(req, res, url) {
     // /api/projects
     if (parts[0] === 'projects' && parts.length === 1) {
       if (method === 'GET') return json(res, 200, { projects: await store.listProjects() }), true;
-      if (method === 'POST') { const r = await mgr.open(body); return json(res, 201, r), true; }
+      if (method === 'POST') {
+        try { return json(res, 201, await mgr.open(body)), true; }        // P1-1: bad path → 400, not a persisted junk project
+        catch (e) { return json(res, 400, { error: e.message }), true; }
+      }
     }
 
     // DELETE /api/projects/:id → forget a project (S2-7)
@@ -123,7 +130,10 @@ export async function handleApi(req, res, url) {
     if (parts[0] === 'projects' && parts.length === 3 && method === 'POST') {
       const pid = parts[1], sub = parts[2];
       if (sub === 'memory') return json(res, 200, await learn(store, pid, body)), true;
-      if (sub === 'env') return json(res, 200, await registerTarget(store, pid, body)), true;
+      if (sub === 'env') {
+        try { return json(res, 200, await registerTarget(store, pid, body)), true; } // P1-2: bad URL → 400
+        catch (e) { return json(res, 400, { error: e.message }), true; }
+      }
     }
 
     // /api/sessions/:id  (+ /pause /resume /cancel /scan)   ?project=<id>
@@ -136,21 +146,31 @@ export async function handleApi(req, res, url) {
       // truth that persists findings/coverage (same analyze() over the same graph → no drift).
       if (method === 'GET' && action === 'stream') {
         res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
-        const send = (event) => res.write(`data: ${JSON.stringify(event)}\n\n`);
-        const scope = normaliseScope({ mode: url.searchParams.get('mode') || 'all', feature: url.searchParams.get('feature') || undefined });
-        const graph = await readGraph(store, project);
-        const jobs = planJobs(scope);
-        send({ stage: 'framer', status: 'done', jobs: jobs.length });
-        await runAll(jobs, async (job) => {
-          send({ stage: 'hunter', status: 'start', job: job.id, feature: job.feature });
-          const jobScope = (job.feature && job.feature !== '<all>') ? { ...scope, mode: 'feature', feature: job.feature } : scope;
-          const found = analyze(graph, { scope: jobScope, patterns: jobScope.patterns });
-          send({ stage: 'hunter', status: 'done', job: job.id, candidates: found.length });
-        });
-        const result = await runAssessment({ store, projectId: project, scope, engine: 'rules',
-          onEvent: (e) => { if (e.stage !== 'framer' && e.stage !== 'hunter') send(e); } });
-        send({ stage: 'done', findings: result.findings.length, coverage: result.coverage?.percent ?? null });
-        return res.end(), true;
+        const send = (event) => { try { res.write(`data: ${JSON.stringify(event)}\n\n`); } catch { /* client gone */ } };
+        // Read-only progress ONLY. The POST /scan is the single writer that persists findings, so
+        // the stream never runs a persisting assessment — that removes the concurrent-writer race
+        // that used to crash the process. All work here is analyze() (pure, no store writes). P0-2.
+        try {
+          const scope = normaliseScope({ mode: url.searchParams.get('mode') || 'all', feature: url.searchParams.get('feature') || undefined });
+          const graph = await readGraph(store, project);
+          const jobs = planJobs(scope);
+          send({ stage: 'framer', status: 'done', jobs: jobs.length });
+          await runAll(jobs, async (job) => {
+            send({ stage: 'hunter', status: 'start', job: job.id, feature: job.feature });
+            const jobScope = (job.feature && job.feature !== '<all>') ? { ...scope, mode: 'feature', feature: job.feature } : scope;
+            const found = analyze(graph, { scope: jobScope, patterns: jobScope.patterns });
+            send({ stage: 'hunter', status: 'done', job: job.id, candidates: found.length });
+          });
+          const all = analyze(graph, { scope, patterns: scope.patterns });
+          send({ stage: 'triager', kept: all.length });
+          send({ stage: 'validator', validated: all.length });
+          send({ stage: 'reporter', promoted: all.length });
+          send({ stage: 'done', candidates: all.length });
+        } catch (err) {
+          send({ stage: 'error', error: String((err && err.message) || err) });
+        }
+        try { res.end(); } catch { /* already closed */ }
+        return true;
       }
       if (method === 'GET' && !action) return json(res, 200, await mgr.status(project, sid)), true;
       if (method === 'POST' && action === 'pause') return json(res, 200, await mgr.pause(project, sid)), true;
@@ -163,16 +183,22 @@ export async function handleApi(req, res, url) {
       if (method === 'POST' && action === 'scan') {
         const bad = scopeInputError(body.scope);                            // S3-6: don't silently coerce an explicit bad scope
         if (bad) return json(res, 400, { error: `invalid scope.${bad}`, allowed: { mode: [...SCOPE_KINDS], method: [...RUN_METHODS] } }), true;
-        const engine = await validEngineId(body.engine);                    // N1/N2: known adapter id only, coerced to a string
-        const scope = normaliseScope(body.scope);                           // input validation vs SCOPE_KINDS/RUN_METHODS
-        const cur = await mgr.status(project, sid);
-        if (cur && cur.status === 'created') await mgr.start(project, sid);  // N3: drive the FSM so status is real + pause works
-        await mgr.configureRun(project, sid, scope);
-        await mgr.recordEngine(project, sid, { provider: engine, model: typeof body.model === 'string' ? body.model : null }); // N4
-        await store.clearFindings(project);                                 // N5: a re-scan replaces findings; no stale results survive
-        const model = typeof body.model === 'string' ? body.model : null;
-        const result = await runAssessment({ store, projectId: project, scope, engine, model });
-        return json(res, 200, result), true;
+        if (activeScans.has(project)) return json(res, 409, { error: 'a scan is already running for this project' }), true; // P0-2e
+        activeScans.add(project);
+        try {
+          const engine = await validEngineId(body.engine);                  // N1/N2: known adapter id only, coerced to a string
+          const scope = normaliseScope(body.scope);                         // input validation vs SCOPE_KINDS/RUN_METHODS
+          const cur = await mgr.status(project, sid);
+          if (cur && cur.status === 'created') await mgr.start(project, sid); // N3: drive the FSM so status is real + pause works
+          await mgr.configureRun(project, sid, scope);
+          await mgr.recordEngine(project, sid, { provider: engine, model: typeof body.model === 'string' ? body.model : null }); // N4
+          await store.clearFindings(project);                               // N5: a re-scan replaces findings; no stale results survive
+          const model = typeof body.model === 'string' ? body.model : null;
+          const result = await runAssessment({ store, projectId: project, scope, engine, model });
+          return json(res, 200, result), true;
+        } finally {
+          activeScans.delete(project);
+        }
       }
     }
 
@@ -187,6 +213,9 @@ export async function handleApi(req, res, url) {
 
     return json(res, 404, { error: 'no such route', path: url.pathname }), true;
   } catch (e) {
+    // If a response (e.g. an SSE stream) already started, a second writeHead would throw again
+    // inside the catch and escape uncaught. Just close it. P0-2a.
+    if (res.headersSent) { try { res.end(); } catch { /* already closed */ } return true; }
     return json(res, 500, { error: e.message }), true;
   }
 }

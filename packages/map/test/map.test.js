@@ -12,6 +12,7 @@ let tmpRoot, store, pid;
 before(async () => {
   tmpRoot = path.join(os.tmpdir(), 'sf-map-' + crypto.randomBytes(4).toString('hex'));
   store = new Store(tmpRoot);
+  await fs.mkdir(path.join(tmpRoot, 'proj'), { recursive: true });
   const project = await store.openProject({ sourceRoot: path.join(tmpRoot, 'proj'), name: 'MAP' });
   pid = project.id;
 });
@@ -31,6 +32,13 @@ describe('mapProject()', () => {
   test('returns status ERROR for a missing path', async () => {
     const result = await mapProject({ sourceRoot: path.join(tmpRoot, 'nope'), store, projectId: pid });
     assert.equal(result.status, 'ERROR');
+  });
+
+  test('refuses to map a filesystem root without walking it (P0-1)', async () => {
+    const result = await mapProject({ sourceRoot: '/', store, projectId: pid });
+    assert.equal(result.status, 'ERROR');
+    assert.match(result.error, /root/);
+    assert.equal(result.nodeCount, 0);
   });
 
   test('returns status MAPPED with features for a real source directory', async () => {

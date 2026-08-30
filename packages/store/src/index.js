@@ -20,7 +20,9 @@ async function readJSON(file, fallback = null) {
 }
 async function writeJSON(file, data) {
   await fs.mkdir(path.dirname(file), { recursive: true });
-  const tmp = file + '.tmp';
+  // Unique temp name per writer: two concurrent writes to the same file must not share a .tmp
+  // path (that made one rename consume the other's file → ENOENT and a crashed request). P0-2c.
+  const tmp = `${file}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;
   await fs.writeFile(tmp, JSON.stringify(data, null, 2));
   await fs.rename(tmp, file); // atomic
 }
@@ -36,6 +38,11 @@ export class Store {
     let raw = sourceRoot.trim();
     if (raw === '~' || raw.startsWith('~/')) raw = path.join(os.homedir(), raw.slice(1)); // expand ~ (S1-6)
     const abs = path.resolve(raw);
+    // P1-1: validate the filesystem path at creation, not only at map time — otherwise a
+    // nonexistent path, a file, or "/" all create a persistent junk project first.
+    if (abs === path.parse(abs).root) throw new Error('refusing to open a filesystem root');
+    let st; try { st = await fs.stat(abs); } catch { st = null; }
+    if (!st || !st.isDirectory()) throw new Error('sourceRoot must be an existing directory');
     // Optional confinement for hardened / multi-user deployments: SECFORGE_ALLOW_ROOT limits
     // which trees may be opened+scanned, mitigating arbitrary-path reads via the HTTP API.
     const allow = process.env.SECFORGE_ALLOW_ROOT;

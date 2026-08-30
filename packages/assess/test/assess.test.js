@@ -94,6 +94,7 @@ describe('computeCoverage()', () => {
   before(async () => {
     tmpRoot = path.join(os.tmpdir(), 'sf-assess-' + crypto.randomBytes(4).toString('hex'));
     store = new Store(tmpRoot);
+    await fs.mkdir(path.join(tmpRoot, 'src'), { recursive: true });
     const project = await store.openProject({ sourceRoot: path.join(tmpRoot, 'src'), name: 'COV' });
     pid = project.id;
     const snapshotId = 'snap-test';

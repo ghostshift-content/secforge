@@ -37,11 +37,21 @@ async function serveStatic(res, pathname) {
   }
 }
 
+// P0-2d: a single bad request must never take the whole loopback server down. Log and keep serving.
+process.on('uncaughtException', (err) => { console.error('[secforge] uncaughtException (kept serving):', err); });
+process.on('unhandledRejection', (err) => { console.error('[secforge] unhandledRejection (kept serving):', err); });
+
 const server = http.createServer(async (req, res) => {
-  if (!guarded(req)) { res.writeHead(403, { 'content-type': 'text/plain' }).end('forbidden host'); return; }
-  const url = new URL(req.url, `http://${req.headers.host}`);
-  if (await handleApi(req, res, url)) return;
-  await serveStatic(res, url.pathname);
+  try {
+    if (!guarded(req)) { res.writeHead(403, { 'content-type': 'text/plain' }).end('forbidden host'); return; }
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    if (await handleApi(req, res, url)) return;
+    await serveStatic(res, url.pathname);
+  } catch (err) {
+    console.error('[secforge] request handler error:', err);
+    if (!res.headersSent) { try { res.writeHead(500, { 'content-type': 'application/json' }); } catch { /* ignore */ } }
+    try { res.end(res.headersSent ? '' : JSON.stringify({ error: 'internal error' })); } catch { /* already closed */ }
+  }
 });
 
 server.listen(PORT, HOST, () => {
