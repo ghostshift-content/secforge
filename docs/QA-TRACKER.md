@@ -84,6 +84,42 @@ QA withdrew the "47 dead controls" figure: 0 dead of 110 actionable controls.
 - [x] **S3-6** Invalid scope.mode/method → 400 {error, allowed:{…}}; absent fields still default. — 32e05e5
 - [~] **S4-3** Per-feature action count is wired from real counts; QA couldn't retest on the single-feature fixture — needs a multi-feature project to confirm.
 
+## Rounds 3–5 — QA register + product-owner items (P0/P1/P2/P4, O-*, N-*, AI-*)
+Fixed & self-verified this session (commits c677482 → 3c81811):
+- [x] **P0-1** map DoS → async fs.promises (yields loop) + MAX_FILES/DEPTH/BYTE caps + refuses filesystem roots. — c677482
+- [x] **P0-2** concurrent SSE+scan crash → process handlers; read-only SSE (no writer race); headers-sent guard; unique temp filenames; per-project scan lock (409). Verified: server survives storms. — c677482
+- [x] **P1-1** junk projects for bad paths → openProject validates dir + refuses roots; POST /projects → 400, no record created. — c677482
+- [x] **P1-2** env URL scheme → http/https allowlist, 400 on javascript:/file:/non-URL. — c677482
+- [x] **O-2** unreadable dir reported MAPPED → openProject probes readability; mapProject ERRORs on empty-manifest-from-non-empty-dir. — 71dbcc3
+- [x] **AI-1** model dropdown now always lists the provider's real e.models; guidance in the badge, select disabled when unusable. — 331863e
+- [x] **AI-2** unconnected provider runs as rules and the record states the truth (requested/reason); never claims a provider that didn't run. — 331863e
+- [x] **AI-3** not-connected provider options are disabled (visible). — 331863e
+- [x] **AI-4** finding.engine is {provider, model}. — 331863e
+- [x] **AI-5** scan response reports modelUsed + requested + reason. — 331863e
+- [x] **O-3** "Open & map" ships disabled, enables on non-empty input. — 331863e
+- [x] **O-4** launcher engine card removed (top-bar selector is the single source). — 331863e
+- [x] **O-5** tabs re-gate whenever the launcher is shown. — 331863e
+- [x] **P2-2** gated tabs give feedback (hover title + click routes to launcher). — 331863e
+- [x] **P2-4/P2-5** Run disabled/refused with empty prompt or zero patterns. — 331863e
+- [x] **N-4** logo is a real home button. — 331863e
+- [x] **N-5** Validate-live: dead inline onclick removed; routes to Env on unauthorised, no dead end. — 1c36409
+- [x] **N-6** validate status is a single slot, reset per finding. — 1c36409
+- [x] **N-7** Export H1 is a submittable report (CVSS, snippet code block, impact, steps, assessment mode). — 1c36409
+- [x] **O-1** launcher columns equalised + headings matched. — 1c36409
+- [x] **P4-4** demo.html watermarked as a design mock (banner + diagonal + retitled). — 1c36409
+- [x] **O-6** Env credential fields (Basic/bearer/extra headers) with an explicit plaintext-storage warning. — 3c81811
+- [x] **P2-1/P2-3** in-page tour retired (Walkthrough → watermarked /demo.html); #proj-acme lives only in the mock. — (prior)
+
+Backlog (release-design surfaces — need map-engine extraction first, not defects):
+- [ ] **P3-1** Map/Inventories — per-file inventory lists + 5-category reconciliation (map engine writes no inventory files yet).
+- [ ] **P3-2** Map/Roles — actor catalog + role→ability matrix (engine emits no ACTOR/ROLE nodes yet).
+- [ ] **P3-3** Map/Consolidated — artifact tree, coverage matrix, completion gate, review queue.
+- [ ] **P3-4** Map/Feature map — Feature Identity, Authorization Map, same-functionality clusters (beyond the ledger).
+- [ ] **P3-5** Findings — honest validation-trail section (rule fired; no independent re-proof).
+- [ ] **P3-6** Memory — "Learned this cycle" section.
+- [ ] **P3-7** [ROADMAP] Env — live-validation transcript pane (Phase 4).
+- [~] **P4-1/P4-3** relabelled/removed already; P4-2 needs a multi-feature fixture to retest.
+
 ## S5 · LOW / hygiene
 - [~] **S5-1** Test suite grown 22 → 48: assess (rules, computeCoverage, decorate/CVSS/snippet), map (ERROR/MAPPED), routes (scope-400). Adapters/patterns/memory/env still thin. — 0b0b0b7/32e05e5
 - [x] **S5-2** Removed coverageStub() (routes.js) and hasAuthzGuard()+AUTHZ_EDGE_TYPES (graph-utils.js). — 0b0b0b7
