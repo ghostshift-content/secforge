@@ -9,8 +9,10 @@ import { readGraph, writeNodes, writeEdges } from '@secforge/store';
 import { jobEnvelope } from '@secforge/schemas';
 import { getAdapter } from '@secforge/adapters';
 import { FAMILIES } from '@secforge/patterns';
+import { buildFeedForward } from '@secforge/retrieval';
 import { analyze, validateCandidate, reproveLlmCandidate, inScope } from './rules.js';
-import { decorateFinding, buildSnippet, loadManifest, readSourceRoot } from './decorate.js';
+import { decorateFinding, buildSnippet, loadManifest, readSourceRoot, readCurrentSnapshotId } from './decorate.js';
+import { citationIndex, citationFromLine } from './grounding.js';
 import { computeCoverage } from './coverage.js';
 import { indexGraph, endpointsOfFeature } from './graph-utils.js';
 
@@ -65,7 +67,20 @@ const FAMILY_CWE = Object.fromEntries(FAMILIES.map((f) => [f.prefix, f.cwe[0]]))
 const LLM_CAPS = { low: 5, medium: 10, high: 15, max: 20 };
 function llmCap(effort) { return LLM_CAPS[effort] || LLM_CAPS.medium; }
 const LLM_TIMEOUT_MS = Number(process.env.SECFORGE_LLM_TIMEOUT_MS) || 180000; // real CLI models (codex exec) need minutes, not seconds
-const LLM_MANY_FEATURES = 8; // above this, one ask() over a compact summary instead of per-feature
+// Effort's THIRD honest, documented effect (alongside the adapters' token-budget scaling and
+// LLM_CAPS above): how much fed-forward context (§1 of the Phase B design) goes into each
+// per-feature ask(). No tokenizer in this zero-dep codebase — bounded by count/char caps instead.
+const CONTEXT_CAPS = {
+  low: { maxCitations: 8, maxEndpoints: 10 },
+  medium: { maxCitations: 16, maxEndpoints: 20 },
+  high: { maxCitations: 24, maxEndpoints: 30 },
+  max: { maxCitations: 40, maxEndpoints: 50 }, // 40 == retrieveFeatureContext's own default ceiling
+};
+// Run-wide bound: at most this many FEATURE nodes get an LLM call per scan. Features beyond the
+// cap get zero LLM-assist this run — they still get full deterministic coverage (analyze() runs
+// over the whole graph regardless of engine). Never silently eaten: the count surfaces as
+// result.featuresSkipped.
+const MAX_LLM_FEATURES_PER_RUN = 8;
 
 // Belt-and-suspenders timeout: the adapter enforces its own, but a scan must never hang on it.
 // Resolves to null (not a rejection) on error/timeout so callers can treat it as "no answer".
@@ -80,34 +95,59 @@ function withTimeout(promise, ms) {
   });
 }
 
-function summarizeFeatures(graph) {
+// route -> {featureId, endpointId} across the WHOLE graph (unscoped by design — the scope
+// narrowing that matters happens earlier, at which features llmAssist even calls buildFeedForward
+// for; this table only resolves a route string a surviving candidate already named).
+function buildRouteIndex(graph) {
   const idx = indexGraph(graph);
-  const routeIndex = new Map(); // route -> {featureId, endpointId}
-  const summaries = [];
+  const routeIndex = new Map();
   for (const feature of graph.nodes.filter((n) => n.type === 'FEATURE')) {
-    const eps = endpointsOfFeature(idx, feature.id);
-    if (!eps.length) continue;
-    for (const ep of eps) {
-      if (ep.data?.route) routeIndex.set(ep.data.route, { featureId: feature.id, endpointId: ep.id });
+    for (const ep of endpointsOfFeature(idx, feature.id)) {
+      if (ep.data?.route) routeIndex.set(ep.data.route, { featureId: feature.id, endpointId: ep.id, method: ep.data?.method });
     }
-    summaries.push({ name: feature.name, endpoints: eps.map((e) => `${e.data?.method || '?'} ${e.data?.route || e.name}`) });
   }
-  return { summaries, routeIndex };
+  return routeIndex;
 }
 
-function buildPrompt(summaries) {
-  const lines = summaries.map((f) => `- ${f.name}: ${f.endpoints.join(', ') || '(no mapped endpoints)'}`).join('\n');
+// Per-feature grounded prompt (Phase B design §1.2): the retrieval package's GROUNDING_PREAMBLE
+// verbatim, then the feature's own endpoints/data-stores/roles/depth facts, then its cited source
+// excerpts, ending in the strict output format the gate (grounding.js) requires a trailing
+// file:line on. Bounded by `caps` (CONTEXT_CAPS) — count/char caps, no tokenizer.
+function fmtEndpoint(ep) {
+  return `- ${ep.method || '?'} ${ep.route || ep.name}  [authn=${!!ep.authn} authz=${!!ep.authz}]`;
+}
+function fmtCitation(c) {
+  const excerpt = (c.excerpt || '').slice(0, 500);
+  return `- ${c.file}:${c.line}\n${excerpt}`;
+}
+function buildGroundedPrompt(bundle, caps) {
+  const endpoints = bundle.endpoints || [];
+  const shown = endpoints.slice(0, caps.maxEndpoints);
+  const moreEndpoints = endpoints.length - shown.length;
+  const citations = bundle.citations || [];
+
   return [
-    'You are a security reviewer. For the HTTP endpoints below, list LIKELY access-control (IDOR/',
-    'broken authorization), injection (SQL/command), or SSRF issues. Prefer one line per issue as:',
-    'FAMILY|title|METHOD|ROUTE|severity',
-    'where FAMILY is ACX (access control), QIX (injection), or SX (SSRF); severity is low/medium/high/critical;',
-    'and ROUTE is copied EXACTLY from the list below. Example:',
-    'ACX|order readable by any authenticated user|GET|/orders/:id|high',
-    'If you prefer prose, still name the exact route and the issue type clearly.',
+    bundle.preamble,
     '',
-    'Endpoints by feature:',
-    lines,
+    `Feature: ${bundle.feature?.name || bundle.feature?.id} (${bundle.feature?.id})`,
+    '',
+    'Endpoints:',
+    ...shown.map(fmtEndpoint),
+    ...(moreEndpoints > 0 ? [`  ...and ${moreEndpoints} more endpoint(s) not shown`] : []),
+    '',
+    `Data stores: ${(bundle.dataStores || []).map((d) => d.name).join(', ') || '(none)'}`,
+    `Roles: ${(bundle.roles || []).map((r) => r.name).join(', ') || '(none)'}`,
+    `Depth: reaches ${bundle.depth?.memberCount ?? 0} node(s) across ${bundle.depth?.filesTouched ?? 0} file(s)`,
+    '',
+    'Cited source — use ONLY these when naming a location:',
+    ...citations.map(fmtCitation),
+    '',
+    'List LIKELY access-control (IDOR/broken authorization), injection (SQL/command), or SSRF',
+    'issues for THIS feature only. One line per issue:',
+    'FAMILY|title|METHOD|ROUTE|severity|file:line',
+    'FAMILY is ACX, QIX, or SX; ROUTE copied EXACTLY from Endpoints; file:line copied EXACTLY',
+    'from Cited source above. If you cannot point to one of the citations above for an issue,',
+    'do not report it — never invent or estimate a file or line number.',
   ].join('\n');
 }
 
@@ -127,79 +167,99 @@ function severityFromText(s) {
   return /\bcritical\b/.test(t) ? 'critical' : /\bhigh\b/.test(t) ? 'high' : /\blow\b/.test(t) ? 'low' : 'medium';
 }
 
-// Parse model output into grounded candidates. Strict `FAMILY|title|METHOD|ROUTE|severity` lines
-// first; otherwise a lenient pass that only accepts a line naming a KNOWN route (from the graph)
-// plus a recognisable vuln keyword — so the model contributes without a rigid format and cannot
-// invent routes that don't exist.
-function parseLlmCandidates(text, routeIndex) {
-  if (!text || typeof text !== 'string') return [];
+// Parse model output into grounded candidates. Strict `FAMILY|title|METHOD|ROUTE|severity|file:line`
+// lines first; otherwise a lenient pass that only accepts a line naming a KNOWN route (from the
+// graph) plus a recognisable vuln keyword — so the model contributes without a rigid format and
+// cannot invent routes that don't exist. Either way, a shape match is not enough to survive: the
+// grounding gate (citationFromLine, over THIS feature's own fed-forward citationIdx) must also find
+// a real file:line, or the candidate is dropped here — before TRIAGE, before reproveLlmCandidate.
+function parseLlmCandidates(text, routeIndex, citationIdx) {
+  if (!text || typeof text !== 'string') return { candidates: [], citationDropped: 0 };
   const knownRoutes = [...routeIndex.keys()];
-  const push = (out, family, title, method, route, sev) => {
+  const out = [];
+  let citationDropped = 0;
+  const push = (family, title, method, route, sev, citation) => {
     const mapped = routeIndex.get(route) || {};
     out.push({
       family, cwe: FAMILY_CWE[family], title: (title || `${family} issue`).slice(0, 140),
       featureId: mapped.featureId || null, endpointId: mapped.endpointId || null,
       method: ((method || mapped.method || '') + '').toUpperCase() || null, route,
       severity: SEVERITIES.includes(sev) ? sev : 'medium',
-      evidence: { file: null, line: null }, rule: 'llm',
+      evidence: { file: citation.file, line: citation.line }, citation, rule: 'llm',
     });
   };
-  const out = [];
   for (const raw of text.split('\n')) {
     const line = raw.trim();
     if (!line) continue;
     const parts = line.split('|').map((p) => p.trim());
+    let family, title, method, route, sev;
     if (parts.length >= 4 && LLM_FAMILIES.has(parts[0])) {
-      push(out, parts[0], parts[1], parts[2], parts[3], parts[4]);
-      continue;
+      [family, title, method, route, sev] = parts;
+    } else {
+      // lenient, grounded: a known route mentioned in the line + a vuln keyword
+      const foundRoute = knownRoutes.find((r) => r && line.includes(r));
+      const foundFamily = foundRoute ? familyFromText(line) : null;
+      if (!foundRoute || !foundFamily) continue;
+      family = foundFamily; title = line; method = null; route = foundRoute; sev = severityFromText(line);
     }
-    // lenient, grounded: a known route mentioned in the line + a vuln keyword
-    const route = knownRoutes.find((r) => r && line.includes(r));
-    if (!route) continue;
-    const family = familyFromText(line);
-    if (!family) continue;
-    push(out, family, line, null, route, severityFromText(line));
+    const citation = citationFromLine(line, citationIdx);
+    if (!citation) { citationDropped++; continue; } // recognisable candidate, no grounded citation → dropped
+    push(family, title, method, route, sev, citation);
   }
-  return out;
+  return { candidates: out, citationDropped };
 }
 
-// Run the bounded LLM-assist HUNT step. Never throws; returns [] on any adapter trouble.
-async function llmAssist(graph, engine, existingCandidates, model, effort = 'medium') {
-  if (!engine || engine === 'rules') return [];
+// Run the bounded, GROUNDED LLM-assist HUNT step (Phase B §1): iterate in-scope FEATURE nodes
+// only, feed each one forward via @secforge/retrieval's buildFeedForward, and gate every returned
+// candidate on citing a file:line from THAT feature's own citation pool. Never throws; degrades to
+// zero extra candidates (and reports every feature it didn't call) on any adapter trouble.
+async function llmAssist(store, projectId, graph, engine, existingCandidates, model, effort = 'medium', scope = {}, snapshotId = null) {
+  const none = { extra: [], featuresSkipped: 0, llmCitationDropped: 0 };
+  if (!engine || engine === 'rules' || !store || !projectId) return none;
 
   let adapter;
-  try { adapter = getAdapter(engine); } catch { return []; }
+  try { adapter = getAdapter(engine); } catch { return none; }
 
   let available = false;
   try { available = await withTimeout(adapter.available(), LLM_TIMEOUT_MS); } catch { available = false; }
-  if (!available) return [];
+  if (!available) return none;
 
-  const { summaries, routeIndex } = summarizeFeatures(graph);
-  if (!summaries.length) return [];
+  const features = graph.nodes.filter((n) => n.type === 'FEATURE' && inScope(n.id, scope));
+  if (!features.length) return none;
 
+  const routeIndex = buildRouteIndex(graph);
+  const caps = CONTEXT_CAPS[effort] || CONTEXT_CAPS.medium;
   const cap = llmCap(effort);
   const seen = new Set(existingCandidates.map(dedupeKey));
   const extra = [];
-  const absorb = (text) => {
-    for (const c of parseLlmCandidates(text, routeIndex)) {
-      const key = dedupeKey(c);
-      if (seen.has(key) || extra.length >= cap) continue;
-      seen.add(key);
-      extra.push(c);
-    }
-  };
+  let featuresSkipped = 0;
+  let llmCitationDropped = 0;
+
+  const toCall = features.slice(0, MAX_LLM_FEATURES_PER_RUN);
+  featuresSkipped += features.length - toCall.length; // beyond the run-wide feature cap
 
   try {
-    const batches = summaries.length > LLM_MANY_FEATURES ? [summaries] : summaries.map((s) => [s]);
-    for (const batch of batches) {
-      if (extra.length >= cap) break;
-      const text = await withTimeout(adapter.ask(buildPrompt(batch), { model, effort }), LLM_TIMEOUT_MS);
-      absorb(text);
+    for (let i = 0; i < toCall.length; i++) {
+      if (extra.length >= cap) { featuresSkipped += toCall.length - i; break; } // candidate cap already full
+      const feature = toCall[i];
+      const bundle = await buildFeedForward(store, projectId, feature.id, { maxCitations: caps.maxCitations, snapshotId });
+      if (!bundle.ok || !bundle.endpoints?.length || !bundle.citations?.length) { featuresSkipped++; continue; } // nothing to ground an answer against
+      const citationIdx = citationIndex(bundle);
+      const prompt = buildGroundedPrompt(bundle, caps);
+      const text = await withTimeout(adapter.ask(prompt, { model, effort }), LLM_TIMEOUT_MS);
+      const { candidates, citationDropped } = parseLlmCandidates(text, routeIndex, citationIdx);
+      llmCitationDropped += citationDropped;
+      for (const c of candidates) {
+        const key = dedupeKey(c);
+        if (seen.has(key) || extra.length >= cap) continue;
+        seen.add(key);
+        extra.push(c);
+      }
     }
   } catch {
     // fall through — return whatever was gathered before the failure
   }
-  return extra;
+  return { extra, featuresSkipped, llmCitationDropped };
 }
 
 // REPORT stage: persist each surviving candidate as a finding, plus its graph shadow
@@ -215,7 +275,7 @@ async function report(store, projectId, candidates, graph, engineUsed, ctx = {})
   for (const candidate of candidates) {
     n += 1;
     const base = findingOf(candidate, n, engineUsed, ctx.model, ctx.effort);
-    const snippet = buildSnippet(ctx.sourceRoot, ctx.manifest, base.evidence);
+    const snippet = buildSnippet(store, projectId, ctx.snapshotId, base.evidence, { sourceRoot: ctx.sourceRoot, manifest: ctx.manifest });
     const finding = decorateFinding(base, { snippet });
     await store.writeFinding(projectId, finding);
     findings.push(finding);
@@ -255,21 +315,32 @@ async function report(store, projectId, candidates, graph, engineUsed, ctx = {})
  * default) skips the LLM step entirely; any other engine id is resolved via getAdapter() and
  * used only if available() — an unknown, unavailable, or erroring adapter silently falls back
  * to deterministic-only, it never fails the run.
- * @returns {Promise<{jobs:number, candidates:Array, findings:Array, coverage:object|null, engineUsed:string}>}
+ * @returns {Promise<{jobs:number, candidates:Array, findings:Array, coverage:object|null, engineUsed:string, featuresSkipped:number, llmCitationDropped:number}>}
  */
 export async function runAssessment({ store, projectId, scope = {}, engine = 'rules', model = null, effort = 'medium', onEvent } = {}) {
   const jobs = planJobs(scope);
   onEvent?.({ stage: 'framer', status: 'done', jobs: jobs.length });
 
-  const graph = (store && projectId) ? await readGraph(store, projectId) : { nodes: [], edges: [] };
+  // Pin the WHOLE scan to one snapshot id, resolved once up front, so this run's grounding (§1/§2)
+  // and its evidence snippets (§3) are always about the exact same immutable snapshot — even if a
+  // mapProject run lands a new snapshot for the same project concurrently.
+  let snapshotId = null;
+  let graph = { nodes: [], edges: [] };
+  if (store && projectId) {
+    snapshotId = await readCurrentSnapshotId(store, projectId);
+    graph = await readGraph(store, projectId, snapshotId || undefined);
+  }
   for (const job of jobs) onEvent?.({ stage: 'hunter', job: job.id, feature: job.feature, engine });
 
   const candidates = analyze(graph, { scope, patterns: scope.patterns });
-  const llmExtra = await llmAssist(graph, engine, candidates, model, effort).catch(() => []);
+  const { extra: llmExtra, featuresSkipped, llmCitationDropped } = await llmAssist(
+    store, projectId, graph, engine, candidates, model, effort, scope, snapshotId,
+  ).catch(() => ({ extra: [], featuresSkipped: 0, llmCitationDropped: 0 }));
   let n = candidates.length;
   const allCandidates = candidates.concat(
     llmExtra.map((c) => ({ ...c, id: ID.candidate(++n) })),
   ).filter((c) => inScope(c.featureId, scope)); // close the LLM-assist scope leak (deterministic side already applies this in analyze())
+  onEvent?.({ stage: 'grounding', llmCitationDropped, featuresSkipped });
 
   onEvent?.({ stage: 'triager', kept: allCandidates.length });
   const triaged = allCandidates.map((c) => ({ ...c, triaged: true }));
@@ -296,15 +367,16 @@ export async function runAssessment({ store, projectId, scope = {}, engine = 'ru
   let coverage = null;
   if (store && projectId) {
     const [sourceRoot, manifest] = await Promise.all([readSourceRoot(store, projectId), loadManifest(store, projectId)]);
-    findings = await report(store, projectId, validated, graph, engine, { sourceRoot, manifest, model, effort });
+    findings = await report(store, projectId, validated, graph, engine, { sourceRoot, manifest, model, effort, snapshotId });
     coverage = await computeCoverage(store, projectId);
   }
   onEvent?.({ stage: 'reporter', promoted: findings.length });
 
-  return { jobs: jobs.length, candidates: validated, findings, coverage, engineUsed: engine };
+  return { jobs: jobs.length, candidates: validated, findings, coverage, engineUsed: engine, featuresSkipped, llmCitationDropped };
 }
 
 export { analyze, validateCandidate, reproveLlmCandidate, inScope, computeCoverage, ID };
 export { severityFromScore, RULE_CVSS, RULE_CWE } from './rules.js';
-export { decorateFinding, buildSnippet, loadManifest, readSourceRoot } from './decorate.js';
+export { decorateFinding, buildSnippet, loadManifest, readSourceRoot, readCurrentSnapshotId } from './decorate.js';
 export { buildReport, renderMarkdown, reportJson } from './report.js';
+export { citationIndex, citationFromLine, makeSnapshotVerifier, frozenVerify } from './grounding.js';

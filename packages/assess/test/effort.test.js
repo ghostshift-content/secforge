@@ -102,9 +102,12 @@ describe('llmAssist(): effort scales the LLM-assist candidate cap (the second re
   // Every /thingN/:id is genuinely unauthenticated, so the deterministic engine independently
   // corroborates EVERY nominated route via reproveLlmCandidate() — nothing is dropped for being
   // wrong, so the promoted count directly reflects llmAssist()'s cap, not the reprove gate.
+  // Phase B grounding gate: each line's trailing |file:line must be a REAL citation from the
+  // feature being asked — the shared endpoint() fixture (above) claims {file:'a.js', line:2} for
+  // every feature, so 'a.js:2' grounds every line regardless of which feature's bundle produced it.
   function nominateAll() {
     const lines = [];
-    for (let i = 0; i < N; i++) lines.push(`ACX|unauth thing${i}|GET|/thing${i}/:id|high`);
+    for (let i = 0; i < N; i++) lines.push(`ACX|unauth thing${i}|GET|/thing${i}/:id|high|a.js:2`);
     return lines.join('\n');
   }
 

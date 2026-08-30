@@ -250,7 +250,11 @@ describe('buildSnippet() — sha match vs stale-on-edit (source is NOT frozen)',
     assert.ok(sdx.snippet.lines.some((l) => l.includes("/orders/:id")));
   });
 
-  test('editing the source after the scan → re-read shows stale:true with the NEW lines', async () => {
+  // Phase B: buildSnippet is now frozen-first (see the "frozen-first, live-fallback" describe
+  // block below for that path). Passing snapshotId:null here deliberately forces the pre-Phase-A
+  // fallback path — the same live-read + sha256-vs-manifest staleness check as before Phase B —
+  // simulating a snapshot with no frozen source copy.
+  test('fallback path (no snapshotId): editing the source after the scan → re-read shows stale:true with the NEW lines', async () => {
     const manifest = await loadManifest(store, pid);
     const root = await readSourceRoot(store, pid);
     assert.equal(root, sourceRoot);
@@ -260,17 +264,21 @@ describe('buildSnippet() — sha match vs stale-on-edit (source is NOT frozen)',
       "const Order = mongoose.model('Order', schema);",
       '',
     ].join('\n'));
-    const snip = buildSnippet(root, manifest, { file: 'api/orders.js', line: 1 });
+    const snip = buildSnippet(store, pid, null, { file: 'api/orders.js', line: 1 }, { sourceRoot: root, manifest });
     assert.equal(snip.stale, true);
+    assert.equal(snip.frozen, false);
     assert.ok(snip.lines.some((l) => l.includes('CHANGED')), 'reflects the edited source');
   });
 
-  test('no manifest entry or unreadable file → null', () => {
-    assert.equal(buildSnippet(sourceRoot, new Map(), { file: 'api/orders.js', line: 1 }), null);
+  test('fallback path (no snapshotId): no manifest entry or unreadable file → null', () => {
+    assert.equal(buildSnippet(store, pid, null, { file: 'api/orders.js', line: 1 }, { sourceRoot, manifest: new Map() }), null);
     const m = new Map([['nope.js', 'deadbeef']]);
-    assert.equal(buildSnippet(sourceRoot, m, { file: 'nope.js', line: 1 }), null);
+    assert.equal(buildSnippet(store, pid, null, { file: 'nope.js', line: 1 }, { sourceRoot, manifest: m }), null);
   });
 });
+
+// Phase B's frozen-first buildSnippet() path (the finding survives a live edit) lives in its own
+// file, test/snippet.test.js, to keep this file under the 500-line budget.
 
 // --- Phase 2: executor→verifier separation for LLM-assist candidates ------------------------
 // The invariant under test: an LLM-nominated candidate may only become a finding if the
@@ -340,6 +348,8 @@ describe('executor→verifier separation — LLM-assist candidates', () => {
     const nodes = [feature('f:orders', 'orders'), endpoint('ep', 'GET', '/orders/:id'), authNode('ac:authn', 'authentication'), authNode('ac:authz', 'authorization')];
     const edges = [edge('EXPOSES', 'f:orders', 'ep'), edge('AUTHENTICATED_BY', 'ep', 'ac:authn'), edge('AUTHORIZED_BY', 'ep', 'ac:authz')];
     const { pid } = await makeProject('uncorroborated', nodes, edges);
+    // No change needed: this line also carries no file:line, so it's now dropped even earlier, at
+    // the Phase B grounding gate — findings.length===0 holds for an additional, equally valid reason.
     register({ id: 'fake-llm-bogus', available: async () => true, ask: async () => 'ACX|bogus IDOR|GET|/orders/:id|high' });
     const result = await runAssessment({ store, projectId: pid, scope: {}, engine: 'fake-llm-bogus' });
     assert.equal(result.findings.length, 0, 'the model\'s plausible-looking claim never becomes a finding');
@@ -354,7 +364,9 @@ describe('executor→verifier separation — LLM-assist candidates', () => {
     const nodes = [feature('f:orders', 'orders'), endpoint('ep', 'GET', '/orders/:id')];
     const edges = [edge('EXPOSES', 'f:orders', 'ep')];
     const { pid } = await makeProject('corroborated', nodes, edges);
-    register({ id: 'fake-llm-good', available: async () => true, ask: async () => 'ACX|bogus IDOR|GET|/orders/:id|high' });
+    // Phase B grounding gate: the trailing |file:line must be a REAL citation from this feature's
+    // fed-forward pool — the endpoint fixture's own claim (endpoint() helper above) is {file:'a.js', line:2}.
+    register({ id: 'fake-llm-good', available: async () => true, ask: async () => 'ACX|bogus IDOR|GET|/orders/:id|high|a.js:2' });
     const result = await runAssessment({ store, projectId: pid, scope: { patterns: ['REX'] }, engine: 'fake-llm-good' });
     assert.equal(result.findings.length, 1);
     const f = result.findings[0];
@@ -372,7 +384,10 @@ describe('executor→verifier separation — LLM-assist candidates', () => {
     const edges = [edge('EXPOSES', 'f:orders', 'ep-orders'), edge('EXPOSES', 'f:accounts', 'ep-accounts')];
     const { pid } = await makeProject('scopeleak', nodes, edges);
     // The model nominates the OUT-of-scope /accounts endpoint — deterministically corroborable,
-    // but outside the requested scope (feature: f:orders only).
+    // but outside the requested scope (feature: f:orders only). No change needed to stay green:
+    // doubly-defended now — llmAssist only calls buildFeedForward for f:orders, so the model is
+    // never even shown /accounts (its citation would be dropped at the grounding gate too, since
+    // this line carries no file:line at all).
     register({ id: 'fake-llm-outofscope', available: async () => true, ask: async () => 'ACX|bogus issue|GET|/accounts|high' });
     const result = await runAssessment({ store, projectId: pid, scope: { mode: 'feature', feature: 'f:orders' }, engine: 'fake-llm-outofscope' });
     assert.equal(result.findings.some((f) => f.route === '/accounts' || f.endpoint === 'ep-accounts'), false, 'out-of-scope LLM candidate must never reach a finding');

@@ -8,6 +8,7 @@ import { readFileSync, promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { cweName } from '@secforge/patterns';
+import { readFrozenSourceLines } from '@secforge/store';
 import { RULE_CVSS, severityFromScore } from './rules.js';
 
 // "<METHOD> <route> (<file>:<line>)" from whatever facts are present.
@@ -71,13 +72,24 @@ export function decorateFinding(finding, { snippet = null } = {}) {
   };
 }
 
-// --- snippet I/O (the snapshot does NOT freeze source; re-read the live file every time) ---
+// --- snippet I/O (frozen-first: Phase B §3; live-read is now only the pre-Phase-A fallback) ---
+
+// Read the current snapshot id from graph/current.json (the same pointer file
+// writeCurrentPointerFile mirrors and routes.js's inventory handler independently re-reads).
+// null on any failure (no project yet, no snapshot taken).
+export async function readCurrentSnapshotId(store, projectId) {
+  try {
+    const p = JSON.parse(await fs.readFile(path.join(store.projectDir(projectId), 'graph', 'current.json'), 'utf8'));
+    return p.snapshotId || null;
+  } catch { return null; }
+}
 
 // Load the current snapshot's source-manifest as a Map<relPath, sha256>. Empty map on any failure.
 export async function loadManifest(store, projectId) {
+  const snapshotId = await readCurrentSnapshotId(store, projectId);
+  if (!snapshotId) return new Map();
   try {
-    const pointer = JSON.parse(await fs.readFile(path.join(store.projectDir(projectId), 'graph', 'current.json'), 'utf8'));
-    const text = await fs.readFile(path.join(store.projectDir(projectId), 'snapshots', pointer.snapshotId, 'source-manifest.jsonl'), 'utf8');
+    const text = await fs.readFile(path.join(store.projectDir(projectId), 'snapshots', snapshotId, 'source-manifest.jsonl'), 'utf8');
     const m = new Map();
     for (const line of text.split('\n')) { if (!line) continue; const r = JSON.parse(line); m.set(r.path, r.sha256); }
     return m;
@@ -90,22 +102,35 @@ export async function readSourceRoot(store, projectId) {
 }
 
 /**
- * Read the real source window around evidence.line. Compares the file's current sha256 to the one
- * recorded in the snapshot manifest: stale=false if identical, stale=true if the file changed since
- * the scan (lines still reflect the CURRENT file). null if no manifest entry or the file can't be read.
- * @returns {{file,startLine,endLine,lines:string[],sha256,stale}|null}
+ * Snippet around evidence.line, FROZEN-first (Phase B §3): reads the immutable per-snapshot source
+ * copy so a finding's evidence excerpt can never drift from what the scan actually saw, however
+ * much the live tree changes afterward. Falls back to a live re-read + sha256-vs-manifest staleness
+ * check ONLY when no frozen copy exists (a pre-Phase-A snapshot, or snapshotId is unknown) — an
+ * honest degrade, never a silent skip. `frozen` says which path served the result.
+ * @returns {{file,startLine,endLine,lines:string[],sha256?,stale,frozen}|null}
  */
-export function buildSnippet(sourceRoot, manifest, evidence, window = 2) {
+export function buildSnippet(store, projectId, snapshotId, evidence, { sourceRoot = null, manifest = null, window = 2 } = {}) {
   const rel = evidence?.file;
   const line = evidence?.line;
-  if (!sourceRoot || !rel || !line) return null;
+  if (!rel || !line) return null;
+  const startLine = Math.max(1, line - window);
+  const endLine = line + window;
+
+  if (snapshotId) {
+    const text = readFrozenSourceLines(store, projectId, snapshotId, rel, startLine, endLine);
+    if (text != null) return { file: rel, startLine, endLine, lines: text.split('\n'), stale: false, frozen: true };
+  }
+
+  // Fallback: this snapshot predates Phase A (no frozen source dir) — same live-read +
+  // sha256-vs-manifest staleness check as before Phase B. Honest degrade, not a silent skip.
+  if (!sourceRoot) return null;
   const manifestSha = manifest?.get?.(rel);
   if (!manifestSha) return null; // no manifest entry
   let buf;
   try { buf = readFileSync(path.join(sourceRoot, rel)); } catch { return null; }
   const sha256 = crypto.createHash('sha256').update(buf).digest('hex');
   const all = buf.toString('utf8').split(/\r?\n/);
-  const startLine = Math.max(1, line - window);
-  const endLine = Math.min(all.length, line + window);
-  return { file: rel, startLine, endLine, lines: all.slice(startLine - 1, endLine), sha256, stale: sha256 !== manifestSha };
+  const s = Math.max(1, line - window);
+  const e = Math.min(all.length, line + window);
+  return { file: rel, startLine: s, endLine: e, lines: all.slice(s - 1, e), sha256, stale: sha256 !== manifestSha, frozen: false };
 }
