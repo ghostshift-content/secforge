@@ -1526,7 +1526,7 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
     if(remEl) remEl.innerHTML = f.remediation ? esc(f.remediation) : '<span class="muted">No remediation text recorded for this rule.</span>';
     // P3-5: honest validation trail — a deterministic rule match, NOT an independent agent re-proof.
     var valEl = document.getElementById('findValidation');
-    if(valEl) valEl.innerHTML = 'Detected deterministically by rule <span class="mono chip">'+esc(f.rule||'—')+'</span> · '+esc(f.assessment_mode||'static_confirmed')+'. No independent agent re-proof was performed — this is a static match over the knowledge graph, not a runtime-confirmed exploit. Use <b>Validate live</b> above to probe an authorised target.';
+    if(valEl) valEl.innerHTML = 'Detected deterministically by rule <span class="mono chip">'+esc(f.rule||'—')+'</span> · '+esc(f.assessment_mode||'static_confirmed')+'. No independent agent re-proof was performed — this is a static match over the knowledge graph, not a live-confirmed exploit. Use <b>Validate live</b> above to probe an authorised target.';
     var btn = document.getElementById('findValidateBtn');
     if(btn) btn.onclick = function(){ validateFinding(f.id); };
   }
