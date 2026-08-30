@@ -6,7 +6,7 @@ import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import { SessionManager } from '@secforge/session';
 import { Store, readGraph } from '@secforge/store';
-import { runAssessment, computeCoverage, analyze, planJobs } from '@secforge/assess';
+import { runAssessment, computeCoverage, analyze, planJobs, buildReport } from '@secforge/assess';
 import { runAll } from '@secforge/orchestrator';
 import { FAMILIES, loadCanonicalCards, cweCatalog, importCustomFolder } from '@secforge/patterns';
 import { mapProject } from '@secforge/map';
@@ -154,6 +154,19 @@ export async function handleApi(req, res, url) {
       }
     }
 
+    // GET /api/projects/:id/report?format=h1|md|json → whole-assessment report, read-only.
+    // Additive, arranges ALREADY-persisted findings + coverage — see PHASE5-POLISH-DESIGN.md §2.2.
+    if (parts[0] === 'projects' && parts.length === 3 && parts[2] === 'report' && method === 'GET') {
+      const pid = parts[1];
+      const proj = (await store.listProjects()).find((p) => p.id === pid);
+      if (!proj) return json(res, 404, { error: 'no such project' }), true;
+      const { contentType, body } = await buildReport(store, pid, url.searchParams.get('format'));
+      const ext = contentType.includes('json') ? 'json' : 'md';
+      res.writeHead(200, { 'content-type': contentType, 'content-disposition': `attachment; filename="secforge-report-${pid}.${ext}"` });
+      res.end(body);
+      return true;
+    }
+
     // POST /api/projects/:id/map → run the mapping engine over the project's source
     if (parts[0] === 'projects' && parts.length === 3 && parts[2] === 'map' && method === 'POST') {
       const pid = parts[1];
@@ -273,6 +286,9 @@ export async function handleApi(req, res, url) {
           const flaggedFindings = result.findings.filter((f) => f.priorFeedback);
           for (const f of flaggedFindings) await store.writeFinding(project, f); // persist the badge so GET /findings shows it too
           const mined = await minePatterns(store, project, result.findings);
+          // Phase 5 §1c: "scheduled consolidation" without a scheduler — tidy learned-patterns.md/
+          // feedback.jsonl right after the thing that dirties them. Never fails the scan.
+          await consolidate(store, project).catch(() => {});
           return json(res, 200, { ...result, modelUsed: model, effort, requested, reason, mined, priorFeedbackFlagged }), true; // AI-5: report what actually ran
         } finally {
           activeScans.delete(project);

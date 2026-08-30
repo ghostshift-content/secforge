@@ -307,3 +307,4 @@ export async function runAssessment({ store, projectId, scope = {}, engine = 'ru
 export { analyze, validateCandidate, reproveLlmCandidate, inScope, computeCoverage, ID };
 export { severityFromScore, RULE_CVSS, RULE_CWE } from './rules.js';
 export { decorateFinding, buildSnippet, loadManifest, readSourceRoot } from './decorate.js';
+export { buildReport, renderMarkdown, reportJson } from './report.js';

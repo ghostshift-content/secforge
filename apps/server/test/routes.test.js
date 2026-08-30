@@ -34,9 +34,9 @@ function mockReq(method, body) {
 }
 function mockRes() {
   return {
-    code: null, body: null,
-    writeHead(c) { this.code = c; },
-    end(b) { this.body = b ? JSON.parse(b) : null; },
+    code: null, body: null, headers: null, text: null,
+    writeHead(c, h) { this.code = c; this.headers = h || {}; },
+    end(b) { this.text = b; try { this.body = b ? JSON.parse(b) : null; } catch { this.body = null; } },
   };
 }
 
@@ -262,6 +262,109 @@ describe('Phase 3 self-learning: feedback, mining, consolidation', () => {
       assert.ok(res.body.learnedPatterns.after < res.body.learnedPatterns.before, 'the two identical manual lines collapsed to one');
       assert.equal(typeof res.body.feedback.before, 'number');
       assert.equal(typeof res.body.feedback.after, 'number');
+    } finally {
+      await handleApi(mockReq('DELETE', {}), mockRes(), new URL('http://x/api/projects/' + pid));
+      await fsp.rm(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
+// docs/PHASE5-POLISH-DESIGN.md §2.2 — GET /api/projects/:id/report?format=h1|md|json
+describe('GET /api/projects/:id/report', () => {
+  async function openScannedProject(tag) {
+    const tmp = path.join(os.tmpdir(), 'sf-p5-report-' + tag + '-' + crypto.randomBytes(4).toString('hex'));
+    await fsp.mkdir(path.join(tmp, 'api'), { recursive: true });
+    await fsp.writeFile(path.join(tmp, 'api', 'orders.js'), [
+      "router.get('/orders/:id', (req, res) => res.json({}));",
+      "const Order = mongoose.model('Order', schema);",
+      '',
+    ].join('\n'));
+
+    const openRes = mockRes();
+    await handleApi(mockReq('POST', { sourceRoot: tmp }), openRes, new URL('http://x/api/projects'));
+    assert.equal(openRes.code, 201, JSON.stringify(openRes.body));
+    const pid = openRes.body.project.id;
+    const sid = openRes.body.session.sessionId;
+
+    await handleApi(mockReq('POST', {}), mockRes(), new URL('http://x/api/projects/' + pid + '/map'));
+    const scanRes = mockRes();
+    await handleApi(mockReq('POST', { scope: { mode: 'all' }, engine: 'rules' }), scanRes,
+      new URL('http://x/api/sessions/' + sid + '/scan?project=' + pid));
+    assert.equal(scanRes.code, 200, JSON.stringify(scanRes.body));
+    return { tmp, pid, findings: scanRes.body.findings };
+  }
+
+  test('format=h1 → 200, text/markdown, content-disposition attachment with the h1 filename, all real findings present', async () => {
+    const { tmp, pid, findings } = await openScannedProject('h1');
+    try {
+      const res = mockRes();
+      await handleApi(mockReq('GET', {}), res, new URL('http://x/api/projects/' + pid + '/report?format=h1'));
+      assert.equal(res.code, 200);
+      assert.match(res.headers['content-type'], /^text\/markdown/);
+      assert.equal(res.headers['content-disposition'], `attachment; filename="secforge-report-${pid}.md"`);
+      for (const f of findings) assert.ok(res.text.includes(f.id));
+      assert.ok(res.text.includes(`Findings (${findings.length})`));
+    } finally {
+      await handleApi(mockReq('DELETE', {}), mockRes(), new URL('http://x/api/projects/' + pid));
+      await fsp.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('format=json → 200, application/json, body parses and its counts equal findings.length/coverage.percent', async () => {
+    const { tmp, pid, findings } = await openScannedProject('json');
+    try {
+      const res = mockRes();
+      await handleApi(mockReq('GET', {}), res, new URL('http://x/api/projects/' + pid + '/report?format=json'));
+      assert.equal(res.code, 200);
+      assert.match(res.headers['content-type'], /^application\/json/);
+      assert.equal(res.headers['content-disposition'], `attachment; filename="secforge-report-${pid}.json"`);
+      assert.equal(res.body.summary.counts.total, findings.length);
+      assert.equal(res.body.findings.length, findings.length);
+
+      const covRes = mockRes();
+      await handleApi(mockReq('GET', {}), covRes, new URL('http://x/api/projects/' + pid + '/coverage'));
+      assert.equal(res.body.summary.coverage.percent, covRes.body.percent);
+    } finally {
+      await handleApi(mockReq('DELETE', {}), mockRes(), new URL('http://x/api/projects/' + pid));
+      await fsp.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('unknown/missing format coerces to md, not an error', async () => {
+    const { tmp, pid } = await openScannedProject('bogus');
+    try {
+      const res = mockRes();
+      await handleApi(mockReq('GET', {}), res, new URL('http://x/api/projects/' + pid + '/report?format=bogus'));
+      assert.equal(res.code, 200);
+      assert.match(res.headers['content-type'], /^text\/markdown/);
+
+      const noFormatRes = mockRes();
+      await handleApi(mockReq('GET', {}), noFormatRes, new URL('http://x/api/projects/' + pid + '/report'));
+      assert.equal(noFormatRes.code, 200);
+      assert.match(noFormatRes.headers['content-type'], /^text\/markdown/);
+    } finally {
+      await handleApi(mockReq('DELETE', {}), mockRes(), new URL('http://x/api/projects/' + pid));
+      await fsp.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('unknown project id → 404', async () => {
+    const res = mockRes();
+    await handleApi(mockReq('GET', {}), res, new URL('http://x/api/projects/no-such-project/report?format=md'));
+    assert.equal(res.code, 404);
+  });
+
+  test('an unscanned project → 200, a valid empty report, never a 500', async () => {
+    const tmp = path.join(os.tmpdir(), 'sf-p5-report-unscanned-' + crypto.randomBytes(4).toString('hex'));
+    await fsp.mkdir(tmp, { recursive: true });
+    const openRes = mockRes();
+    await handleApi(mockReq('POST', { sourceRoot: tmp }), openRes, new URL('http://x/api/projects'));
+    const pid = openRes.body.project.id;
+    try {
+      const res = mockRes();
+      await handleApi(mockReq('GET', {}), res, new URL('http://x/api/projects/' + pid + '/report?format=md'));
+      assert.equal(res.code, 200);
+      assert.ok(res.text.includes('Findings (0)'));
     } finally {
       await handleApi(mockReq('DELETE', {}), mockRes(), new URL('http://x/api/projects/' + pid));
       await fsp.rm(tmp, { recursive: true, force: true });

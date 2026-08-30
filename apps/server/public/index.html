@@ -617,7 +617,7 @@
       </div>
       <div style="flex-grow:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;">
         <div style="padding:18px 26px 15px;border-bottom:1px solid var(--border);">
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span id="findHeaderSev" class="badge" style="padding:3px 9px;">—</span><div id="findHeaderTitle" style="font-size:20px;font-weight:700;letter-spacing:-.02em;">No finding selected</div><div style="flex-grow:1"></div><button id="findRejectBtn" class="btn" onclick="submitFindingFeedback('reject')">Mark false positive</button><button id="findAcceptBtn" class="btn" onclick="submitFindingFeedback('accept')">Confirm</button><button class="btn" onclick="exportFinding()">Export H1</button><button id="findValidateBtn" class="btn-primary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>Validate live</button></div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span id="findHeaderSev" class="badge" style="padding:3px 9px;">—</span><div id="findHeaderTitle" style="font-size:20px;font-weight:700;letter-spacing:-.02em;">No finding selected</div><div style="flex-grow:1"></div><button id="findRejectBtn" class="btn" onclick="submitFindingFeedback('reject')">Mark false positive</button><button id="findAcceptBtn" class="btn" onclick="submitFindingFeedback('accept')">Confirm</button><button class="btn" onclick="exportFinding()">Export H1</button><a id="exportReportH1" class="btn" download>Export report (H1)</a><a id="exportReportMd" class="btn" download>Export report (MD)</a><a id="exportReportJson" class="btn" download>Export report (JSON)</a><button id="findValidateBtn" class="btn-primary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>Validate live</button></div>
           <div id="findHeaderChips" style="display:flex;gap:7px;margin-top:11px;flex-wrap:wrap;"></div>
           <div id="findValidateNote" style="margin-top:10px;font-size:12px;"></div>
         </div>
@@ -1030,6 +1030,18 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
     if(t){ t.textContent = 'live: '+project.name; t.style.display = 'inline'; }
     var sl = document.getElementById('assessSessionLine');
     if(sl) sl.textContent = project.name+' @ '+String(project.id).slice(2,8)+(state.session?' · '+String(state.session.sessionId).slice(0,8):'');
+    wireReportExportLinks(project);
+  }
+
+  // Phase 5: whole-assessment report links. Native <a download> + the route's
+  // content-disposition:attachment header does the whole job — no fetch/Blob needed, the
+  // report is server-rendered from real per-project data at request time.
+  function wireReportExportLinks(project){
+    if(!project) return;
+    var base = '/api/projects/'+encodeURIComponent(project.id)+'/report?format=';
+    var h1 = document.getElementById('exportReportH1'); if(h1) h1.href = base+'h1';
+    var md = document.getElementById('exportReportMd'); if(md) md.href = base+'md';
+    var js = document.getElementById('exportReportJson'); if(js) js.href = base+'json';
   }
 
   function openProject(sourceRoot){
