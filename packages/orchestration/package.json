@@ -1,0 +1,17 @@
+{
+  "name": "@secforge/orchestration",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "exports": "./src/index.js",
+  "dependencies": {
+    "@secforge/adapters": "0.0.0",
+    "@secforge/assess": "0.0.0",
+    "@secforge/map": "0.0.0",
+    "@secforge/orchestrator": "0.0.0",
+    "@secforge/retrieval": "0.0.0",
+    "@secforge/session": "0.0.0",
+    "@secforge/store": "0.0.0"
+  }
+}

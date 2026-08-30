@@ -300,6 +300,23 @@
           <button class="msub" data-msub="cons" onclick="mapSub('cons')">Consolidated</button>
         </div>
 
+        <!-- Phase D: live map-stage progress, mirrors #assess-pipeline. Stays visible across every
+             mapSub() subtab since a map run isn't scoped to one of them. -->
+        <div style="padding:14px 24px 0;">
+          <div class="kicker" style="margin:0 0 9px;">Pipeline · snapshot → inventory → consolidate → semantic → persist</div>
+          <div id="map-pipeline" style="display:flex;align-items:stretch;gap:9px;flex-wrap:wrap;">
+            <div class="stage"><h4>Snapshot</h4><p>Freezes source into a content-addressed snapshot.</p><div class="st muted">—</div></div>
+            <div style="display:flex;align-items:center;color:var(--ink3)">→</div>
+            <div class="stage"><h4>Inventory</h4><p>Heuristic extraction of endpoints, models, jobs.</p><div class="st muted">—</div></div>
+            <div style="display:flex;align-items:center;color:var(--ink3)">→</div>
+            <div class="stage"><h4>Consolidate</h4><p>Splits lumped clusters into named sub-features.</p><div class="st muted">—</div></div>
+            <div style="display:flex;align-items:center;color:var(--ink3)">→</div>
+            <div class="stage"><h4>Semantic</h4><p>AI-assisted feature naming + ontology.</p><div class="st muted">—</div></div>
+            <div style="display:flex;align-items:center;color:var(--ink3)">→</div>
+            <div class="stage"><h4>Persist</h4><p>Writes the graph + reconciliation ledger.</p><div class="st muted">—</div></div>
+          </div>
+        </div>
+
         <div class="scroll" style="flex-grow:1;min-width:0;">
 
           <!-- GRAPH -->
@@ -1053,6 +1070,7 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
       window.__sfProject=true; document.body.classList.remove('nav-locked'); // S1-11: unlock the chrome now a real project is open
       if(typeof show==='function'){ show('map'); if(typeof mapSub==='function') mapSub('graph'); }
       setLiveIndicator(d.project);
+      if(typeof startMapStream==='function' && d.session) startMapStream(d.session.sessionId, d.project.id);
       return post('/api/projects/'+d.project.id+'/map').catch(function(){ return null; });
     }).then(function(mapRes){
       if(mapRes) applyMapResult(mapRes);
@@ -1451,6 +1469,37 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
     if(stages[4]) stages[4].textContent = finds.length+' findings';
     var hdr = document.getElementById('assessRunHeader');
     if(hdr) hdr.innerHTML = '<span class="sd" style="background:var(--ok);width:9px;height:9px;"></span><div><div style="font-weight:600;font-size:13.5px;">Run complete</div><div class="mono muted" style="font-size:11px;">'+cands.length+' candidate'+(cands.length===1?'':'s')+' · '+finds.length+' finding'+(finds.length===1?'':'s')+'</div></div>';
+  }
+
+  // Phase D: live map-stage progress via the same SSE route, keyed on the map's own stage names
+  // (snapshot/inventory/consolidate/semantic/persist/done/error) instead of assess's. POST /map is
+  // still the source of truth that persists the graph; this stream only animates the boxes.
+  var _mapES = null;
+  function startMapStream(sessionId, projectId){
+    if(!window.EventSource || !sessionId || !projectId) return;
+    try{ if(_mapES) _mapES.close(); }catch(e){}
+    var host = document.getElementById('map-pipeline'); var stages = host ? host.querySelectorAll('.stage .st') : [];
+    stages.forEach(function(s){ s.textContent = '—'; });
+    try{
+      var es = new EventSource('/api/sessions/'+encodeURIComponent(sessionId)+'/stream?project='+encodeURIComponent(projectId));
+      _mapES = es;
+      es.onmessage = function(ev){
+        var d; try{ d = JSON.parse(ev.data); }catch(e){ return; }
+        if(d.stage==='snapshot' && stages[0]) stages[0].textContent = (d.pct>=25 ? 'done' : 'snapshotting…');
+        else if(d.stage==='inventory' && stages[1]) stages[1].textContent = (d.pct>=50 ? 'done' : 'extracting…');
+        else if(d.stage==='consolidate' && stages[2]) stages[2].textContent = 'done';
+        else if(d.stage==='semantic' && stages[3]) stages[3].textContent = 'done';
+        else if(d.stage==='persist' && stages[4]) stages[4].textContent = (d.pct>=100 ? 'done' : 'persisting…');
+        else if(d.stage==='done'){
+          if(stages[4]) stages[4].textContent = ((d.result && d.result.features!=null) ? d.result.features : '')+' features';
+          try{ es.close(); }catch(e){} _mapES=null;
+        } else if(d.stage==='error'){
+          if(stages[4]) stages[4].textContent = 'error';
+          try{ es.close(); }catch(e){} _mapES=null;
+        }
+      };
+      es.onerror = function(){ try{ es.close(); }catch(e){} _mapES=null; };
+    }catch(e){}
   }
 
   // Live pipeline progress via SSE (deterministic fan-out). The POST /scan below is the source

@@ -6,6 +6,7 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { SCOPE_KINDS, RUN_METHODS } from '@secforge/schemas';
+import { emit as busEmit } from '@secforge/orchestration';
 import { handleApi, scopeInputError } from '../src/routes.js';
 
 // --- pure validation logic (S3-6: reject explicit invalid scope, don't silently coerce) ---
@@ -38,6 +39,18 @@ function mockRes() {
     writeHead(c, h) { this.code = c; this.headers = h || {}; },
     end(b) { this.text = b; try { this.body = b ? JSON.parse(b) : null; } catch { this.body = null; } },
   };
+}
+// SSE mock — captures every res.write() chunk instead of a single end() body.
+function mockSseRes() {
+  return {
+    code: null, headers: null, ended: false, chunks: [],
+    writeHead(c, h) { this.code = c; this.headers = h || {}; },
+    write(chunk) { this.chunks.push(chunk); },
+    end() { this.ended = true; },
+  };
+}
+function sseEvents(res) {
+  return res.chunks.map((c) => JSON.parse(String(c).replace(/^data: /, '').trim()));
 }
 
 describe('POST /api/sessions/:id/scan scope validation', () => {
@@ -365,6 +378,138 @@ describe('GET /api/projects/:id/report', () => {
       await handleApi(mockReq('GET', {}), res, new URL('http://x/api/projects/' + pid + '/report?format=md'));
       assert.equal(res.code, 200);
       assert.ok(res.text.includes('Findings (0)'));
+    } finally {
+      await handleApi(mockReq('DELETE', {}), mockRes(), new URL('http://x/api/projects/' + pid));
+      await fsp.rm(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
+// Phase D — map/scan routes delegate to @secforge/orchestration; GET .../stream forwards its
+// live bus events instead of replaying a canned animation.
+describe('Phase D: orchestration wiring', () => {
+  async function openProject(tag) {
+    const tmp = path.join(os.tmpdir(), 'sf-pd-' + tag + '-' + crypto.randomBytes(4).toString('hex'));
+    await fsp.mkdir(path.join(tmp, 'api'), { recursive: true });
+    await fsp.writeFile(path.join(tmp, 'api', 'orders.js'), [
+      "router.get('/orders/:id', (req, res) => res.json({}));",
+      "const Order = mongoose.model('Order', schema);",
+      '',
+    ].join('\n'));
+    const openRes = mockRes();
+    await handleApi(mockReq('POST', { sourceRoot: tmp }), openRes, new URL('http://x/api/projects'));
+    assert.equal(openRes.code, 201, JSON.stringify(openRes.body));
+    return { tmp, pid: openRes.body.project.id, sid: openRes.body.session.sessionId };
+  }
+
+  test('POST /map delegates to runMapOrchestration: response is mapProject\'s own shape (no leftover "ok"), and session.phase reaches done', async () => {
+    const { tmp, pid, sid } = await openProject('map');
+    try {
+      const mapRes = mockRes();
+      await handleApi(mockReq('POST', {}), mapRes, new URL('http://x/api/projects/' + pid + '/map'));
+      assert.equal(mapRes.code, 200, JSON.stringify(mapRes.body));
+      assert.equal(mapRes.body.status, 'MAPPED');
+      assert.ok(!('ok' in mapRes.body), 'the orchestrator\'s own {ok,...} wrapper must not leak into the HTTP response');
+
+      const sessRes = mockRes();
+      await handleApi(mockReq('GET', {}), sessRes, new URL('http://x/api/sessions/' + sid + '?project=' + pid));
+      assert.equal(sessRes.code, 200);
+      assert.equal(sessRes.body.phase?.name, 'map');
+      assert.equal(sessRes.body.phase?.stage, 'done');
+      assert.equal(sessRes.body.phase?.result?.features, mapRes.body.features.length);
+    } finally {
+      await handleApi(mockReq('DELETE', {}), mockRes(), new URL('http://x/api/projects/' + pid));
+      await fsp.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('POST /scan (feature-scoped) delegates to runScanOrchestration: findings/mining/consolidate still run, and session.phase reaches done for that feature', async () => {
+    const { tmp, pid, sid } = await openProject('scan');
+    try {
+      await handleApi(mockReq('POST', {}), mockRes(), new URL('http://x/api/projects/' + pid + '/map'));
+      const graphRes = mockRes();
+      await handleApi(mockReq('GET', {}), graphRes, new URL('http://x/api/projects/' + pid + '/graph'));
+      const featureId = graphRes.body.nodes.find((n) => n.type === 'FEATURE').id;
+
+      const scanRes = mockRes();
+      await handleApi(mockReq('POST', { scope: { mode: 'feature', feature: featureId }, engine: 'rules' }), scanRes,
+        new URL('http://x/api/sessions/' + sid + '/scan?project=' + pid));
+      assert.equal(scanRes.code, 200, JSON.stringify(scanRes.body));
+      assert.ok(scanRes.body.findings.length > 0, 'the fixture produces a real finding');
+      assert.ok(Array.isArray(scanRes.body.mined), 'mining still ran (post-processing intact)');
+      assert.equal(typeof scanRes.body.priorFeedbackFlagged, 'number', 'annotatePriorFeedback still ran');
+
+      const sessRes = mockRes();
+      await handleApi(mockReq('GET', {}), sessRes, new URL('http://x/api/sessions/' + sid + '?project=' + pid));
+      assert.equal(sessRes.body.phase?.name, 'scan');
+      assert.equal(sessRes.body.phase?.stage, 'done');
+      assert.equal(sessRes.body.phase?.feature, featureId);
+      assert.equal(sessRes.body.phase?.result?.findings, scanRes.body.findings.length);
+    } finally {
+      await handleApi(mockReq('DELETE', {}), mockRes(), new URL('http://x/api/projects/' + pid));
+      await fsp.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('a paused session refuses a new POST /map or POST /scan with 409, before any lock/orchestration run', async () => {
+    const { tmp, pid, sid } = await openProject('paused');
+    try {
+      await handleApi(mockReq('POST', {}), mockRes(), new URL('http://x/api/projects/' + pid + '/map'));
+      // A session starts 'created'; only a scan drives it to 'running' (pause requires running->paused).
+      const firstScan = mockRes();
+      await handleApi(mockReq('POST', { scope: { mode: 'all' } }), firstScan,
+        new URL('http://x/api/sessions/' + sid + '/scan?project=' + pid));
+      assert.equal(firstScan.code, 200, JSON.stringify(firstScan.body));
+      const pauseRes = mockRes();
+      await handleApi(mockReq('POST', {}), pauseRes, new URL('http://x/api/sessions/' + sid + '/pause?project=' + pid));
+      assert.equal(pauseRes.code, 200, JSON.stringify(pauseRes.body));
+
+      const mapRes = mockRes();
+      await handleApi(mockReq('POST', {}), mapRes, new URL('http://x/api/projects/' + pid + '/map'));
+      assert.equal(mapRes.code, 409);
+      assert.match(mapRes.body.error, /paused/);
+
+      const scanRes = mockRes();
+      await handleApi(mockReq('POST', { scope: { mode: 'all' } }), scanRes,
+        new URL('http://x/api/sessions/' + sid + '/scan?project=' + pid));
+      assert.equal(scanRes.code, 409);
+      assert.match(scanRes.body.error, /paused/);
+    } finally {
+      await handleApi(mockReq('DELETE', {}), mockRes(), new URL('http://x/api/projects/' + pid));
+      await fsp.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('GET /sessions/:id/stream sends the current session.phase first, then forwards live bus events, and unsubscribes once done', async () => {
+    const { tmp, pid, sid } = await openProject('stream');
+    try {
+      await handleApi(mockReq('POST', {}), mockRes(), new URL('http://x/api/projects/' + pid + '/map'));
+      const sessRes = mockRes();
+      await handleApi(mockReq('GET', {}), sessRes, new URL('http://x/api/sessions/' + sid + '?project=' + pid));
+      const priorPhase = sessRes.body.phase;
+
+      const stream = mockSseRes();
+      const req = mockReq('GET', {});
+      const handled = await handleApi(req, stream, new URL('http://x/api/sessions/' + sid + '/stream?project=' + pid));
+      assert.equal(handled, true);
+      assert.equal(stream.code, 200);
+
+      let events = sseEvents(stream);
+      assert.equal(events.length, 1, 'the current session.phase is sent immediately, once');
+      assert.deepEqual(events[0], priorPhase);
+
+      busEmit(sid, { stage: 'hunter', jobs: 1 });
+      events = sseEvents(stream);
+      assert.equal(events.length, 2, 'a live bus event is forwarded to the stream');
+      assert.deepEqual(events[1], { stage: 'hunter', jobs: 1 });
+
+      busEmit(sid, { stage: 'done', result: { findings: 0 } });
+      events = sseEvents(stream);
+      assert.equal(events.length, 3);
+      assert.equal(stream.ended, true, 'a done/error event ends the response and unsubscribes');
+
+      busEmit(sid, { stage: 'ignored-after-unsubscribe' });
+      assert.equal(sseEvents(stream).length, 3, 'nothing is forwarded after the stream ended');
     } finally {
       await handleApi(mockReq('DELETE', {}), mockRes(), new URL('http://x/api/projects/' + pid));
       await fsp.rm(tmp, { recursive: true, force: true });

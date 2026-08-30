@@ -12,7 +12,7 @@ let tmpRoot;
 before(async () => {
   tmpRoot = path.join(os.tmpdir(), 'sf-test-' + crypto.randomBytes(4).toString('hex'));
   // openProject now validates the path is a real directory; create the ones these tests open.
-  for (let i = 1; i <= 6; i++) await fs.mkdir(path.join(tmpRoot, 'proj-' + i), { recursive: true });
+  for (let i = 1; i <= 8; i++) await fs.mkdir(path.join(tmpRoot, 'proj-' + i), { recursive: true });
 });
 
 after(async () => {
@@ -114,5 +114,37 @@ describe('SessionManager.configureRun', () => {
     const sm2 = new SessionManager(new Store(tmpRoot));
     const s = await sm2.status(project.id, session.sessionId);
     assert.deepEqual(s.scope, scope);
+  });
+});
+
+describe('SessionManager.recordPhase', () => {
+  test('persists a phase patch, and GET/status returns it', async () => {
+    const sourceRoot = path.join(tmpRoot, 'proj-7');
+    const sm = new SessionManager(new Store(tmpRoot));
+    const { project, session } = await sm.open({ sourceRoot, name: 'Proj7' });
+
+    await sm.recordPhase(project.id, session.sessionId, { name: 'map', stage: 'snapshot', pct: 0 });
+
+    const sm2 = new SessionManager(new Store(tmpRoot));
+    const s = await sm2.status(project.id, session.sessionId);
+    assert.equal(s.phase.name, 'map');
+    assert.equal(s.phase.stage, 'snapshot');
+    assert.equal(s.phase.pct, 0);
+    assert.ok(s.phase.updatedAt);
+  });
+
+  test('a second recordPhase shallow-merges without clobbering unrelated keys', async () => {
+    const sourceRoot = path.join(tmpRoot, 'proj-8');
+    const sm = new SessionManager(new Store(tmpRoot));
+    const { project, session } = await sm.open({ sourceRoot, name: 'Proj8' });
+
+    await sm.recordPhase(project.id, session.sessionId, { name: 'scan', stage: 'context', pct: 5, feature: 'feature:login' });
+    await sm.recordPhase(project.id, session.sessionId, { stage: 'hunter', pct: 40 });
+
+    const s = await sm.status(project.id, session.sessionId);
+    assert.equal(s.phase.name, 'scan');
+    assert.equal(s.phase.feature, 'feature:login');
+    assert.equal(s.phase.stage, 'hunter');
+    assert.equal(s.phase.pct, 40);
   });
 });

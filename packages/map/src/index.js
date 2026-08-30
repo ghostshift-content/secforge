@@ -396,9 +396,12 @@ function bridgeLegacySurfaces(inventories, legacyRows) {
  * whenever a prior snapshot exists and every eligibility guard passes — re-mapping only the
  * features a code change touched and reusing prior AI work + frozen source for the rest, else
  * degrading transparently to a full map. `false` always takes today's full-map path, verbatim.
+ * `onClusters` (optional): `async (clusters, {engine,model,effort}) => clusters`, run right after
+ * clustering, before AI-semantic/buildGraph, so an orchestrator can consolidate them (must return
+ * the same shape). Omitted, behavior is unchanged.
  * @returns {Promise<{status:string, snapshotId:string, features:Array, coverage:object, nodeCount:number, edgeCount:number, incremental:boolean, remappedFeatures:string[], reusedFeatures:string[], changedFiles:string[]}>}
  */
-export async function mapProject({ sourceRoot, store, projectId, onProgress, engine = 'rules', model = null, effort, incremental = 'auto' } = {}) {
+export async function mapProject({ sourceRoot, store, projectId, onProgress, onClusters, engine = 'rules', model = null, effort, incremental = 'auto' } = {}) {
   if (!sourceRoot || !store || !projectId) throw new Error('mapProject requires sourceRoot, store, projectId');
   // Refuse to "map" a path that isn't a real directory — otherwise walk() swallows the readdir
   // error and returns status:MAPPED with 0 nodes, and the UI fabricates a graph for a repo that
@@ -467,7 +470,11 @@ export async function mapProject({ sourceRoot, store, projectId, onProgress, eng
   onProgress?.({ phase: 'inventory', pct: 50 });
 
   onProgress?.({ phase: 'features', pct: 55 });
-  const clusters = deterministicSemanticPlan(inventories);
+  const rawClusters = deterministicSemanticPlan(inventories);
+
+  // Phase D seam: orchestrator hook to consolidate clusters before AI-semantic/buildGraph see them.
+  onProgress?.({ phase: 'consolidate', pct: 60 });
+  const clusters = onClusters ? await onClusters(rawClusters, { engine, model, effort }) : rawClusters;
 
   // remapGraph() (incremental.js) owns the rest of Phase C: guard #2, incremental AI-plan reuse
   // vs a full fresh derivation, the one buildGraph() call, and the lossless self-check + fallback.

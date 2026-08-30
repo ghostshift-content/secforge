@@ -7,6 +7,8 @@
 // planClusters() takes the adapter as a parameter (dependency-injected) — it never constructs one — so callers
 // (and tests) can pass any object shaped like { ask(prompt, opts) => Promise<string> }.
 
+import { runAll } from '@secforge/orchestrator';
+
 const jsonBytes = (value) => Buffer.byteLength(JSON.stringify(value));
 const uniq = (values) => [...new Set((values || []).filter((x) => x != null && String(x).trim() !== ''))];
 const itemKey = (value) => JSON.stringify(value);
@@ -240,7 +242,9 @@ async function runSingleShot(summarizedClusters, adapter, { model, effort } = {}
 // @secforge/adapters makeAdapter(...).ask, or a fake in tests). Never constructed here.
 // Fails closed: returns null when there is nothing to plan, the adapter is missing/malformed, or every ask()
 // response (single-shot or every chunk) fails to parse. Never throws.
-export async function planClusters(clusters, adapter, { model, effort, maxBytes = 180_000 } = {}) {
+// opts.concurrency: max chunk LLM calls in flight at once when the chunked path runs (default 4).
+// opts.onProgress({chunksDone, chunksTotal}): called after each chunk resolves (chunked path only).
+export async function planClusters(clusters, adapter, { model, effort, maxBytes = 180_000, concurrency = 4, onProgress } = {}) {
   if (!adapter || typeof adapter.ask !== 'function') return null;
   const summarized = summarizeClusters(clusters);
   if (!summarized.length) return null;
@@ -250,8 +254,14 @@ export async function planClusters(clusters, adapter, { model, effort, maxBytes 
   }
 
   const bins = chunkClusters(summarized, { maxBytes });
-  const results = await Promise.all(bins.map((bin) => runSingleShot(bin.clusters, adapter, { model, effort })));
-  const parsed = results.filter(Boolean);
+  let chunksDone = 0;
+  const jobs = await runAll(bins, async (bin) => {
+    const result = await runSingleShot(bin.clusters, adapter, { model, effort });
+    chunksDone += 1;
+    onProgress?.({ chunksDone, chunksTotal: bins.length });
+    return result;
+  }, { concurrency });
+  const parsed = jobs.map((j) => j.result).filter(Boolean);
   if (!parsed.length) return null;
   const failedCount = bins.length - parsed.length;
   const gaps = failedCount > 0 ? [`${failedCount} semantic chunk(s) failed to parse and were dropped`] : [];

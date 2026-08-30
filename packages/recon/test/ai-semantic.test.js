@@ -145,6 +145,40 @@ describe('planClusters', () => {
     assert.equal(raw.features[0].slug, 'expenses');
     assert.ok(raw.gaps.length >= 1);
   });
+
+  test('(f) chunked path runs bounded-concurrency with progress, merges every chunk, drops garbage', async () => {
+    const clusters = [
+      cluster({ slug: 'expenses', domain: 'core', file: 'app/controllers/expenses_controller.rb', line: 2, entry: 'def show' }),
+      cluster({ slug: 'invoices', domain: 'billing', file: 'app/controllers/expenses_controller.rb', line: 3, entry: 'authorize @expense' }),
+      cluster({ slug: 'audits', domain: 'ops', file: 'app/controllers/expenses_controller.rb', line: 2, entry: 'def show' }),
+      cluster({ slug: 'broken', domain: 'garbage', file: 'app/controllers/expenses_controller.rb', line: 2, entry: 'def show' }),
+    ];
+    let inFlight = 0, maxInFlight = 0;
+    const progressEvents = [];
+    const adapter = {
+      async ask(prompt) {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        inFlight -= 1;
+        if (prompt.includes('"garbage"')) return 'not json at all, sorry';
+        return echoAdapter(() => ({})).ask(prompt);
+      },
+    };
+    const raw = await planClusters(clusters, adapter, {
+      maxBytes: 10,
+      concurrency: 2,
+      onProgress: (evt) => progressEvents.push(evt),
+    });
+    assert.ok(raw);
+    assert.ok(maxInFlight <= 2, `expected bounded concurrency <= 2, saw ${maxInFlight}`);
+    const slugs = raw.features.map((f) => f.slug).sort();
+    assert.deepEqual(slugs, ['audits', 'expenses', 'invoices']);
+    assert.ok(raw.gaps.some((g) => g.includes('failed to parse')));
+    assert.equal(progressEvents.length, 4);
+    assert.equal(progressEvents.at(-1).chunksTotal, 4);
+    assert.deepEqual(progressEvents.map((e) => e.chunksDone).sort((a, b) => a - b), [1, 2, 3, 4]);
+  });
 });
 
 describe('mergeReconPlans', () => {

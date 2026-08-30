@@ -316,6 +316,63 @@ describe('Phase A: source freezing + reconciliation ledger (real mapProject run)
     assert.ok(graph.edges.some((e) => e.type === 'AUTHORIZED_BY' && e.src === show.id));
   });
 
+  // Phase D §2 — the onClusters hook: an orchestrator may consolidate the deterministic clusters
+  // before AI-semantic/buildGraph ever see them. Default (no onClusters) MUST be exact current
+  // behavior — proven here by comparing an omitted call against an explicit identity function.
+  describe('onClusters hook', () => {
+    async function seedProject(store, name) {
+      const src = path.join(tmpRoot, name);
+      await fs.mkdir(path.join(src, 'api'), { recursive: true });
+      await fs.writeFile(path.join(src, 'api', 'orders.js'),
+        "router.get('/orders/:id', (req, res) => res.json({}));\n");
+      const project = await store.openProject({ sourceRoot: src, name });
+      return { src, projectId: project.id };
+    }
+
+    test('splitting a cluster in onClusters produces FEATURE nodes reflecting the split', async () => {
+      const { src, projectId } = await seedProject(store, 'onclusters-split');
+      let seen = null;
+      const onClusters = async (clusters) => {
+        seen = clusters;
+        const [first, ...rest] = clusters;
+        const mid = Math.ceil(first.rows.length / 2) || 1;
+        return [
+          { ...first, name: 'Alpha', slug: 'alpha', rows: first.rows.slice(0, mid) },
+          { ...first, name: 'Beta', slug: 'beta', rows: first.rows.slice(mid) },
+          ...rest,
+        ];
+      };
+      const result = await mapProject({ sourceRoot: src, store, projectId, onClusters });
+      assert.equal(result.status, 'MAPPED');
+      assert.ok(seen, 'onClusters was invoked with the raw deterministic clusters');
+      assert.equal(result.features.some((f) => f.name === 'Alpha'), true);
+      assert.equal(result.features.some((f) => f.name === 'Beta'), true);
+      assert.equal(result.features.some((f) => f.name === seen[0].name && f.name !== 'Alpha' && f.name !== 'Beta'), false);
+
+      const graph = await readGraph(store, projectId);
+      const featureNames = graph.nodes.filter((n) => n.type === 'FEATURE').map((n) => n.name);
+      assert.ok(featureNames.includes('Alpha'));
+      assert.ok(featureNames.includes('Beta'));
+    });
+
+    test('omitting onClusters is byte-for-byte identical to passing identity', async () => {
+      const withoutIt = await seedProject(store, 'onclusters-default-a');
+      const withIdentity = await seedProject(store, 'onclusters-default-b');
+
+      const resultA = await mapProject({ sourceRoot: withoutIt.src, store, projectId: withoutIt.projectId });
+      const resultB = await mapProject({
+        sourceRoot: withIdentity.src, store, projectId: withIdentity.projectId,
+        onClusters: async (clusters) => clusters,
+      });
+
+      assert.equal(resultA.status, 'MAPPED');
+      assert.equal(resultB.status, 'MAPPED');
+      assert.equal(resultA.nodeCount, resultB.nodeCount);
+      assert.equal(resultA.edgeCount, resultB.edgeCount);
+      assert.deepEqual(resultA.features.map((f) => f.name).sort(), resultB.features.map((f) => f.name).sort());
+    });
+  });
+
   test('frozen citations survive live mutation: overwriting the live source does not change what was frozen', async () => {
     const before = await readFrozenSourceLines(store, pid, sid, 'app/controllers/expenses_controller.rb', 8, 8);
     assert.equal(before, '  def download_receipt');

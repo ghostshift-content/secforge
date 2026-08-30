@@ -7,8 +7,8 @@ import path from 'node:path';
 import { SessionManager } from '@secforge/session';
 import { Store, readGraph, readReconciliation, reconciliationCounts } from '@secforge/store';
 import { buildFeedForward, answer } from '@secforge/retrieval';
-import { runAssessment, computeCoverage, analyze, planJobs, buildReport } from '@secforge/assess';
-import { runAll } from '@secforge/orchestrator';
+import { runAssessment, computeCoverage, buildReport } from '@secforge/assess';
+import { runMapOrchestration, runScanOrchestration, subscribe as subscribePhase } from '@secforge/orchestration';
 import { FAMILIES, loadCanonicalCards, cweCatalog, importCustomFolder } from '@secforge/patterns';
 import { mapProject } from '@secforge/map';
 import { learn, recall, crossProjectRecall, stats, listLearned, recordVerdict, annotatePriorFeedback, minePatterns, consolidate } from '@secforge/memory';
@@ -191,11 +191,24 @@ export async function handleApi(req, res, url) {
 
     // POST /api/projects/:id/map → run the mapping engine over the project's source. Mirrors
     // /scan's engine handling: a known-but-unreachable/non-LLM provider silently falls back to
-    // 'rules' rather than being recorded as if it ran.
+    // 'rules' rather than being recorded as if it ran. Delegates the RUN to
+    // runMapOrchestration (Phase D) so GET .../stream can forward live map-stage progress; a
+    // project with no resolvable session runs mapProject() directly (no phase to record onto).
     if (parts[0] === 'projects' && parts.length === 3 && parts[2] === 'map' && method === 'POST') {
       const pid = parts[1];
       const proj = (await store.listProjects()).find((p) => p.id === pid);
       if (!proj) return json(res, 404, { error: 'no such project' }), true;
+
+      let sid = url.searchParams.get('session') || null;
+      if (!sid) {
+        const active = (await store.listRuns(pid)).find((r) => r && ['created', 'running', 'paused'].includes(r.status));
+        sid = active ? active.sessionId : null;
+      }
+      if (sid) {
+        const cur = await mgr.status(pid, sid);
+        if (cur && cur.status === 'paused') return json(res, 409, { error: 'session is paused — resume first' }), true;
+      }
+
       const requested = await validEngineId(body.engine);
       let engine = 'rules';
       if (requested !== 'rules') {
@@ -204,7 +217,14 @@ export async function handleApi(req, res, url) {
       }
       const model = (engine === requested && typeof body.model === 'string') ? body.model : null;
       const effort = validEffort(body.effort);
-      const result = await mapProject({ sourceRoot: proj.sourceRoot, store, projectId: pid, engine, model, effort });
+      const incremental = typeof body.incremental === 'string' ? body.incremental : 'auto';
+
+      const outcome = sid
+        ? await runMapOrchestration({ store, mgr, projectId: pid, sessionId: sid, sourceRoot: proj.sourceRoot, engine, model, effort, incremental })
+        : { ok: true, ...(await mapProject({ sourceRoot: proj.sourceRoot, store, projectId: pid, engine, model, effort })) };
+
+      if (!outcome.ok) return json(res, 400, { status: 'ERROR', error: outcome.error }), true;
+      const { ok, ...result } = outcome;
       return json(res, result.status === 'ERROR' ? 400 : 200, result), true;
     }
 
@@ -247,36 +267,33 @@ export async function handleApi(req, res, url) {
     if (parts[0] === 'sessions' && parts[1]) {
       const sid = parts[1], action = parts[2];
       if (!project) return json(res, 400, { error: 'missing ?project=' }), true;
-      // GET /api/sessions/:id/stream → SSE live progress of the deterministic assess pipeline.
-      // Rules-only (no LLM) so the stream is fully deterministic. The hunt is fanned out per
-      // feature via the orchestrator for real streamed progress; runAssessment is the source of
-      // truth that persists findings/coverage (same analyze() over the same graph → no drift).
+      // GET /api/sessions/:id/stream → SSE live progress of the REAL, persisting run (Phase D).
+      // POST /map and POST /scan are still the only writers; this route only forwards what they
+      // already emit onto the session's orchestration bus. First event is the session's current
+      // phase (from mgr.status) so a client that connects mid-run, or reconnects after a reload,
+      // sees where things stand immediately — session.phase on the record is the resumable source
+      // of truth, the stream is just a live convenience on top of it.
       if (method === 'GET' && action === 'stream') {
         res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
         const send = (event) => { try { res.write(`data: ${JSON.stringify(event)}\n\n`); } catch { /* client gone */ } };
-        // Read-only progress ONLY. The POST /scan is the single writer that persists findings, so
-        // the stream never runs a persisting assessment — that removes the concurrent-writer race
-        // that used to crash the process. All work here is analyze() (pure, no store writes). P0-2.
+        let unsubscribe = null;
+        const finish = () => {
+          if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+          try { res.end(); } catch { /* already closed */ }
+        };
         try {
-          const scope = normaliseScope({ mode: url.searchParams.get('mode') || 'all', feature: url.searchParams.get('feature') || undefined });
-          const graph = await readGraph(store, project);
-          const jobs = planJobs(scope);
-          send({ stage: 'framer', status: 'done', jobs: jobs.length });
-          await runAll(jobs, async (job) => {
-            send({ stage: 'hunter', status: 'start', job: job.id, feature: job.feature });
-            const jobScope = (job.feature && job.feature !== '<all>') ? { ...scope, mode: 'feature', feature: job.feature } : scope;
-            const found = analyze(graph, { scope: jobScope, patterns: jobScope.patterns });
-            send({ stage: 'hunter', status: 'done', job: job.id, candidates: found.length });
+          const cur = await mgr.status(project, sid);
+          if (cur && cur.phase) send(cur.phase);
+          unsubscribe = subscribePhase(sid, (evt) => {
+            send(evt);
+            if (evt && (evt.stage === 'done' || evt.stage === 'error')) finish();
           });
-          const all = analyze(graph, { scope, patterns: scope.patterns });
-          send({ stage: 'triager', kept: all.length });
-          send({ stage: 'validator', validated: all.length });
-          send({ stage: 'reporter', promoted: all.length });
-          send({ stage: 'done', candidates: all.length });
         } catch (err) {
           send({ stage: 'error', error: String((err && err.message) || err) });
+          finish();
+          return true;
         }
-        try { res.end(); } catch { /* already closed */ }
+        req.on('close', finish);
         return true;
       }
       if (method === 'GET' && !action) return json(res, 200, await mgr.status(project, sid)), true;
@@ -290,6 +307,8 @@ export async function handleApi(req, res, url) {
       if (method === 'POST' && action === 'scan') {
         const bad = scopeInputError(body.scope);                            // S3-6: don't silently coerce an explicit bad scope
         if (bad) return json(res, 400, { error: `invalid scope.${bad}`, allowed: { mode: [...SCOPE_KINDS], method: [...RUN_METHODS] } }), true;
+        const preStatus = await mgr.status(project, sid);
+        if (preStatus && preStatus.status === 'paused') return json(res, 409, { error: 'session is paused — resume first' }), true; // refuse BEFORE the lock
         if (activeScans.has(project)) return json(res, 409, { error: 'a scan is already running for this project' }), true; // P0-2e
         activeScans.add(project);
         try {
@@ -310,7 +329,17 @@ export async function handleApi(req, res, url) {
           await mgr.configureRun(project, sid, scope);
           await mgr.recordEngine(project, sid, { provider: engine, model, requested, reason, effort }); // N4 + AI-2: never record an engine that didn't run
           await store.clearFindings(project);                               // N5: a re-scan replaces findings; no stale results survive
-          const result = await runAssessment({ store, projectId: project, scope, engine, model, effort });
+          // Phase D: a single-feature scan delegates to runScanOrchestration, which records
+          // session.phase + emits live bus events for GET .../stream, then internally runs
+          // runAssessment (never reimplemented). A whole-project/multi-feature scan has no single
+          // featureId to ground buildFeedForward's pre-flight on, so it keeps calling
+          // runAssessment directly — unchanged behavior, no live phase for that run shape.
+          const featureId = scope.mode === 'feature' && scope.feature ? scope.feature : null;
+          const outcome = featureId
+            ? await runScanOrchestration({ store, mgr, projectId: project, sessionId: sid, featureId, scope, engine, model, effort })
+            : { ok: true, ...(await runAssessment({ store, projectId: project, scope, engine, model, effort })) };
+          if (!outcome.ok) return json(res, outcome.gap ? 404 : 502, { error: outcome.error }), true;
+          const { ok, ...result } = outcome;
           // Phase 3: re-surface (never hide) any finding matching a prior accept/reject verdict,
           // then mine this scan's validated findings into the learned-patterns catalog. Both are
           // additive to the existing scan response shape.

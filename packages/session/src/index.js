@@ -69,6 +69,16 @@ export class SessionManager {
     return s;
   }
 
+  // Record the orchestrator's current phase/stage/progress onto the session (Phase D).
+  // Shallow-merges `patch` into session.phase — never clobbers unrelated phase keys.
+  async recordPhase(projectId, sessionId, patch) {
+    const s = await this.store.readRun(projectId, sessionId);
+    if (!s) throw new Error(`no session ${sessionId}`);
+    s.phase = { ...(s.phase || {}), ...patch, updatedAt: new Date().toISOString() };
+    await this._persist(projectId, s, 'session.phase');
+    return s;
+  }
+
   async _persist(projectId, session, eventType) {
     session.checkpointedAt = new Date().toISOString();
     await this.store.writeRun(projectId, session);
