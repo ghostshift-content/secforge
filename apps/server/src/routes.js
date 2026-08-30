@@ -2,6 +2,8 @@
 // See docs/WIRING.md. Handlers are real where the skeleton allows (sessions, store) and shaped
 // stubs where a Phase engine lands later (map, assess). Nothing 500s.
 
+import { promises as fsp } from 'node:fs';
+import path from 'node:path';
 import { SessionManager } from '@secforge/session';
 import { Store, readGraph } from '@secforge/store';
 import { runAssessment, computeCoverage, analyze, planJobs } from '@secforge/assess';
@@ -115,6 +117,20 @@ export async function handleApi(req, res, url) {
         return json(res, 200, { stats: await stats(store, pid), recall: q ? await recall(store, pid, q) : null, cross: q ? await crossProjectRecall(store, q) : [] }), true;
       }
       if (sub === 'env') return json(res, 200, { target: await getTarget(store, pid) }), true;
+      // GET /api/projects/:id/inventory → the full heuristic inventory.jsonl from the current
+      // snapshot, grouped by kind. Same graph/current.json → snapshot resolution as
+      // packages/assess/src/decorate.js's loadManifest() — not a new pointer mechanism.
+      if (sub === 'inventory') {
+        let rows = [];
+        try {
+          const pointer = JSON.parse(await fsp.readFile(path.join(store.projectDir(pid), 'graph', 'current.json'), 'utf8'));
+          const text = await fsp.readFile(path.join(store.projectDir(pid), 'snapshots', pointer.snapshotId, 'inventory.jsonl'), 'utf8');
+          rows = text.split('\n').filter(Boolean).map((l) => JSON.parse(l));
+        } catch { /* not mapped yet — empty, not an error */ }
+        const counts = {};
+        for (const r of rows) counts[r.kind] = (counts[r.kind] || 0) + 1;
+        return json(res, 200, { rows, counts }), true;
+      }
     }
 
     // POST /api/projects/:id/map → run the mapping engine over the project's source

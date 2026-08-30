@@ -912,7 +912,7 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
     features: [], selectedFeature: null,
     graph: null, findings: [], coverage: null,
     findingFilter: 'all', selectedFinding: null,
-    families: [], cards: []
+    families: [], cards: [], inventory: null
   };
 
   function setBadge(ok){
@@ -1016,7 +1016,7 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
       if(mapRes) applyMapResult(mapRes);
       return refreshGraph();
     }).then(function(){
-      return Promise.all([refreshFindings(), refreshCoverage(), refreshMemory(), refreshEnv()]);
+      return Promise.all([refreshFindings(), refreshCoverage(), refreshMemory(), refreshEnv(), refreshInventory()]);
     }).catch(function(){
       if(typeof openMap==='function') openMap(); // never leave the panel blank
     });
@@ -1226,8 +1226,91 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
       state.graph = g;
       renderGraphSvg();
       updateGraphHeader(g);
+      renderRoles();
       if(state.selectedFeature) renderLedger(state.selectedFeature);
     }).catch(function(){});
+  }
+
+  // ---------- map: Roles subtab — actor catalog + role x (actor/endpoint/permission) matrix ----------
+  // Heuristic only: static line-scanning can name role/permission VOCABULARY and tie a role check
+  // to the file it lives in, but it cannot know which user instances hold which role, and a
+  // framework outside the covered set (Rails/Devise/CanCan, Spring, NestJS, Laravel, Django)
+  // yields nothing here — an honest miss, not a wrong answer (docs/PHASE1-ROLES-INVENTORY-DESIGN.md §1.4).
+  function renderRoles(){
+    var g = state.graph, host = document.getElementById('rolesBody');
+    if(!host || !g) return;
+    var actors = (g.nodes||[]).filter(function(n){ return n.type==='ACTOR'; });
+    var roles  = (g.nodes||[]).filter(function(n){ return n.type==='ROLE'; });
+    if(!actors.length && !roles.length){
+      host.innerHTML = sfEmpty('No ACTOR or ROLE nodes found in this codebase — the current heuristics (role constants/enums, requireRole/hasRole/@Roles/current_user.x? checks, CanCan/Spring/Laravel/Django ability declarations) found nothing to extract. Real gap, not a rendering bug.');
+      return;
+    }
+    var nodeById = {};
+    (g.nodes||[]).forEach(function(n){ nodeById[n.id] = n; });
+    function namesVia(targetId, edgeType, wantSrc){
+      return (g.edges||[]).filter(function(e){ return e.type===edgeType && (wantSrc ? e.dst===targetId : e.src===targetId); })
+        .map(function(e){ var other = nodeById[wantSrc ? e.src : e.dst]; return other ? other.name : null; })
+        .filter(Boolean);
+    }
+    var actorRows = actors.map(function(a){
+      var claim = a.claims && a.claims[0];
+      var loc = claim ? esc(claim.file)+' <span class="muted">:'+claim.line+'</span>' : '—';
+      return '<tr><td>'+esc(a.name)+'</td><td class="mono muted">'+loc+'</td></tr>';
+    }).join('');
+    var actorHtml = '<div class="kicker" style="margin-top:2px;">Actors <span class="muted">· '+actors.length+'</span></div>'
+      + (actors.length ? '<table class="grid"><tbody>'+actorRows+'</tbody></table>'
+        : sfEmpty('No ACTOR node detected — heuristics look for a Devise/role-associated model class named User/Account/Member/etc. A different actor model name yields no hit unless it also carries a devise/:roles signal.'));
+    var roleHtml = '';
+    if(roles.length){
+      roleHtml = '<div class="kicker" style="margin-top:16px;">Roles <span class="muted">· '+roles.length+'</span></div>'
+        + '<table class="grid"><thead><tr><th>Role</th><th>Held by</th><th>Required by</th><th>Grants</th></tr></thead><tbody>'
+        + roles.map(function(r){
+            var heldBy = namesVia(r.id, 'HAS_ROLE', true);
+            var reqBy = namesVia(r.id, 'REQUIRES_ROLE', true);
+            var grants = namesVia(r.id, 'GRANTS', false);
+            return '<tr><td>'+esc(r.name)+'</td>'
+              + '<td>'+(heldBy.length?esc(heldBy.join(', ')):'<span class="muted">—</span>')+'</td>'
+              + '<td>'+(reqBy.length?esc(reqBy.join(', ')):'<span class="muted">—</span>')+'</td>'
+              + '<td>'+(grants.length?esc(grants.join(', ')):'<span class="muted">—</span>')+'</td></tr>';
+          }).join('') + '</tbody></table>';
+    }
+    host.innerHTML = actorHtml + roleHtml
+      + '<div class="muted" style="font-size:11.5px;margin-top:14px;line-height:1.5;">Heuristic extraction only, covering Rails+Devise/CanCan, Spring @PreAuthorize, NestJS @Roles, Laravel Gate, Django permission_required. A framework outside that list, a dynamically-built role string, or a role→permission check split across lines yields an honest miss, not a wrong answer. "Held by" is blank when multiple actor types exist and none shows a role-association line for that class — a visible gap, not a guess.</div>';
+  }
+
+  // ---------- map: Inventories subtab — the raw heuristic inventory, grouped by kind ----------
+  function refreshInventory(){
+    if(!state.project) return Promise.resolve();
+    return get('/api/projects/'+state.project.id+'/inventory').then(function(inv){
+      state.inventory = inv;
+      renderInventory();
+    }).catch(function(){});
+  }
+  function inventoryRowLabel(r){
+    var d = r.detail || {};
+    if(r.kind==='ENDPOINT') return '<span class="mono">'+esc(d.method||'—')+' '+esc(d.route||'')+'</span>'+(d.guarded?' <span class="muted">· guarded</span>':' <span class="guard-warn">no guard</span>');
+    if(r.kind==='SERVICE'||r.kind==='JOB'||r.kind==='DATA_STORE'||r.kind==='ROLE'||r.kind==='ACTOR') return esc(d.name||'—');
+    if(r.kind==='PERMISSION') return esc(d.action||'—')+(d.resource?' <span class="muted">· '+esc(d.resource)+'</span>':'');
+    if(r.kind==='ROLE_CHECK') return 'role: '+esc(d.role||'—');
+    if(r.kind==='ROLE_GRANTS') return esc(d.role||'—')+' grants '+esc(d.action||'—')+(d.resource?' <span class="muted">· '+esc(d.resource)+'</span>':'');
+    return esc(JSON.stringify(d));
+  }
+  function renderInventory(){
+    var inv = state.inventory, host = document.getElementById('invBody');
+    if(!host || !inv) return;
+    if(!inv.rows || !inv.rows.length){
+      host.innerHTML = sfEmpty('No inventory recorded yet. Run Map to generate one — an empty result means the heuristics found nothing to extract from this source tree, not a rendering gap. Every mapped row is attached to a feature by directory; classifying rows as shared-infra / not-relevant / dead needs semantic review, not implemented here.');
+      return;
+    }
+    var byKind = {};
+    inv.rows.forEach(function(r){ (byKind[r.kind]=byKind[r.kind]||[]).push(r); });
+    host.innerHTML = Object.keys(byKind).sort().map(function(kind){
+      var rows = byKind[kind];
+      return '<div class="kicker" style="margin-top:14px;">'+esc(kind)+' <span class="muted">· '+rows.length+'</span></div>'
+        + '<table class="grid"><tbody>' + rows.map(function(r){
+            return '<tr><td class="mono muted">'+esc(r.file)+':'+r.line+'</td><td>'+inventoryRowLabel(r)+'</td></tr>';
+          }).join('') + '</tbody></table>';
+    }).join('') + '<div class="muted" style="font-size:11.5px;margin-top:14px;line-height:1.5;">Every row is attached to a feature by directory; classifying rows as shared-infra/not-relevant/dead needs semantic review, not implemented here.</div>';
   }
 
   // ---------- assess: scope + method + run ----------

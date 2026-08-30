@@ -17,7 +17,7 @@ export const EDGE_TYPES = Object.freeze([
   // structure
   'CONTAINS', 'DEFINES', 'EXPOSES', 'HANDLED_BY', 'CALLS', 'READS', 'WRITES', 'ENQUEUES',
   'AUTHENTICATED_BY', 'AUTHORIZED_BY', 'REQUIRES_ROLE', 'CROSSES_BOUNDARY', 'RETURNS_DATA',
-  'USES_SERVICE', 'USES_INTEGRATION', 'SHARES_IMPLEMENTATION_WITH',
+  'USES_SERVICE', 'USES_INTEGRATION', 'SHARES_IMPLEMENTATION_WITH', 'HAS_ROLE', 'GRANTS',
   // security layer
   'CANDIDATE_IN', 'VIOLATES', 'GUARDED_BY', 'MAPS_TO_CWE', 'PROMOTED_TO', 'VALIDATED_BY', 'COVERS',
 ]);
@@ -59,6 +59,9 @@ export const ID = Object.freeze({
   candidate: (n) => `candidate:C-${n}`,
   run: (sessionId) => `run:${sessionId}`,
   cwe: (id) => `cwe:${id}`,
+  role: (name) => `role:${slug(name)}`,
+  actor: (name) => `actor:${slug(name)}`,
+  permission: (action, resource) => `permission:${slug(action)}${resource ? ':' + slug(resource) : ''}`,
 });
 
 // A job envelope dispatched to a fan-out agent; a result envelope comes back.

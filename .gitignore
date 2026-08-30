@@ -10,3 +10,8 @@ coverage/
 
 # local dev-tool scratch (never part of the product)
 .claude-flow/
+.ruflo/
+.ruvector/
+.ruv-swarm/
+.hive-mind/
+.swarm/
