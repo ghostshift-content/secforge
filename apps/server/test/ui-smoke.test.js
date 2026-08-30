@@ -31,3 +31,12 @@ describe('tab gate is driven by one source', () => {
     assert.match(INDEX, /\.disabled\s*=\s*gated/);
   });
 });
+
+// docs/PHASE3-LEARNING-DESIGN.md §8.4 — the Memory/Findings tabs show real counts (accepted,
+// rejected, mined, learned) only, never a precision/confidence/accuracy percentage anywhere.
+describe('Phase 3 self-learning UI never fabricates a metric', () => {
+  test('no % sits next to precision/confidence/accuracy anywhere in index.html', () => {
+    assert.doesNotMatch(INDEX, /(precision|confidence|accuracy)[^\n<]{0,40}%/i);
+    assert.doesNotMatch(INDEX, /%[^\n<]{0,40}(precision|confidence|accuracy)/i);
+  });
+});

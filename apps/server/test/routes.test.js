@@ -101,3 +101,170 @@ describe('GET /api/projects/:id/inventory', () => {
     assert.deepEqual(res.body, { rows: [], counts: {} });
   });
 });
+
+// docs/PHASE3-LEARNING-DESIGN.md — accept/reject feedback loop, mining, consolidation, honest stats.
+describe('Phase 3 self-learning: feedback, mining, consolidation', () => {
+  async function openMappedProject(tag) {
+    const tmp = path.join(os.tmpdir(), 'sf-p3-' + tag + '-' + crypto.randomBytes(4).toString('hex'));
+    await fsp.mkdir(path.join(tmp, 'api'), { recursive: true });
+    // An unauthenticated endpoint reachable + a data store → real ACX/SDX findings via mapProject.
+    await fsp.writeFile(path.join(tmp, 'api', 'orders.js'), [
+      "router.get('/orders/:id', (req, res) => res.json({}));",
+      "const Order = mongoose.model('Order', schema);",
+      '',
+    ].join('\n'));
+
+    const openRes = mockRes();
+    await handleApi(mockReq('POST', { sourceRoot: tmp }), openRes, new URL('http://x/api/projects'));
+    assert.equal(openRes.code, 201, JSON.stringify(openRes.body));
+    const pid = openRes.body.project.id;
+    const sid = openRes.body.session.sessionId;
+
+    const mapRes = mockRes();
+    await handleApi(mockReq('POST', {}), mapRes, new URL('http://x/api/projects/' + pid + '/map'));
+    assert.equal(mapRes.code, 200, JSON.stringify(mapRes.body));
+
+    return { tmp, pid, sid };
+  }
+
+  async function runScan(pid, sid) {
+    const scanRes = mockRes();
+    await handleApi(mockReq('POST', { scope: { mode: 'all' }, engine: 'rules' }), scanRes,
+      new URL('http://x/api/sessions/' + sid + '/scan?project=' + pid));
+    assert.equal(scanRes.code, 200, JSON.stringify(scanRes.body));
+    return scanRes.body;
+  }
+
+  test('a scan response carries additive mined[]/priorFeedbackFlagged fields; GET /memory now returns a real learned[] catalog', async () => {
+    const { tmp, pid, sid } = await openMappedProject('mine');
+    try {
+      const scan = await runScan(pid, sid);
+      assert.ok(Array.isArray(scan.mined));
+      assert.equal(typeof scan.priorFeedbackFlagged, 'number');
+      assert.ok(scan.findings.length > 0, 'the fixture produces at least one real finding');
+      assert.ok(scan.mined.length > 0, 'this project has never been mined before — at least one rule gets a cited entry');
+
+      const memRes = mockRes();
+      await handleApi(mockReq('GET', {}), memRes, new URL('http://x/api/projects/' + pid + '/memory'));
+      assert.equal(memRes.code, 200);
+      assert.ok(Array.isArray(memRes.body.learned), 'GET /memory now returns a top-level learned[] catalog');
+      assert.ok(memRes.body.learned.length > 0);
+      assert.equal(memRes.body.learned.length, scan.mined.length);
+
+      // Re-scanning the same, unchanged project must NOT mine the same rule twice.
+      await handleApi(mockReq('POST', {}), mockRes(), new URL('http://x/api/projects/' + pid + '/map'));
+      const scan2 = await runScan(pid, sid);
+      assert.equal(scan2.mined.length, 0, 'dedup by rule marker — no duplicate mining on a re-scan');
+    } finally {
+      await handleApi(mockReq('DELETE', {}), mockRes(), new URL('http://x/api/projects/' + pid));
+      await fsp.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('POST /feedback validates verdict, records it, and the SAME rule::route shape re-surfaces as priorFeedback on the next scan (never hidden)', async () => {
+    const { tmp, pid, sid } = await openMappedProject('feedback');
+    try {
+      const scan = await runScan(pid, sid);
+      const fid = scan.findings[0].id;
+
+      const badRes = mockRes();
+      await handleApi(mockReq('POST', { findingId: fid, verdict: 'bogus' }), badRes, new URL('http://x/api/projects/' + pid + '/feedback'));
+      assert.equal(badRes.code, 400);
+
+      const okRes = mockRes();
+      await handleApi(mockReq('POST', { findingId: fid, verdict: 'reject' }), okRes, new URL('http://x/api/projects/' + pid + '/feedback'));
+      assert.equal(okRes.code, 200);
+      assert.deepEqual(okRes.body, { ok: true, findingId: fid, verdict: 'reject' });
+
+      // Honest counts: exactly one real reject, no fabricated percentage anywhere in the payload.
+      const memRes = mockRes();
+      await handleApi(mockReq('GET', {}), memRes, new URL('http://x/api/projects/' + pid + '/memory'));
+      assert.equal(memRes.body.stats.rejected, 1);
+      assert.equal(memRes.body.stats.accepted, 0);
+      assert.equal(memRes.body.stats.feedbackSignals, 1);
+
+      // Re-scan (unchanged source → same rule::route shape) → the finding is re-surfaced, not hidden.
+      await handleApi(mockReq('POST', {}), mockRes(), new URL('http://x/api/projects/' + pid + '/map'));
+      const scan2 = await runScan(pid, sid);
+      assert.ok(scan2.findings.length > 0, 'the deterministic rule still fires — never silently suppressed');
+      const flagged = scan2.findings.find((f) => f.priorFeedback);
+      assert.ok(flagged, 'at least one re-scanned finding carries the prior verdict');
+      assert.equal(flagged.priorFeedback.verdict, 'reject');
+
+      // GET /findings independently (not just the scan response) also carries the badge.
+      const findRes = mockRes();
+      await handleApi(mockReq('GET', {}), findRes, new URL('http://x/api/projects/' + pid + '/findings'));
+      assert.ok(findRes.body.findings.some((f) => f.priorFeedback && f.priorFeedback.verdict === 'reject'));
+    } finally {
+      await handleApi(mockReq('DELETE', {}), mockRes(), new URL('http://x/api/projects/' + pid));
+      await fsp.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  // Live-verification regressions (no re-map between scans — the exact repro): a second scan on
+  // an UNCHANGED project must not 500 (bug 1), and a finding rejected before that second scan
+  // must carry priorFeedback on GET /findings, not just in the scan response (bug 2).
+  test('reject, then scan the SAME snapshot AGAIN with no re-map in between: no 500, and GET /findings carries priorFeedback', async () => {
+    const { tmp, pid, sid } = await openMappedProject('rescan-no-remap');
+    try {
+      const scan1 = await runScan(pid, sid);
+      const fid = scan1.findings[0].id;
+
+      const fbRes = mockRes();
+      await handleApi(mockReq('POST', { findingId: fid, verdict: 'reject' }), fbRes, new URL('http://x/api/projects/' + pid + '/feedback'));
+      assert.equal(fbRes.code, 200);
+
+      // NO /map call here — this is the exact live repro (map once, scan, scan again).
+      const scanRes = mockRes();
+      await handleApi(mockReq('POST', { scope: { mode: 'all' }, engine: 'rules' }), scanRes,
+        new URL('http://x/api/sessions/' + sid + '/scan?project=' + pid));
+      assert.equal(scanRes.code, 200, 'bug 1: a second scan on the same snapshot must not 500 — ' + JSON.stringify(scanRes.body));
+      assert.equal(scanRes.body.findings.length, scan1.findings.length, 'the same findings fire again, not duplicated');
+
+      const findRes = mockRes();
+      await handleApi(mockReq('GET', {}), findRes, new URL('http://x/api/projects/' + pid + '/findings'));
+      assert.equal(findRes.code, 200);
+      const persisted = findRes.body.findings.find((f) => f.id === fid);
+      assert.ok(persisted, 'the rejected finding is still WRITTEN, never hidden');
+      assert.equal(persisted.priorFeedback && persisted.priorFeedback.verdict, 'reject',
+        'bug 2: GET /findings — what the UI actually reads — must carry the persisted priorFeedback badge');
+    } finally {
+      await handleApi(mockReq('DELETE', {}), mockRes(), new URL('http://x/api/projects/' + pid));
+      await fsp.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('POST /feedback 404s on an unknown finding id', async () => {
+    const { tmp, pid } = await openMappedProject('nofind');
+    try {
+      const res = mockRes();
+      await handleApi(mockReq('POST', { findingId: 'finding:does-not-exist', verdict: 'accept' }), res,
+        new URL('http://x/api/projects/' + pid + '/feedback'));
+      assert.equal(res.code, 404);
+    } finally {
+      await handleApi(mockReq('DELETE', {}), mockRes(), new URL('http://x/api/projects/' + pid));
+      await fsp.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('POST /memory/consolidate collapses duplicate learned lines and returns real before/after counts', async () => {
+    const { tmp, pid, sid } = await openMappedProject('consolidate');
+    try {
+      await runScan(pid, sid);
+      await handleApi(mockReq('POST', { name: 'manual dup', kind: 'note' }), mockRes(), new URL('http://x/api/projects/' + pid + '/memory'));
+      await handleApi(mockReq('POST', { name: 'manual dup', kind: 'note' }), mockRes(), new URL('http://x/api/projects/' + pid + '/memory'));
+
+      const res = mockRes();
+      await handleApi(mockReq('POST', {}), res, new URL('http://x/api/projects/' + pid + '/memory/consolidate'));
+      assert.equal(res.code, 200);
+      assert.equal(typeof res.body.learnedPatterns.before, 'number');
+      assert.equal(typeof res.body.learnedPatterns.after, 'number');
+      assert.ok(res.body.learnedPatterns.after < res.body.learnedPatterns.before, 'the two identical manual lines collapsed to one');
+      assert.equal(typeof res.body.feedback.before, 'number');
+      assert.equal(typeof res.body.feedback.after, 'number');
+    } finally {
+      await handleApi(mockReq('DELETE', {}), mockRes(), new URL('http://x/api/projects/' + pid));
+      await fsp.rm(tmp, { recursive: true, force: true });
+    }
+  });
+});

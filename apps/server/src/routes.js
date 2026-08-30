@@ -10,7 +10,7 @@ import { runAssessment, computeCoverage, analyze, planJobs } from '@secforge/ass
 import { runAll } from '@secforge/orchestrator';
 import { FAMILIES, loadCanonicalCards, cweCatalog, importCustomFolder } from '@secforge/patterns';
 import { mapProject } from '@secforge/map';
-import { learn, recall, crossProjectRecall, stats } from '@secforge/memory';
+import { learn, recall, crossProjectRecall, stats, listLearned, recordVerdict, annotatePriorFeedback, minePatterns, consolidate } from '@secforge/memory';
 import { registerTarget, getTarget, validateFinding } from '@secforge/env';
 import { listEngines, checkConnection } from '@secforge/adapters';
 import { SCOPE_KINDS, RUN_METHODS } from '@secforge/schemas';
@@ -114,7 +114,12 @@ export async function handleApi(req, res, url) {
       if (sub === 'graph') return json(res, 200, await readGraph(store, pid)), true;
       if (sub === 'memory') {
         const q = url.searchParams.get('q') || '';
-        return json(res, 200, { stats: await stats(store, pid), recall: q ? await recall(store, pid, q) : null, cross: q ? await crossProjectRecall(store, q) : [] }), true;
+        return json(res, 200, {
+          stats: await stats(store, pid),
+          learned: await listLearned(store, pid),
+          recall: q ? await recall(store, pid, q) : null,
+          cross: q ? await crossProjectRecall(store, q) : [],
+        }), true;
       }
       if (sub === 'env') return json(res, 200, { target: await getTarget(store, pid) }), true;
       // GET /api/projects/:id/inventory → the full heuristic inventory.jsonl from the current
@@ -140,6 +145,27 @@ export async function handleApi(req, res, url) {
       if (!proj) return json(res, 404, { error: 'no such project' }), true;
       const result = await mapProject({ sourceRoot: proj.sourceRoot, store, projectId: pid });
       return json(res, result.status === 'ERROR' ? 400 : 200, result), true;
+    }
+
+    // POST /api/projects/:id/memory/consolidate → on-demand dedup pass (no scheduler)
+    if (parts[0] === 'projects' && parts.length === 4 && parts[2] === 'memory' && parts[3] === 'consolidate' && method === 'POST') {
+      return json(res, 200, await consolidate(store, parts[1])), true;
+    }
+
+    // POST /api/projects/:id/feedback → record an accept/reject verdict on one finding
+    if (parts[0] === 'projects' && parts.length === 3 && parts[2] === 'feedback' && method === 'POST') {
+      const pid = parts[1];
+      if (body.verdict !== 'accept' && body.verdict !== 'reject') {
+        return json(res, 400, { error: "verdict must be 'accept' or 'reject'" }), true;
+      }
+      const finding = (await store.listFindings(pid)).find((f) => f.id === body.findingId);
+      if (!finding) return json(res, 404, { error: 'no such finding' }), true;
+      await recordVerdict(store, pid, {
+        findingId: finding.id, rule: finding.rule, cwe: finding.cwe,
+        feature: finding.feature, route: finding.route, verdict: body.verdict, note: body.note || null,
+      });
+      await store.writeFinding(pid, { ...finding, feedback: { verdict: body.verdict, at: new Date().toISOString() } });
+      return json(res, 200, { ok: true, findingId: finding.id, verdict: body.verdict }), true;
     }
 
     // POST /api/projects/:id/(memory|env)
@@ -219,7 +245,14 @@ export async function handleApi(req, res, url) {
           await mgr.recordEngine(project, sid, { provider: engine, model, requested, reason }); // N4 + AI-2: never record an engine that didn't run
           await store.clearFindings(project);                               // N5: a re-scan replaces findings; no stale results survive
           const result = await runAssessment({ store, projectId: project, scope, engine, model });
-          return json(res, 200, { ...result, modelUsed: model, requested, reason }), true; // AI-5: report what actually ran
+          // Phase 3: re-surface (never hide) any finding matching a prior accept/reject verdict,
+          // then mine this scan's validated findings into the learned-patterns catalog. Both are
+          // additive to the existing scan response shape.
+          const priorFeedbackFlagged = await annotatePriorFeedback(store, project, result.findings);
+          const flaggedFindings = result.findings.filter((f) => f.priorFeedback);
+          for (const f of flaggedFindings) await store.writeFinding(project, f); // persist the badge so GET /findings shows it too
+          const mined = await minePatterns(store, project, result.findings);
+          return json(res, 200, { ...result, modelUsed: model, requested, reason, mined, priorFeedbackFlagged }), true; // AI-5: report what actually ran
         } finally {
           activeScans.delete(project);
         }

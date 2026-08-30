@@ -617,11 +617,12 @@
       </div>
       <div style="flex-grow:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;">
         <div style="padding:18px 26px 15px;border-bottom:1px solid var(--border);">
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span id="findHeaderSev" class="badge" style="padding:3px 9px;">—</span><div id="findHeaderTitle" style="font-size:20px;font-weight:700;letter-spacing:-.02em;">No finding selected</div><div style="flex-grow:1"></div><button class="btn" onclick="exportFinding()">Export H1</button><button id="findValidateBtn" class="btn-primary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>Validate live</button></div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span id="findHeaderSev" class="badge" style="padding:3px 9px;">—</span><div id="findHeaderTitle" style="font-size:20px;font-weight:700;letter-spacing:-.02em;">No finding selected</div><div style="flex-grow:1"></div><button id="findRejectBtn" class="btn" onclick="submitFindingFeedback('reject')">Mark false positive</button><button id="findAcceptBtn" class="btn" onclick="submitFindingFeedback('accept')">Confirm</button><button class="btn" onclick="exportFinding()">Export H1</button><button id="findValidateBtn" class="btn-primary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>Validate live</button></div>
           <div id="findHeaderChips" style="display:flex;gap:7px;margin-top:11px;flex-wrap:wrap;"></div>
           <div id="findValidateNote" style="margin-top:10px;font-size:12px;"></div>
         </div>
         <div id="find-detail" class="scroll" style="flex-grow:1;padding:18px 26px;">
+          <div id="findFeedbackBanner"></div>
           <div class="kicker" style="margin-bottom:8px;">What happens</div>
           <div id="findWhatHappens" style="line-height:1.6;max-width:82ch;margin-bottom:18px;"><span class="muted">Run an assessment to produce findings.</span></div>
           <div class="kicker" style="margin-bottom:8px;">Evidence</div>
@@ -702,11 +703,18 @@
         <div class="grid4" style="margin-bottom:20px;">
           <div class="card stat" style="padding:16px;box-shadow:none;"><div class="n" id="memPatterns">0</div><div class="muted" style="font-size:12px;margin-top:2px;color:var(--ink2)">patterns in catalog</div></div>
           <div class="card stat" style="padding:16px;box-shadow:none;"><div class="n" id="memSignals">0</div><div class="muted" style="font-size:12px;margin-top:2px;color:var(--ink2)">accept / reject signals</div></div>
-          <div class="card stat" style="padding:16px;box-shadow:none;"><div class="n" id="memProjects">0</div><div class="muted" style="font-size:12px;margin-top:2px;color:var(--ink2)">projects contributing</div></div>
+          <div class="card stat" style="padding:16px;box-shadow:none;"><div class="n" id="memAccepted">0</div><div class="muted" style="font-size:12px;margin-top:2px;color:var(--ink2)">confirmed by you</div></div>
+          <div class="card stat" style="padding:16px;box-shadow:none;"><div class="n" id="memRejected">0</div><div class="muted" style="font-size:12px;margin-top:2px;color:var(--ink2)">marked false positive</div></div>
         </div>
         <div style="display:flex;gap:20px;flex-wrap:wrap;">
           <div style="flex:1 1 460px;min-width:0;">
-            <div class="kicker" style="margin-bottom:10px;">Learned patterns · learned-patterns.md</div>
+            <div class="kicker" style="margin-bottom:10px;">Learned this cycle</div>
+            <div id="memLearnedCycle" class="card" style="overflow:hidden;box-shadow:none;margin-bottom:18px;"><div class="muted" style="padding:16px;text-align:center;font-size:12.5px;">Run a scan to see newly learned patterns from this cycle.</div></div>
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:10px;">
+              <div class="kicker">Learned patterns · learned-patterns.md</div>
+              <button class="btn" style="font-size:11.5px;padding:4px 10px;" onclick="runConsolidate()">Consolidate now</button>
+            </div>
+            <div id="memConsolidateResult" class="muted" style="font-size:11.5px;margin-bottom:8px;"></div>
             <div id="memLearned" class="card" style="overflow:hidden;box-shadow:none;"><div class="muted" style="padding:16px;text-align:center;font-size:12.5px;">Nothing learned yet. Patterns promoted from confirmed findings appear here.</div></div>
           </div>
           <div id="mem-recall" style="flex:1 1 400px;min-width:0;">
@@ -912,7 +920,7 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
     features: [], selectedFeature: null,
     graph: null, findings: [], coverage: null,
     findingFilter: 'all', selectedFinding: null,
-    families: [], cards: [], inventory: null
+    families: [], cards: [], inventory: null, lastMined: []
   };
 
   function setBadge(ok){
@@ -1008,6 +1016,7 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
     return post('/api/projects', { sourceRoot: sourceRoot }).then(function(d){
       if(!d || !d.project) throw new Error('open failed');
       state.project = d.project; state.session = d.session;
+      state.lastMined = []; renderLearnedCycle([]); // S3: "this cycle" is session-scoped to the CURRENT project only
       window.__sfProject=true; document.body.classList.remove('nav-locked'); // S1-11: unlock the chrome now a real project is open
       if(typeof show==='function'){ show('map'); if(typeof mapSub==='function') mapSub('graph'); }
       setLiveIndicator(d.project);
@@ -1462,6 +1471,9 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
         updatePipeline(res);
         refreshCoverage();
         refreshFindings();
+        state.lastMined = res.mined || [];
+        renderLearnedCycle(state.lastMined);
+        refreshMemory();
       }).catch(function(){});
   };
 
@@ -1542,9 +1554,18 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
     var list = filter==='all' ? all : all.filter(function(f){ return (f.severity||'').toLowerCase()===filter; });
     if(!all.length){ host.innerHTML = sfEmpty('No findings. Run an assessment from the Assess tab — results land here.'); clearFindingDetail(); return; }
     if(!list.length){ host.innerHTML = '<div class="muted" style="padding:18px;text-align:center;font-size:12.5px;">No '+esc(filter)+' findings.</div>'; return; }
+    // S3: deprioritise (never remove/hide) findings the user previously rejected — a stable
+    // sort so a "you rejected this" finding sinks to the bottom without reordering the rest.
+    list = list.map(function(f,i){ return { f: f, i: i }; }).sort(function(a,b){
+      var ar = a.f.priorFeedback && a.f.priorFeedback.verdict==='reject' ? 1 : 0;
+      var br = b.f.priorFeedback && b.f.priorFeedback.verdict==='reject' ? 1 : 0;
+      return ar-br || a.i-b.i;
+    }).map(function(x){ return x.f; });
     host.innerHTML = list.map(function(f,i){
-      return '<div class="navitem'+(i===0?' sel':'')+'" data-fid="'+esc(f.id)+'" style="flex-direction:column;align-items:stretch;gap:5px;padding:11px 15px;border-bottom:1px solid var(--border2);">'
-        + '<div style="display:flex;align-items:center;gap:8px;"><span class="badge '+sevClass(f.severity)+'">'+esc((f.severity||'').toUpperCase())+'</span><span class="mono muted" style="font-size:10.5px">'+esc(f.id)+'</span></div>'
+      var rejected = f.priorFeedback && f.priorFeedback.verdict==='reject';
+      var badge = rejected ? ' <span class="chip" style="font-size:10px;">you rejected this before</span>' : '';
+      return '<div class="navitem'+(i===0?' sel':'')+'" data-fid="'+esc(f.id)+'" style="flex-direction:column;align-items:stretch;gap:5px;padding:11px 15px;border-bottom:1px solid var(--border2);'+(rejected?'opacity:.6;':'')+'">'
+        + '<div style="display:flex;align-items:center;gap:8px;"><span class="badge '+sevClass(f.severity)+'">'+esc((f.severity||'').toUpperCase())+'</span><span class="mono muted" style="font-size:10.5px">'+esc(f.id)+'</span>'+badge+'</div>'
         + '<div style="font-weight:600;font-size:13px;">'+esc(f.title||'')+'</div>'
         + '<div class="mono muted" style="font-size:10.5px">'+esc(f.cwe||'')+' · '+esc(f.feature||'')+' · '+esc(f.route||'')+'</div></div>';
     }).join('');
@@ -1555,7 +1576,10 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
         renderFindingDetail(list.find(function(f){ return String(f.id)===el.getAttribute('data-fid'); }));
       });
     });
-    renderFindingDetail(list[0]);
+    // Preserve the current selection across a refresh (e.g. after submitting feedback) instead
+    // of always jumping back to the top of the list.
+    var prev = state.selectedFinding && list.find(function(f){ return f.id===state.selectedFinding.id; });
+    renderFindingDetail(prev || list[0]);
   }
 
   function clearFindingDetail(){
@@ -1567,6 +1591,22 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
     var rem=document.getElementById('findRemediation'); if(rem) rem.innerHTML='<span class="muted">—</span>';
     var val=document.getElementById('findValidation'); if(val) val.innerHTML='<span class="muted">—</span>';
     var vn=document.getElementById('findValidateNote'); if(vn) vn.textContent='';
+    var fb=document.getElementById('findFeedbackBanner'); if(fb) fb.innerHTML='';
+  }
+  // S3: honest accept/reject banner — never a percentage, just what happened and when.
+  function feedbackBannerHtml(f){
+    var own = f.feedback, prior = f.priorFeedback;
+    if(own){
+      return '<div class="card" style="padding:10px 14px;margin-bottom:14px;box-shadow:none;background:var(--bg);font-size:12.5px;">'
+        + (own.verdict==='reject' ? 'You marked this a false positive' : 'You confirmed this finding')
+        + ' on <span class="mono">'+esc(new Date(own.at).toLocaleString())+'</span>.</div>';
+    }
+    if(prior){
+      return '<div class="card" style="padding:10px 14px;margin-bottom:14px;box-shadow:none;background:var(--bg);font-size:12.5px;">'
+        + (prior.verdict==='reject' ? 'You previously marked this a false positive' : 'You previously confirmed this')
+        + ' on <span class="mono">'+esc(new Date(prior.at).toLocaleString())+'</span> — the rule still fired, so it is shown here again, not hidden.</div>';
+    }
+    return '';
   }
   function snippetHtml(s, evLine){
     if(!s || !s.lines || !s.lines.length) return '';
@@ -1612,7 +1652,23 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
     if(valEl) valEl.innerHTML = 'Detected deterministically by rule <span class="mono chip">'+esc(f.rule||'—')+'</span> · '+esc(f.assessment_mode||'static_confirmed')+'. No independent agent re-proof was performed — this is a static match over the knowledge graph, not a live-confirmed exploit. Use <b>Validate live</b> above to probe an authorised target.';
     var btn = document.getElementById('findValidateBtn');
     if(btn) btn.onclick = function(){ validateFinding(f.id); };
+    var fb=document.getElementById('findFeedbackBanner'); if(fb) fb.innerHTML = feedbackBannerHtml(f);
+    var accBtn=document.getElementById('findAcceptBtn'), rejBtn=document.getElementById('findRejectBtn');
+    if(accBtn) accBtn.disabled = !!(f.feedback && f.feedback.verdict==='accept');
+    if(rejBtn) rejBtn.disabled = !!(f.feedback && f.feedback.verdict==='reject');
   }
+
+  // S3: POST /api/projects/:id/feedback for the selected finding, then refresh findings + memory
+  // so the badge and the real accepted/rejected counts update without a page reload.
+  window.submitFindingFeedback = function(verdict){
+    var f = state.selectedFinding;
+    if(!f || !state.project) return;
+    post('/api/projects/'+state.project.id+'/feedback', { findingId: f.id, verdict: verdict }).then(function(){
+      return refreshFindings();
+    }).then(function(){
+      refreshMemory();
+    }).catch(function(){});
+  };
 
   function validateFinding(fid){
     if(!state.project) return;
@@ -1783,23 +1839,47 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
 
   // ---------- memory ----------
   function setText(id,v){ var e=document.getElementById(id); if(e) e.textContent=v; }
+  function learnedListHtml(learned){
+    return learned.map(function(p){
+      return '<div style="padding:13px 16px;border-bottom:1px solid var(--border2);"><div style="font-weight:600;font-size:13px;">'+esc(p.title||p.name||'pattern')+'</div>'
+        + (p.note ? '<div class="muted" style="font-size:12px;margin-top:4px;line-height:1.5;">'+esc(p.note)+'</div>' : '')+'</div>';
+    }).join('');
+  }
   function refreshMemory(){
     if(!state.project) return Promise.resolve();
     return get('/api/projects/'+state.project.id+'/memory').then(function(d){
       var s = d.stats || {};
       setText('memPatterns', typeof s.patterns==='number' ? s.patterns : 0);
       setText('memSignals', typeof s.feedbackSignals==='number' ? s.feedbackSignals : 0);
+      setText('memAccepted', typeof s.accepted==='number' ? s.accepted : 0);
+      setText('memRejected', typeof s.rejected==='number' ? s.rejected : 0);
       setText('memProjects', typeof s.projects==='number' ? s.projects : 0);
-      var learned = s.learned || d.learned || [];
+      var learned = d.learned || s.learned || [];
       var host = document.getElementById('memLearned');
-      if(host && learned.length){
-        host.innerHTML = learned.map(function(p){
-          return '<div style="padding:13px 16px;border-bottom:1px solid var(--border2);"><div style="font-weight:600;font-size:13px;">'+esc(p.title||p.name||'pattern')+'</div>'
-            + (p.note ? '<div class="muted" style="font-size:12px;margin-top:4px;line-height:1.5;">'+esc(p.note)+'</div>' : '')+'</div>';
-        }).join('');
+      if(host){
+        host.innerHTML = learned.length ? learnedListHtml(learned)
+          : '<div class="muted" style="padding:16px;text-align:center;font-size:12.5px;">Nothing learned yet. Patterns promoted from confirmed findings appear here.</div>';
       }
     }).catch(function(){});
   }
+  // S3: "Learned this cycle" — honest, session-scoped only (the `mined` array from the most
+  // recent scan response in THIS browser session), never persisted state of its own.
+  function renderLearnedCycle(mined){
+    var host = document.getElementById('memLearnedCycle'); if(!host) return;
+    if(!mined || !mined.length){
+      host.innerHTML = '<div class="muted" style="padding:16px;text-align:center;font-size:12.5px;">Run a scan to see newly learned patterns from this cycle.</div>';
+      return;
+    }
+    host.innerHTML = learnedListHtml(mined);
+  }
+  window.runConsolidate = function(){
+    if(!state.project) return;
+    var out = document.getElementById('memConsolidateResult'); if(out) out.textContent = 'Consolidating…';
+    post('/api/projects/'+state.project.id+'/memory/consolidate', {}).then(function(r){
+      if(out) out.textContent = 'learned-patterns: '+r.learnedPatterns.before+' → '+r.learnedPatterns.after+', feedback: '+r.feedback.before+' → '+r.feedback.after+'.';
+      refreshMemory();
+    }).catch(function(){ if(out) out.textContent = 'Consolidate failed.'; });
+  };
   window.runRecall = function(){
     if(!state.project) return;
     var inp = document.getElementById('memRecallInput'); var q = inp ? inp.value.trim() : '';

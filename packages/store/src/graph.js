@@ -112,11 +112,23 @@ function resolveSnapshotId(db, projectId, snapshotId) {
 // pattern actually shrinks/replaces rather than only ever growing. Callers wrap this in their own
 // BEGIN/COMMIT (writeRows for a single public write, or one big transaction around several calls
 // for the legacy import, so a multi-snapshot import is all-or-nothing).
+// Dedupe by id (row[0], since cols[0] is always 'id'), last-wins, BEFORE the bulk INSERT. The
+// old JSONL writer silently tolerated a caller passing duplicate ids in one write (e.g.
+// assess/report()'s "existing ∪ new" re-adding the same deterministic FINDING/VULN_CANDIDATE
+// nodes+edges on every scan); the UNIQUE(snapshot_id, id) PK here does not, so without this a
+// second scan on the same project 500s. This restores JSONL-equivalent tolerance for every
+// caller, in one place, without touching the full-replace-per-snapshot semantics.
+function dedupeById(rows) {
+  const byId = new Map();
+  for (const row of rows) byId.set(row[0], row);
+  return [...byId.values()];
+}
+
 function insertRows(db, table, cols, sid, rows) {
   db.prepare(`DELETE FROM ${table} WHERE snapshot_id = ?`).run(sid);
   const placeholders = cols.map(() => '?').join(',');
   const ins = db.prepare(`INSERT INTO ${table} (snapshot_id, ${cols.join(',')}) VALUES (?, ${placeholders})`);
-  for (const row of rows) ins.run(sid, ...row);
+  for (const row of dedupeById(rows)) ins.run(sid, ...row);
 }
 
 // One transaction around a single insertRows call, plus the current-snapshot meta update when

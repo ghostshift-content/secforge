@@ -8,6 +8,8 @@ import { Store, record, recall, learn, crossProjectRecall, stats } from './index
 const root = await fs.mkdtemp(path.join(os.tmpdir(), 'secforge-memory-demo-'));
 const store = new Store(root);
 
+await fs.mkdir(path.join(root, 'proj-a'), { recursive: true });
+await fs.mkdir(path.join(root, 'proj-b'), { recursive: true });
 const projectA = await store.openProject({ sourceRoot: path.join(root, 'proj-a') });
 const projectB = await store.openProject({ sourceRoot: path.join(root, 'proj-b') });
 
@@ -26,10 +28,13 @@ const cross = await crossProjectRecall(store, 'ssrf');
 assert.equal(cross.length, 1, 'crossProjectRecall should find the hit in project B');
 assert.equal(cross[0].project, projectB.id);
 
-// stats() counts correctly
+// stats() counts correctly — feedbackSignals/accepted/rejected count ONLY real
+// 'finding.verdict' entries, never learn()'s 'learned' mirror entries or ad-hoc record() shapes.
 const statsA = await stats(store, projectA.id);
 assert.equal(statsA.patterns, 1, 'projectA should have 1 learned-pattern line');
-assert.equal(statsA.feedbackSignals, 2, 'projectA should have 2 feedback lines (learn + record)');
+assert.equal(statsA.feedbackSignals, 0, 'no accept/reject verdicts recorded yet — not every feedback.jsonl line');
+assert.equal(statsA.accepted, 0);
+assert.equal(statsA.rejected, 0);
 assert.equal(statsA.projects, 2, 'store has 2 projects total');
 
 // bad kind rejected

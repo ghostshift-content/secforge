@@ -133,6 +133,44 @@ describe('computeCoverage()', () => {
   });
 });
 
+// Regression: a SECOND runAssessment() on the SAME project/snapshot (no re-map in between) used
+// to 500 with "UNIQUE constraint failed: edges.snapshot_id, edges.id" — report() re-adds the
+// same deterministic FINDING/VULN_CANDIDATE nodes+edges every scan (candidate/finding numbering
+// restarts each run, so the ids collide with what the first scan already persisted into the
+// SAME current snapshot). Fixed at the store layer (packages/store/src/graph.js dedupes by id);
+// this guards the actual caller-visible symptom: two scans in a row must both succeed.
+describe('runAssessment(): two scans in a row on the same project never throw (P0 re-scan regression)', () => {
+  let tmpRoot, store, pid;
+
+  before(async () => {
+    tmpRoot = path.join(os.tmpdir(), 'sf-rescan-' + crypto.randomBytes(4).toString('hex'));
+    store = new Store(tmpRoot);
+    await fs.mkdir(path.join(tmpRoot, 'src'), { recursive: true });
+    const project = await store.openProject({ sourceRoot: path.join(tmpRoot, 'src'), name: 'RESCAN' });
+    pid = project.id;
+    const snapshotId = 'snap-rescan';
+    await writeNodes(store, pid, [
+      feature('f:orders', 'orders'), endpoint('ep', 'GET', '/orders/:id'), authNode('ac:authn', 'authentication'),
+    ], { snapshotId });
+    await writeEdges(store, pid, [
+      edge('EXPOSES', 'f:orders', 'ep'), edge('AUTHENTICATED_BY', 'ep', 'ac:authn'),
+    ], { snapshotId });
+  });
+
+  after(async () => { await fs.rm(tmpRoot, { recursive: true, force: true }); });
+
+  test('scan, then scan AGAIN on the unchanged graph — both succeed, findings stable', async () => {
+    const first = await runAssessment({ store, projectId: pid, scope: {}, engine: 'rules' });
+    assert.equal(first.findings.length, 1);
+    assert.equal(first.findings[0].rule, 'ACX-idor-no-owner-check');
+
+    await assert.doesNotReject(runAssessment({ store, projectId: pid, scope: {}, engine: 'rules' }));
+    const second = await runAssessment({ store, projectId: pid, scope: {}, engine: 'rules' });
+    assert.equal(second.findings.length, 1, 'findings are stable across re-scans, not duplicated');
+    assert.equal(second.findings[0].rule, 'ACX-idor-no-owner-check');
+  });
+});
+
 describe('severityFromScore() — CVSS v3.1 bands', () => {
   test('band boundaries', () => {
     assert.equal(severityFromScore(9.0), 'critical');

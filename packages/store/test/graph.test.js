@@ -133,6 +133,37 @@ describe('graph: validation runs before any delete', () => {
   });
 });
 
+// Regression: assess/report() re-adds the same deterministic FINDING/VULN_CANDIDATE nodes+edges
+// on every scan (same ids, since candidate/finding numbering restarts each run) — the OLD JSONL
+// writer tolerated a caller passing duplicate ids in one write; the SQLite UNIQUE(snapshot_id,id)
+// PK does not, so a bulk INSERT containing two rows with the same id must not throw. Without the
+// dedupe-by-id fix in insertRows, this test throws "UNIQUE constraint failed: edges.snapshot_id,
+// edges.id" (and the equivalent for nodes).
+describe('graph: duplicate ids within ONE write are tolerated (last-wins), matching the old JSONL writer', () => {
+  test('writeNodes with two rows of the SAME id → no throw; readGraph returns ONE (the last)', async () => {
+    const { id: pid } = await freshProject('dup-nodes');
+    const sid = 'snap-1';
+    await assert.doesNotReject(
+      writeNodes(store, pid, [n('a', { name: 'first' }), n('b'), n('a', { name: 'second' })], { snapshotId: sid }),
+    );
+    const graph = await readGraph(store, pid, sid);
+    assert.deepEqual(graph.nodes.map((x) => x.id).sort(), ['a', 'b']);
+    assert.equal(graph.nodes.find((x) => x.id === 'a').name, 'second', 'last row for a duplicate id wins');
+  });
+
+  test('writeEdges with two rows of the SAME id → no throw; readGraph returns ONE (the last)', async () => {
+    const { id: pid } = await freshProject('dup-edges');
+    const sid = 'snap-1';
+    await writeNodes(store, pid, [n('a'), n('b'), n('c')], { snapshotId: sid });
+    await assert.doesNotReject(
+      writeEdges(store, pid, [e('e1', 'a', 'b'), e('e1', 'a', 'c')], { snapshotId: sid }),
+    );
+    const graph = await readGraph(store, pid, sid);
+    assert.equal(graph.edges.length, 1);
+    assert.equal(graph.edges[0].dst, 'c', 'last row for a duplicate id wins');
+  });
+});
+
 describe('graph: multi-snapshot isolation', () => {
   test('two snapshots keep separate rows; current tracks whichever was written last explicitly', async () => {
     const { id: pid } = await freshProject('multi');
