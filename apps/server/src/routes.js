@@ -12,7 +12,7 @@ import { FAMILIES, loadCanonicalCards, cweCatalog, importCustomFolder } from '@s
 import { mapProject } from '@secforge/map';
 import { learn, recall, crossProjectRecall, stats, listLearned, recordVerdict, annotatePriorFeedback, minePatterns, consolidate } from '@secforge/memory';
 import { registerTarget, getTarget, validateFinding } from '@secforge/env';
-import { listEngines, checkConnection } from '@secforge/adapters';
+import { listEngines, checkConnection, EFFORT_BUDGETS } from '@secforge/adapters';
 import { SCOPE_KINDS, RUN_METHODS } from '@secforge/schemas';
 
 const mgr = new SessionManager();
@@ -27,11 +27,25 @@ const json = (res, code, body) => {
   res.end(JSON.stringify(body));
 };
 
+// PHASE4 §4: the browser must never receive a decrypted authHeader/extraHeaders — not on a read
+// (GET) and not echoed back from a write (POST) either, so response logs/proxies/browser history
+// never carry the secret. Both routes below return exactly this shape.
+function redactTarget(t) {
+  if (!t) return null;
+  return {
+    baseUrl: t.baseUrl, scope: t.scope, authorized: t.authorized, updatedAt: t.updatedAt,
+    credentialsSet: !!(t.authHeader || (t.extraHeaders && Object.keys(t.extraHeaders).length)),
+  };
+}
+
 // Only ever run/record a KNOWN engine id (a string). Unknown/non-string → 'rules'.
 async function validEngineId(id) {
   if (typeof id !== 'string') return 'rules';
   try { return (await listEngines()).some((e) => e.id === id) ? id : 'rules'; } catch { return 'rules'; }
 }
+// PHASE4 §2.2: only ever run/record a KNOWN effort level; anything else (missing, typo'd,
+// tampered) silently coerces to the documented default rather than erroring the whole scan.
+export function validEffort(e) { return Object.prototype.hasOwnProperty.call(EFFORT_BUDGETS, e) ? e : 'medium'; }
 // Validate the run scope against the schema's frozen sets; coerce anything invalid to safe defaults.
 // Also normalise scope.patterns to family prefixes: a family stays, a CWE id maps to the families
 // that carry it, an unknown token (e.g. a custom-set name) is dropped. If nothing resolves, drop
@@ -121,7 +135,9 @@ export async function handleApi(req, res, url) {
           cross: q ? await crossProjectRecall(store, q) : [],
         }), true;
       }
-      if (sub === 'env') return json(res, 200, { target: await getTarget(store, pid) }), true;
+      // PHASE4 §4: never send the decrypted authHeader/extraHeaders to the browser on a read —
+      // only what the UI needs to render state (baseUrl/scope/authorized) plus a boolean.
+      if (sub === 'env') return json(res, 200, { target: redactTarget(await getTarget(store, pid)) }), true;
       // GET /api/projects/:id/inventory → the full heuristic inventory.jsonl from the current
       // snapshot, grouped by kind. Same graph/current.json → snapshot resolution as
       // packages/assess/src/decorate.js's loadManifest() — not a new pointer mechanism.
@@ -173,7 +189,11 @@ export async function handleApi(req, res, url) {
       const pid = parts[1], sub = parts[2];
       if (sub === 'memory') return json(res, 200, await learn(store, pid, body)), true;
       if (sub === 'env') {
-        try { return json(res, 200, await registerTarget(store, pid, body)), true; } // P1-2: bad URL → 400
+        // Redacted the same fields as GET's target (§4) — the client just sent this value, but
+        // the response must not echo it back over the wire (response logs/proxies/browser
+        // history). Stays a flat object (unlike GET's {target:...}) — index.html's
+        // registerEnvTarget()/applyEnvTarget() already consume the POST response unwrapped.
+        try { return json(res, 200, redactTarget(await registerTarget(store, pid, body))), true; } // P1-2: bad URL → 400
         catch (e) { return json(res, 400, { error: e.message }), true; }
       }
     }
@@ -238,13 +258,14 @@ export async function handleApi(req, res, url) {
             else reason = conn.connected ? 'analysis not wired' : 'not connected';
           }
           const model = (engine === requested && typeof body.model === 'string') ? body.model : null;
+          const effort = validEffort(body.effort);                          // PHASE4 §2.2/§5: optional, defaults to 'medium'
           const scope = normaliseScope(body.scope);                         // input validation vs SCOPE_KINDS/RUN_METHODS
           const cur = await mgr.status(project, sid);
           if (cur && cur.status === 'created') await mgr.start(project, sid); // N3: drive the FSM so status is real + pause works
           await mgr.configureRun(project, sid, scope);
-          await mgr.recordEngine(project, sid, { provider: engine, model, requested, reason }); // N4 + AI-2: never record an engine that didn't run
+          await mgr.recordEngine(project, sid, { provider: engine, model, requested, reason, effort }); // N4 + AI-2: never record an engine that didn't run
           await store.clearFindings(project);                               // N5: a re-scan replaces findings; no stale results survive
-          const result = await runAssessment({ store, projectId: project, scope, engine, model });
+          const result = await runAssessment({ store, projectId: project, scope, engine, model, effort });
           // Phase 3: re-surface (never hide) any finding matching a prior accept/reject verdict,
           // then mine this scan's validated findings into the learned-patterns catalog. Both are
           // additive to the existing scan response shape.
@@ -252,7 +273,7 @@ export async function handleApi(req, res, url) {
           const flaggedFindings = result.findings.filter((f) => f.priorFeedback);
           for (const f of flaggedFindings) await store.writeFinding(project, f); // persist the badge so GET /findings shows it too
           const mined = await minePatterns(store, project, result.findings);
-          return json(res, 200, { ...result, modelUsed: model, requested, reason, mined, priorFeedbackFlagged }), true; // AI-5: report what actually ran
+          return json(res, 200, { ...result, modelUsed: model, effort, requested, reason, mined, priorFeedbackFlagged }), true; // AI-5: report what actually ran
         } finally {
           activeScans.delete(project);
         }

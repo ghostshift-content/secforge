@@ -31,7 +31,7 @@ export function planJobs(scope = {}) {
 
 function slugFor(candidate) { return `${candidate.family}-${candidate.title}`; }
 
-function findingOf(candidate, n, engineUsed, modelUsed = null) {
+function findingOf(candidate, n, engineUsed, modelUsed = null, effort = 'medium') {
   return {
     id: ID.finding(n, slugFor(candidate)),
     family: candidate.family,
@@ -44,7 +44,7 @@ function findingOf(candidate, n, engineUsed, modelUsed = null) {
     route: candidate.route,
     evidence: candidate.evidence,
     rule: candidate.rule,
-    engine: { provider: engineUsed, model: modelUsed || null }, // AI-4: same {provider,model} shape as the session record
+    engine: { provider: engineUsed, model: modelUsed || null, effort }, // AI-4 + PHASE4 §2.2: same shape as the session record
     verified_by: candidate.llmNominated ? 'llm-nominated+rule-confirmed' : 'rule', // additive, auditability only
 
     lifecycle: 'terminal',
@@ -60,7 +60,10 @@ function findingOf(candidate, n, engineUsed, modelUsed = null) {
 // top of it, and any adapter failure degrades silently to "no extra candidates".
 const LLM_FAMILIES = new Set(['ACX', 'QIX', 'SX']); // access-control / injection / SSRF only
 const FAMILY_CWE = Object.fromEntries(FAMILIES.map((f) => [f.prefix, f.cwe[0]]));
-const LLM_CAP = 10;
+// PHASE4 §2.2: effort also bounds how many extra LLM-nominated candidates the assist step may
+// surface — the second real, honest effect (alongside the adapters' token-budget scaling).
+const LLM_CAPS = { low: 5, medium: 10, high: 15, max: 20 };
+function llmCap(effort) { return LLM_CAPS[effort] || LLM_CAPS.medium; }
 const LLM_TIMEOUT_MS = Number(process.env.SECFORGE_LLM_TIMEOUT_MS) || 180000; // real CLI models (codex exec) need minutes, not seconds
 const LLM_MANY_FEATURES = 8; // above this, one ask() over a compact summary instead of per-feature
 
@@ -161,7 +164,7 @@ function parseLlmCandidates(text, routeIndex) {
 }
 
 // Run the bounded LLM-assist HUNT step. Never throws; returns [] on any adapter trouble.
-async function llmAssist(graph, engine, existingCandidates, model) {
+async function llmAssist(graph, engine, existingCandidates, model, effort = 'medium') {
   if (!engine || engine === 'rules') return [];
 
   let adapter;
@@ -174,12 +177,13 @@ async function llmAssist(graph, engine, existingCandidates, model) {
   const { summaries, routeIndex } = summarizeFeatures(graph);
   if (!summaries.length) return [];
 
+  const cap = llmCap(effort);
   const seen = new Set(existingCandidates.map(dedupeKey));
   const extra = [];
   const absorb = (text) => {
     for (const c of parseLlmCandidates(text, routeIndex)) {
       const key = dedupeKey(c);
-      if (seen.has(key) || extra.length >= LLM_CAP) continue;
+      if (seen.has(key) || extra.length >= cap) continue;
       seen.add(key);
       extra.push(c);
     }
@@ -188,8 +192,8 @@ async function llmAssist(graph, engine, existingCandidates, model) {
   try {
     const batches = summaries.length > LLM_MANY_FEATURES ? [summaries] : summaries.map((s) => [s]);
     for (const batch of batches) {
-      if (extra.length >= LLM_CAP) break;
-      const text = await withTimeout(adapter.ask(buildPrompt(batch), { model }), LLM_TIMEOUT_MS);
+      if (extra.length >= cap) break;
+      const text = await withTimeout(adapter.ask(buildPrompt(batch), { model, effort }), LLM_TIMEOUT_MS);
       absorb(text);
     }
   } catch {
@@ -210,7 +214,7 @@ async function report(store, projectId, candidates, graph, engineUsed, ctx = {})
   let n = 0;
   for (const candidate of candidates) {
     n += 1;
-    const base = findingOf(candidate, n, engineUsed, ctx.model);
+    const base = findingOf(candidate, n, engineUsed, ctx.model, ctx.effort);
     const snippet = buildSnippet(ctx.sourceRoot, ctx.manifest, base.evidence);
     const finding = decorateFinding(base, { snippet });
     await store.writeFinding(projectId, finding);
@@ -253,7 +257,7 @@ async function report(store, projectId, candidates, graph, engineUsed, ctx = {})
  * to deterministic-only, it never fails the run.
  * @returns {Promise<{jobs:number, candidates:Array, findings:Array, coverage:object|null, engineUsed:string}>}
  */
-export async function runAssessment({ store, projectId, scope = {}, engine = 'rules', model = null, onEvent } = {}) {
+export async function runAssessment({ store, projectId, scope = {}, engine = 'rules', model = null, effort = 'medium', onEvent } = {}) {
   const jobs = planJobs(scope);
   onEvent?.({ stage: 'framer', status: 'done', jobs: jobs.length });
 
@@ -261,7 +265,7 @@ export async function runAssessment({ store, projectId, scope = {}, engine = 'ru
   for (const job of jobs) onEvent?.({ stage: 'hunter', job: job.id, feature: job.feature, engine });
 
   const candidates = analyze(graph, { scope, patterns: scope.patterns });
-  const llmExtra = await llmAssist(graph, engine, candidates, model).catch(() => []);
+  const llmExtra = await llmAssist(graph, engine, candidates, model, effort).catch(() => []);
   let n = candidates.length;
   const allCandidates = candidates.concat(
     llmExtra.map((c) => ({ ...c, id: ID.candidate(++n) })),
@@ -292,7 +296,7 @@ export async function runAssessment({ store, projectId, scope = {}, engine = 'ru
   let coverage = null;
   if (store && projectId) {
     const [sourceRoot, manifest] = await Promise.all([readSourceRoot(store, projectId), loadManifest(store, projectId)]);
-    findings = await report(store, projectId, validated, graph, engine, { sourceRoot, manifest, model });
+    findings = await report(store, projectId, validated, graph, engine, { sourceRoot, manifest, model, effort });
     coverage = await computeCoverage(store, projectId);
   }
   onEvent?.({ stage: 'reporter', promoted: findings.length });

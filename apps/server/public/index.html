@@ -210,7 +210,7 @@
     <div style="flex-grow:1"></div>
     <button id="walkBtn" class="walkbtn" onclick="window.location.href='/demo.html'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l14 8-14 8z"/></svg>Walkthrough</button>
     <div id="live-badge" class="enginepill" style="background:#F0FDF4;border-color:#BBF7D0;" title="backend connection"><span class="sd" style="background:var(--ok)"></span><span class="mono" style="font-size:12px;color:#166534;font-weight:600;">live</span></div>
-    <div class="enginepill"><span class="dot"></span><select id="engineSelectTop" class="mono" title="Engine for this session" onchange="onEngineChange(this)" style="border:0;background:transparent;font-size:12px;color:var(--accent-ink);font-weight:600;outline:none;cursor:pointer;appearance:auto;font-family:inherit;"><option selected>Claude · opus · high</option></select></div>
+    <div class="enginepill"><span class="dot"></span><select id="engineSelectTop" class="mono" title="Engine for this session" onchange="onEngineChange(this)" style="border:0;background:transparent;font-size:12px;color:var(--accent-ink);font-weight:600;outline:none;cursor:pointer;appearance:auto;font-family:inherit;"><option selected>Loading engines…</option></select></div>
     <div class="avatar"></div>
   </div>
 
@@ -468,7 +468,7 @@
         <!-- engine -->
         <div class="cfg-sec">
           <div class="kicker" style="margin-bottom:8px;">Engine</div>
-          <div class="enginepill" style="display:inline-flex;"><span class="dot"></span><select id="engineSelectAssess" class="mono" title="Engine for this run" onchange="onEngineChange(this)" style="border:0;background:transparent;font-size:12px;color:var(--accent-ink);font-weight:600;outline:none;cursor:pointer;appearance:auto;font-family:inherit;"><option selected>Claude · opus · high</option></select></div>
+          <div class="enginepill" style="display:inline-flex;"><span class="dot"></span><select id="engineSelectAssess" class="mono" title="Engine for this run" onchange="onEngineChange(this)" style="border:0;background:transparent;font-size:12px;color:var(--accent-ink);font-weight:600;outline:none;cursor:pointer;appearance:auto;font-family:inherit;"><option selected>Loading engines…</option></select></div>
         </div>
 
         <div style="padding:14px 18px;margin-top:auto;border-top:1px solid var(--border2);position:sticky;bottom:0;background:var(--panel);">
@@ -679,8 +679,9 @@
             <div style="display:flex;gap:8px;"><input id="envUser" type="text" autocomplete="off" placeholder="username" style="flex:1;height:32px;border:1px solid var(--border);border-radius:6px;padding:0 10px;font-family:inherit;font-size:12.5px;background:var(--panel);color:var(--ink);"><input id="envPass" type="password" autocomplete="new-password" placeholder="password" style="flex:1;height:32px;border:1px solid var(--border);border-radius:6px;padding:0 10px;font-family:inherit;font-size:12.5px;background:var(--panel);color:var(--ink);"></div>
             <input id="envToken" type="password" autocomplete="new-password" placeholder="bearer token (overrides username/password)" style="height:32px;border:1px solid var(--border);border-radius:6px;padding:0 10px;font-family:inherit;font-size:12.5px;background:var(--panel);color:var(--ink);">
             <div id="envHeaders" style="display:flex;flex-direction:column;gap:6px;"></div>
+            <div id="envCredMsg" class="muted" style="font-size:11px;"></div>
             <button class="btn" style="align-self:flex-start;font-size:12px;padding:4px 10px;" onclick="addEnvHeader()">+ Add header</button>
-            <div class="muted" style="font-size:11px;line-height:1.45;background:#FFFBEB;border:1px solid #FDE68A;border-radius:6px;padding:7px 9px;color:#92400E;">⚠ Credentials are stored <b>in plaintext</b> in the local project store (~/.secforge). Use throwaway/staging credentials, not production secrets.</div>
+            <div class="muted" style="font-size:11px;line-height:1.45;background:#FFFBEB;border:1px solid #FDE68A;border-radius:6px;padding:7px 9px;color:#92400E;">⚠ Credentials are <b>encrypted at rest</b> (AES-256-GCM) against casual disclosure of the data files alone — a backup, a copied project folder, a support bundle. They are <b>not</b> protected from anyone who can already read files as your local user account, root, or a memory dump of this process. Use throwaway/staging credentials, not production secrets.</div>
             <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink2);cursor:pointer;"><input id="envAuthorise" type="checkbox" style="width:15px;height:15px;">I am authorised to test this target</label>
             <div style="display:flex;gap:8px;align-items:center;"><button class="btn-primary" onclick="registerEnvTarget()">Register target</button><span id="envSaveMsg" class="muted" style="font-size:11.5px;"></span></div>
           </div>
@@ -916,7 +917,7 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
 
   var state = {
     projects: [], project: null, session: null,
-    engines: [], engine: null, model: null,
+    engines: [], engine: null, model: null, effort: 'medium',
     features: [], selectedFeature: null,
     graph: null, findings: [], coverage: null,
     findingFilter: 'all', selectedFinding: null,
@@ -937,17 +938,26 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
   // ---------- engine / provider / model picker (single authoritative picker) ----------
   var SEL_IDS = ['engineSelectTop','engineSelectAssess'];
   function engineById(id){ return state.engines.find(function(e){ return e.id===id; }) || null; }
+  var EFFORT_LEVELS = ['low','medium','high','max'];
   function ensureModelUI(sel){
     if(sel._sfInit) return; sel._sfInit = true;
     var m = document.createElement('select'); m.className = 'sf-model';
     m.style.cssText = 'height:26px;border:1px solid var(--border);border-radius:6px;background:var(--panel);font-size:12px;margin-left:6px;color:var(--ink);max-width:170px;font-family:inherit;';
+    // Effort: a recorded, best-effort knob. Real effect = token-budget/candidate-cap scaling for
+    // the LLM-assist step; inert (recorded only) for the rules engine and unwired CLI adapters —
+    // see the badge/title text paintPicker() sets below. Never implies a universal behavior switch.
+    var eff = document.createElement('select'); eff.className = 'sf-effort';
+    eff.style.cssText = 'height:26px;border:1px solid var(--border);border-radius:6px;background:var(--panel);font-size:11px;margin-left:6px;color:var(--ink);font-family:inherit;';
+    EFFORT_LEVELS.forEach(function(lvl){ var o=document.createElement('option'); o.value=lvl; o.textContent=lvl; eff.appendChild(o); });
     var b = document.createElement('span'); b.className = 'sf-conn';
     b.style.cssText = 'font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:20px;margin-left:6px;white-space:nowrap;';
-    sel.insertAdjacentElement('afterend', m); m.insertAdjacentElement('afterend', b);
-    sel._sfModel = m; sel._sfBadge = b;
+    sel.insertAdjacentElement('afterend', m); m.insertAdjacentElement('afterend', eff); eff.insertAdjacentElement('afterend', b);
+    sel._sfModel = m; sel._sfEffort = eff; sel._sfBadge = b;
     m.addEventListener('change', function(){ state.model = m.value; syncModels(m.value); });
+    eff.addEventListener('change', function(){ state.effort = eff.value; syncEffort(eff.value); });
   }
   function syncModels(v){ SEL_IDS.forEach(function(id){ var s=document.getElementById(id); if(s && s._sfModel && s._sfModel.value!==v) s._sfModel.value=v; }); }
+  function syncEffort(v){ SEL_IDS.forEach(function(id){ var s=document.getElementById(id); if(s && s._sfEffort && s._sfEffort.value!==v) s._sfEffort.value=v; }); }
   function paintPicker(){
     var e = engineById(state.engine);
     SEL_IDS.forEach(function(id){
@@ -963,6 +973,17 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
       m.disabled = !usable;
       if(usable){ if(state.model==null || !models.includes(state.model)) state.model = models[0]||null; m.value = state.model||''; }
       else { state.model = null; }
+      // Effort is recorded on every run/finding regardless of engine (reproducibility), but it
+      // only ever changes behavior for a real, connected LLM adapter — so it is disabled/badged
+      // exactly like the model select whenever the current engine can't act on it.
+      var eff = sel._sfEffort;
+      if(eff){
+        eff.value = state.effort || 'medium';
+        eff.disabled = !usable;
+        eff.title = usable
+          ? 'Effort — higher effort widens the LLM-assist search: more candidates for any connected model, and a larger per-call token budget on the HTTP providers (OpenAI/Anthropic/Ollama). Recorded either way, for reproducibility.'
+          : 'Effort is recorded for reproducibility but has no effect here — '+(e.id==='rules' ? 'the rules engine is deterministic.' : 'this provider’s analysis is not wired to act on it.');
+      }
       if(e.id==='rules'){ b.textContent='No AI · deterministic'; b.style.background='var(--border2)'; b.style.color='var(--ink2)'; b.style.border='1px solid var(--border)'; b.title=''; }
       else if(e.connected===false){ b.textContent='Not connected'; b.style.background='#FFFBEB'; b.style.color='#92400E'; b.style.border='1px solid #FDE68A'; b.title=e.howToConnect||''; }
       else if(e.analysis!=='llm'){ b.textContent='Connected · analysis not wired'; b.style.background='#FFFBEB'; b.style.color='#92400E'; b.style.border='1px solid #FDE68A'; b.title='Signed in, but this provider’s analysis is not wired yet — a run uses the deterministic rules engine.'; }
@@ -1465,7 +1486,7 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
     var hdr = document.getElementById('assessRunHeader');
     if(hdr) hdr.innerHTML = '<span class="sd" style="background:var(--accent);width:9px;height:9px;"></span><div><div style="font-weight:600;font-size:13.5px;">Running…</div><div class="mono muted" style="font-size:11px;">streaming pipeline progress</div></div>';
     startAssessStream(scope);
-    post('/api/sessions/'+state.session.sessionId+'/scan?project='+state.project.id, { scope: scope, engine: state.engine, model: state.model })
+    post('/api/sessions/'+state.session.sessionId+'/scan?project='+state.project.id, { scope: scope, engine: state.engine, model: state.model, effort: state.effort })
       .then(function(res){
         renderCandidates(res.candidates);
         updatePipeline(res);
@@ -1670,23 +1691,50 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
     }).catch(function(){});
   };
 
+  // Honest dynamic-validation resolution (PHASE4 §3): there is no PoC execution environment of
+  // any kind — "Validate live" is a single guarded, read-only GET against a target the project
+  // owner explicitly authorised. This first
+  // call is always a dry-run: it tells us whether the target is authorised and, if so, the exact
+  // URL a real check would hit, WITHOUT ever making the network call itself.
   function validateFinding(fid){
     if(!state.project) return;
     var slot = document.getElementById('findValidateNote');
-    if(slot) slot.textContent = 'Validating…';
+    if(slot) slot.textContent = 'Checking…';
     post('/api/findings/'+encodeURIComponent(fid)+'/validate?project='+encodeURIComponent(state.project.id), { dryRun: true }).then(function(res){
       if(!slot) return;
       var unauth = res.ran===false && /not authoriz|static-only|not registered|no target/i.test(res.reason||'');
       if(unauth){
         // N-10: always render a visible verdict here; N-5: offer (not force) the route to Env.
         slot.innerHTML = '<span style="color:var(--med);font-weight:600;">Static-only — no authorised target.</span> <a href="#" onclick="go(\'env\');return false;" style="color:var(--accent);font-weight:600;">Register one in Env →</a>';
+      } else if(res.ran===false && res.wouldGet){
+        // Authorised target found — offer the real, one-GET authorized reachability check, but
+        // never fire it without an explicit second click (a UX gate, not a new authorization
+        // check: the target is already authorised).
+        slot.innerHTML = 'Authorised target. This sends one real read-only GET to <span class="mono">'+esc(res.wouldGet)+'</span>. '
+          + '<a href="#" onclick="confirmValidateFinding(\''+esc(fid).replace(/'/g,"\\'")+'\');return false;" style="color:var(--accent);font-weight:600;">Run authorized reachability check →</a>';
       } else if(res.ran===false){
-        slot.textContent = 'Static-only — '+(res.reason||'not run')+(res.wouldGet?' · would GET '+res.wouldGet:'');
+        slot.textContent = 'Static-only — '+(res.reason||'not run');
       } else {
-        slot.textContent = 'Live validation ran — '+(res.verdict||'')+(res.status?' · HTTP '+res.status:'');
+        slot.textContent = 'Authorized reachability check ran — '+(res.verdict||'')+(res.status?' · HTTP '+res.status:'');
       }
     }).catch(function(){ if(slot) slot.textContent='Validation failed.'; });
   }
+
+  // The confirmed, real (non-dry-run) call — only ever reachable via the explicit link above.
+  window.confirmValidateFinding = function(fid){
+    if(!state.project) return;
+    var slot = document.getElementById('findValidateNote');
+    if(slot) slot.textContent = 'Running authorized reachability check…';
+    post('/api/findings/'+encodeURIComponent(fid)+'/validate?project='+encodeURIComponent(state.project.id), { dryRun: false }).then(function(res){
+      if(!slot) return;
+      if(res.ran===false){
+        // Honest — a guard (SSRF block, out-of-scope route, etc.) refused the real call.
+        slot.textContent = 'Not run — '+(res.reason||'refused by a guard');
+      } else {
+        slot.textContent = 'Authorized reachability check ran — '+(res.verdict||'')+(res.status?' · HTTP '+res.status:'')+(res.error?' · '+res.error:'');
+      }
+    }).catch(function(){ if(slot) slot.textContent='Validation failed.'; });
+  };
 
   // S2-3: export the selected finding as a HackerOne-style markdown report (local download).
   window.exportFinding = function(){
@@ -1902,9 +1950,13 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
     if(u) u.value = t ? (t.baseUrl||'') : '';
     if(s) s.value = t ? (t.scope||[]).join(', ') : '';
     if(a) a.checked = !!(t && t.authorized);
-    // Hydrate non-secret extra headers; never echo stored secrets (authHeader) back into the DOM.
+    // GET /env never returns the decrypted authHeader/extraHeaders (PHASE4 §4) — only a
+    // credentialsSet boolean. Right after a save, the POST response still echoes back what was
+    // just typed (not a stored-secret leak, just an echo), so this hydrates rows then too.
     var hh=document.getElementById('envHeaders');
     if(hh){ hh.innerHTML=''; var ex=(t&&t.extraHeaders)||{}; Object.keys(ex).forEach(function(k){ addEnvHeader(k, ex[k]); }); }
+    var credMsg=document.getElementById('envCredMsg');
+    if(credMsg) credMsg.textContent = (t && t.credentialsSet) ? 'Credentials saved (hidden — encrypted at rest).' : '';
     var st=document.getElementById('envAuthState');
     if(st){
       var authed = !!(t && t.authorized);

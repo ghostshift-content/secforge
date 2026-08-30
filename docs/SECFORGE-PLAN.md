@@ -49,7 +49,7 @@ rehydrated from that state.
 | **Report / finding** rendering | `StaticCodeReview/report-writing-skill` | Frozen-record → HackerOne / Cobalt / generic report, format linters | Feed the Findings tab |
 | **Memory / self-learning** | *SecForge (new)* | Files + SQLite store as source of truth; optional embedded vector recall (`sqlite-vec`); accept/reject learning weights | Build over the store |
 | **Multi-agent fan-out** | *SecForge (new)* | Own scheduler over Claude Agent SDK subagents; bounded concurrency; optional scratch worktrees | Build the orchestrator for per-feature × per-pattern fan-out |
-| **Sandboxed untrusted-code exec** | *SecForge (new)* | Self-contained sandbox (container or WASM), no host FS, for running PoCs | Build for the test-environment validation step |
+| **Dynamic validation** | *SecForge (new)* | A single guarded, authorized, read-only GET against a registered target (SSRF-blocked, 5s timeout) — no PoC code execution, no sandbox (see Phase 4 gap analysis, `docs/PHASE4-ENV-PROVIDER-DESIGN.md §3`) | Build for the test-environment validation step |
 
 **SecForge is therefore an integration + shell project, not a greenfield build.** The new
 code is: the unified project store, the session shell, the engine adapters (multi-provider),
@@ -121,7 +121,7 @@ secforge ls | doctor | ask     # inherited codengram-style commands
 ┌───────────────┴───────────────────────────────────────────────────────┐
 │  SUPPORTING SERVICES · SecForge's own code, built over the store      │
 │  memory/recall (sqlite-vec) · orchestrator (fan-out) · model router   │
-│  (routing + learning weights) · sandbox (PoC validation)              │
+│  (routing + learning weights) · env (guarded read-only GET validation)│
 └───────────────────────────────────────────────────────────────────────┘
                 │
 ┌───────────────┴───────────────────────────────────────────────────────┐
@@ -249,8 +249,15 @@ Two entry modes over the *same* map:
 - Register a target: base URL, auth, headers, scope, **explicit authorization flag**.
 - Default mode is **STATIC_ONLY**; runtime/dynamic validation stays disabled until the
   project records authorization (StaticCodeReview already gates exactly this).
-- After a candidate is confirmed statically, an optional **dynamic-validation step** exercises
-  it against the live env; PoCs run inside a **self-contained sandbox** (container or WASM, no host FS).
+- After a candidate is confirmed statically, an optional **authorized reachability check**
+  exercises it against the live env: **a single guarded, read-only GET** — SSRF-blocked
+  (loopback/cloud-metadata/`.internal`), 5s timeout, `redirect:'manual'`. There is no PoC code
+  execution and no sandbox (container or WASM) of any kind; see the honest gap analysis and
+  scoping decision in `docs/PHASE4-ENV-PROVIDER-DESIGN.md §3`. A bounded probe that does more
+  than one read (a scoped payload, a response-body check) is a possible v2, not built.
+- authHeader/extraHeaders on a registered target are encrypted at rest (AES-256-GCM,
+  machine-local key) — see `docs/PHASE4-ENV-PROVIDER-DESIGN.md §4` for the exact (honest) threat
+  model this does and does not cover.
 - Result feeds the finding's `assessment-mode`: static-confirmed → runtime-confirmed.
 
 ### 5.6 Memory tab — self-learning across sessions & projects
@@ -343,7 +350,7 @@ secforge/
 **Phase 4 — Multi-provider + Env.**
 - Engine adapters (claude-code first, then one OpenAI-compatible e.g. Kimi, then ollama).
 - Per-run provider/model/effort selection; optional own tier router.
-- Env tab + authorized dynamic validation in the sandbox.
+- Env tab + authorized dynamic validation (a single guarded read-only GET — no sandbox).
 
 **Phase 5 — polish**: large-scale fan-out for big repos, live progress streams,
 scheduled consolidation, report exporters.

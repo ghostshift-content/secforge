@@ -73,7 +73,7 @@ Session
 | **Model + effort routing** | `packages/adapters` picks provider+model+effort per the user's choice; an optional thin rules router with weights learned into the store. All SecForge code. |
 | **Execution backend** | Adapters: `claude-code` (Agent SDK, default) · `codex` · `kimi`/OpenAI-compat · `ollama`. One interface, provider-swappable. |
 | **Memory / self-learning / recall** | The **store** (files + `index.sqlite`). Optional semantic recall via a **self-contained embedded vector index** (SQLite + `sqlite-vec`, or a tiny cosine over stored embeddings) — no external service. |
-| **Dynamic PoC validation sandbox** | A self-contained sandbox for running PoCs against an authorised target — container or an embedded WASM runtime (decision §9). |
+| **Dynamic validation** | `packages/env` — a single guarded, read-only GET against an authorised target: SSRF-blocked (loopback/cloud-metadata/`.internal`), `redirect:'manual'`, 5s timeout. No PoC code execution, no sandbox — see the honest gap analysis in `docs/PHASE4-ENV-PROVIDER-DESIGN.md §3` (decision §9.4). |
 
 There is **no external orchestrator and no MCP dependency.** If a scan can't reach its LLM
 provider it degrades gracefully to static-only.
@@ -126,8 +126,8 @@ secforge/  (Node ≥22, ESM, npm workspaces — see SECFORGE-PLAN §7)
    reporter → freezes validated records → store.findings + FINDING graph nodes
    ↳ each accept/reject + finding → packages/memory (store, ns security/feedback)
 
-5. VALIDATE (optional)  (packages/agents + self-contained sandbox)
-   authorised target → sandbox.run(poc) → verdict static→runtime-confirmed
+5. VALIDATE (optional)  (packages/env — no sandbox, see §2)
+   authorised target → validateFinding(): one guarded read-only GET → verdict static→runtime-confirmed
 
 6. LEARN   mine new patterns → patterns catalog + memory; periodic recall-index rebuild
 
@@ -189,7 +189,7 @@ Thin REST/JSON over the Session Manager — all served by SecForge itself.
 | `POST /sessions/:id/scan` | run targeted/full assess → orchestrator fan-out |
 | `GET /sessions/:id/stream` (SSE) | live progress from the orchestrator |
 | `GET /projects/:id/findings` · `/coverage` · `/graph` | read the store |
-| `POST /findings/:id/validate` | dynamic validation in the sandbox |
+| `POST /findings/:id/validate` | dynamic validation — one guarded, authorized, read-only GET (no sandbox) |
 
 ---
 
@@ -202,7 +202,7 @@ Thin REST/JSON over the Session Manager — all served by SecForge itself.
 4. **`packages/orchestrator` + Assess fan-out** — framer→hunters (Agent SDK subagents)→triager→
    validator→reporter; executor→verifier; findings to store.
 5. **Adapters + routing** — provider/model/effort selection; optional learned router.
-6. **`packages/memory` recall + Env validation** — self-contained recall; sandbox path.
+6. **`packages/memory` recall + Env validation** — self-contained recall; the guarded read-only-GET validation path (no sandbox).
 
 ---
 
@@ -214,10 +214,22 @@ Thin REST/JSON over the Session Manager — all served by SecForge itself.
    are all SecForge's own code. This supersedes the v0.1 design and `SECFORGE-PLAN §9.3`.
 2. **One active session per project, history kept** (reopenable read-only).
 
+**Locked (2026-08-30, Phase 4 — see `docs/PHASE4-ENV-PROVIDER-DESIGN.md`):**
+4. **No dynamic-PoC-execution sandbox is built — deliberately.** A container or embedded-WASM
+   PoC-execution sandbox is a large, security-sensitive subsystem this codebase has zero
+   infrastructure for (no container runtime, no WASM runtime, stdlib-only constraint), and a fake
+   version of one (`vm` module, a bare subprocess) would be a worse overclaim than not building
+   it. Dynamic validation is, and stays, the existing guarded single read-only GET against an
+   authorised target (SSRF-blocked, 5s timeout, `redirect:'manual'`) — nothing executes. If a real
+   sandbox is ever needed it is a separate, explicitly-scoped project with its own threat model.
+5. **Encryption at rest is scoped to `env/target.json`'s `authHeader`/`extraHeaders` only, not
+   the whole store.** AES-256-GCM via `node:crypto`, decrypt-on-read, machine-local key
+   (`~/.secforge/keyring/env.key` or `SECFORGE_ENV_KEY`). Findings/runs/graph/events stay
+   plaintext — they are the product's output, the user greps/exports/diffs them, and they sit
+   under the same OS-permission boundary as the key anyway. See §4 of the Phase 4 design for the
+   full threat model (what this does and does NOT protect against).
+
 **Still open:**
 3. **Semantic recall library** — `sqlite-vec` vs a tiny hand-rolled cosine over stored embeddings
    vs SQLite FTS only. Recommend `sqlite-vec` (embedded, no service). Or skip embeddings for v1
    and use plain keyword recall.
-4. **Sandbox for dynamic PoC validation** — ephemeral container vs embedded WASM runtime.
-   Recommend a container the user opts into; keep static-only the default.
-5. **Encryption at rest** for the store (holds vuln data) — recommend on by default.

@@ -29,6 +29,13 @@ async function fetchTimeout(url, opts = {}, ms = 15000) {
 
 const errMsg = (err) => String((err && err.message) || err);
 
+// Effort is a recorded, best-effort knob (docs/PHASE4-ENV-PROVIDER-DESIGN.md §2). Its one real,
+// verifiable effect in this codebase is the per-call token budget for the HTTP-based LLM
+// adapters below. It is INERT (recorded only, changes nothing) for the deterministic rules
+// engine and for the unwired CLI adapters (claude-code/gemini) — never claim otherwise.
+export const EFFORT_BUDGETS = { low: 512, medium: 1024, high: 2048, max: 4096 };
+export function effortBudget(effort) { return EFFORT_BUDGETS[effort] || EFFORT_BUDGETS.medium; }
+
 // Wraps a bare `askRaw` (may throw) into the always-safe `ask` + `runAgent` pair every adapter needs.
 function makeAdapter({ id, label, provider, model, available, askRaw, listModels }) {
   return {
@@ -39,9 +46,11 @@ function makeAdapter({ id, label, provider, model, available, askRaw, listModels
     analysis: 'llm', // wraps a real askRaw that calls a working backend
     available,
     listModels: listModels || (async () => [model].filter(Boolean)),
-    async ask(prompt) {
+    // Root-cause fix (PHASE4 §2.3): opts was silently dropped here, so a chosen model/effort
+    // never reached openai/anthropic/ollama. Forwarding opts is what makes both real.
+    async ask(prompt, opts = {}) {
       try {
-        return await askRaw(prompt);
+        return await askRaw(prompt, opts);
       } catch (err) {
         return JSON.stringify({ ok: false, error: errMsg(err) });
       }
@@ -91,14 +100,14 @@ async function ollamaProbe() {
   }
 }
 
-async function ollamaAskRaw(prompt) {
+async function ollamaAskRaw(prompt, opts = {}) {
   const { models } = await ollamaProbe();
-  const model = process.env.OLLAMA_MODEL || models[0];
+  const model = opts.model || process.env.OLLAMA_MODEL || models[0];
   if (!model) throw new Error('no ollama model available (is Ollama running with a model pulled?)');
   const res = await fetchTimeout(`${ollamaBase()}/api/generate`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ model, prompt, stream: false }),
+    body: JSON.stringify({ model, prompt, stream: false, options: { num_predict: effortBudget(opts.effort) } }),
   }, 60000);
   if (!res.ok) throw new Error(`ollama generate failed: ${res.status}`);
   const data = await res.json();
@@ -116,15 +125,15 @@ const ollama = makeAdapter({
 });
 
 // --- openai: OpenAI-compatible chat completions (also serves Kimi/others via OPENAI_BASE_URL). ---
-async function openaiAskRaw(prompt) {
+async function openaiAskRaw(prompt, opts = {}) {
   const key = process.env.OPENAI_API_KEY;
   if (!key) throw new Error('OPENAI_API_KEY not set');
   const base = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
-  const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+  const model = opts.model || process.env.OPENAI_MODEL || 'gpt-4o-mini';
   const res = await fetchTimeout(`${base}/chat/completions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }] }),
+    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], max_tokens: effortBudget(opts.effort) }),
   }, 15000);
   if (!res.ok) throw new Error(`openai chat completion failed: ${res.status}`);
   const data = await res.json();
@@ -141,10 +150,10 @@ const openai = makeAdapter({
 });
 
 // --- anthropic: Messages API called directly over fetch (no Agent SDK dependency). ---
-async function anthropicAskRaw(prompt) {
+async function anthropicAskRaw(prompt, opts = {}) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error('ANTHROPIC_API_KEY not set');
-  const model = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-latest';
+  const model = opts.model || process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-latest';
   const res = await fetchTimeout('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -152,7 +161,7 @@ async function anthropicAskRaw(prompt) {
       'x-api-key': key,
       'anthropic-version': '2023-06-01',
     },
-    body: JSON.stringify({ model, max_tokens: 1024, messages: [{ role: 'user', content: prompt }] }),
+    body: JSON.stringify({ model, max_tokens: effortBudget(opts.effort), messages: [{ role: 'user', content: prompt }] }),
   }, 15000);
   if (!res.ok) throw new Error(`anthropic messages failed: ${res.status}`);
   const data = await res.json();
@@ -320,6 +329,10 @@ const REGISTRY = new Map([
 
 // Register a backend (or override a built-in one).
 export function register(adapter) { REGISTRY.set(adapter.id, adapter); return adapter; }
+
+// Exported so a test (or a future backend) can build a real adapter the same way openai/
+// anthropic/ollama do above, instead of hand-rolling the ask()/runAgent() safety wrapper.
+export { makeAdapter };
 
 // Unknown ids fall back to 'rules' — selection must always work with zero config.
 export function getAdapter(id = 'rules') {
