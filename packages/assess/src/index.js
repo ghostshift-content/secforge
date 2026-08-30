@@ -9,7 +9,7 @@ import { readGraph, writeNodes, writeEdges } from '@secforge/store';
 import { jobEnvelope } from '@secforge/schemas';
 import { getAdapter } from '@secforge/adapters';
 import { FAMILIES } from '@secforge/patterns';
-import { analyze, validateCandidate } from './rules.js';
+import { analyze, validateCandidate, reproveLlmCandidate, inScope } from './rules.js';
 import { decorateFinding, buildSnippet, loadManifest, readSourceRoot } from './decorate.js';
 import { computeCoverage } from './coverage.js';
 import { indexGraph, endpointsOfFeature } from './graph-utils.js';
@@ -45,6 +45,7 @@ function findingOf(candidate, n, engineUsed, modelUsed = null) {
     evidence: candidate.evidence,
     rule: candidate.rule,
     engine: { provider: engineUsed, model: modelUsed || null }, // AI-4: same {provider,model} shape as the session record
+    verified_by: candidate.llmNominated ? 'llm-nominated+rule-confirmed' : 'rule', // additive, auditability only
 
     lifecycle: 'terminal',
     outcome: 'vulnerable',
@@ -264,15 +265,28 @@ export async function runAssessment({ store, projectId, scope = {}, engine = 'ru
   let n = candidates.length;
   const allCandidates = candidates.concat(
     llmExtra.map((c) => ({ ...c, id: ID.candidate(++n) })),
-  );
+  ).filter((c) => inScope(c.featureId, scope)); // close the LLM-assist scope leak (deterministic side already applies this in analyze())
 
   onEvent?.({ stage: 'triager', kept: allCandidates.length });
   const triaged = allCandidates.map((c) => ({ ...c, triaged: true }));
 
-  onEvent?.({ stage: 'validator', queued: triaged.length });
-  const validated = triaged
-    .filter((c) => validateCandidate(c, graph))
-    .map((c) => ({ ...c, verified: true }));
+  // VALIDATE: every candidate — deterministic or LLM-nominated — passes an independent
+  // deterministic gate before it can be promoted. An LLM candidate is NEVER trusted on its own
+  // word: it is only promoted when reproveLlmCandidate() finds the deterministic rule engine
+  // independently flags the same endpoint, and if so it is re-attributed to that rule's own
+  // cwe/severity/evidence. A family with no deterministic rule (QIX/SX) can never be promoted.
+  let llmDropped = 0;
+  const validated = [];
+  for (const c of triaged) {
+    if (c.rule === 'llm') {
+      const reproved = reproveLlmCandidate(c, graph);
+      if (reproved) validated.push({ ...reproved, verified: true });
+      else llmDropped++;
+    } else if (validateCandidate(c, graph)) {
+      validated.push({ ...c, verified: true });
+    }
+  }
+  onEvent?.({ stage: 'validator', queued: triaged.length, verified: validated.length, llmDropped });
 
   let findings = [];
   let coverage = null;
@@ -286,6 +300,6 @@ export async function runAssessment({ store, projectId, scope = {}, engine = 'ru
   return { jobs: jobs.length, candidates: validated, findings, coverage, engineUsed: engine };
 }
 
-export { analyze, validateCandidate, computeCoverage, ID };
-export { severityFromScore, RULE_CVSS } from './rules.js';
+export { analyze, validateCandidate, reproveLlmCandidate, inScope, computeCoverage, ID };
+export { severityFromScore, RULE_CVSS, RULE_CWE } from './rules.js';
 export { decorateFinding, buildSnippet, loadManifest, readSourceRoot } from './decorate.js';

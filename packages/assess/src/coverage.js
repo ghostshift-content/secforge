@@ -2,9 +2,10 @@
 // <projectDir>/assess/coverage.json.
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { FAMILIES } from '@secforge/patterns';
+import { FAMILIES, cweCatalog } from '@secforge/patterns';
 import { readGraph } from '@secforge/store';
 import { STATE_CHANGING_METHODS, indexGraph, endpointsOfFeature, dataStoresOfFeature } from './graph-utils.js';
+import { RULE_CWE } from './rules.js';
 
 // Families this v1 engine actually has rules for (see rules.js). Everything else reads 'na' —
 // honest about what was assessed rather than pretending full 24-family coverage.
@@ -21,6 +22,29 @@ function cellVerdict(family, featureId, findings, hasSurface) {
   if (findings.some((f) => f.feature === featureId && f.family === family)) return 'vuln';
   if (!APPLICABLE_FAMILIES.has(family)) return 'na';
   return hasSurface ? 'pass' : 'open';
+}
+
+// Per-CWE checklist over the FULL canonical catalog (cweCatalog()) — a bijection, every CWE in
+// the catalog gets exactly one verdict, nothing silently skipped. Keyed off RULE_CWE (which CWEs
+// SecForge actually has a DETECTOR for), never off FAMILIES.<prefix>.cwe (which lists CWEs a
+// family is conceptually about, whether or not a rule implements one) — rolling this off FAMILIES
+// would overclaim, e.g. ACX lists 4 CWEs but only 2 have detectors.
+// 'assessed' = a deterministic rule exists for this exact CWE and ran; verdict is 'vulnerable'
+//   (>=1 finding carries this cwe) or 'clean' (ran, nothing found).
+// 'open'     = a rule exists for this CWE but its family never had ANY surface anywhere in the
+//   project (every feature's cell for that family is 'open').
+// 'na'       = no automated detector implements this CWE at all — reason always given.
+function cweChecklist(matrix, findings) {
+  return cweCatalog().map(({ id, name }) => {
+    const rule = Object.keys(RULE_CWE).find((r) => RULE_CWE[r] === id);
+    if (!rule) return { cwe: id, name, status: 'na', reason: 'no automated detector implements this CWE yet' };
+    const family = rule.split('-')[0]; // every RULE_CWE key is "<FAMILY>-<slug>"
+    const cells = matrix.flatMap((row) => row.cells.filter((c) => c.family === family));
+    const vulnCount = findings.filter((f) => f.cwe === id).length;
+    if (vulnCount > 0) return { cwe: id, name, status: 'assessed', verdict: 'vulnerable', count: vulnCount };
+    if (cells.some((c) => c.verdict === 'pass')) return { cwe: id, name, status: 'assessed', verdict: 'clean' };
+    return { cwe: id, name, status: 'open' };
+  });
 }
 
 function groupByCwe(findings) {
@@ -44,7 +68,7 @@ async function persist(store, projectId, result) {
 
 /**
  * Build and persist the feature x family coverage matrix for a project.
- * @returns {Promise<{percent:number, features:Array, families:string[], matrix:Array, byCwe:Array}>}
+ * @returns {Promise<{percent:number, features:Array, families:string[], matrix:Array, byCwe:Array, cweChecklist:Array}>}
  */
 export async function computeCoverage(store, projectId) {
   const graph = await readGraph(store, projectId);
@@ -73,6 +97,7 @@ export async function computeCoverage(store, projectId) {
     families,
     matrix,
     byCwe: groupByCwe(findings),
+    cweChecklist: cweChecklist(matrix, findings),
   };
   await persist(store, projectId, result);
   return result;

@@ -13,7 +13,7 @@ const DATA_DIR = join(__dirname, '..', 'data');
 
 // Canonical family registry (prefix → readable name, count, CWE ids it maps to).
 export const FAMILIES = Object.freeze([
-  { prefix: 'ACX', name: 'Access control', count: 32, cwe: ['CWE-284', 'CWE-639', 'CWE-862', 'CWE-863'] },
+  { prefix: 'ACX', name: 'Access control', count: 32, cwe: ['CWE-284', 'CWE-306', 'CWE-639', 'CWE-862', 'CWE-863'] },
   { prefix: 'ATX', name: 'Account takeover', count: 16, cwe: ['CWE-287', 'CWE-640', 'CWE-307'] },
   { prefix: 'AIX', name: 'AI agent', count: 12, cwe: ['CWE-1427', 'CWE-668'] },
   { prefix: 'XX', name: 'Browser XSS', count: 16, cwe: ['CWE-79'] },

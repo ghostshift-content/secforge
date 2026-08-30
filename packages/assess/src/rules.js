@@ -21,6 +21,16 @@ export const RULE_CVSS = Object.freeze({
   'SDX-unauth-datastore-reachable': { vector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N', score: 7.5 },
 });
 
+// The CWE each deterministic rule actually detects — the honest denominator for a per-CWE
+// checklist (mirrors RULE_CVSS's pattern). Not the same as FAMILIES.<prefix>.cwe, which lists
+// every CWE a family is *conceptually* about, whether or not a detector exists for it.
+export const RULE_CWE = Object.freeze({
+  'ACX-idor-no-owner-check':        'CWE-639',
+  'ACX-missing-authentication':     'CWE-306',
+  'REX-no-rate-limit':              'CWE-770',
+  'SDX-unauth-datastore-reachable': 'CWE-200',
+});
+
 // Standard CVSS v3.1 qualitative severity bands.
 export function severityFromScore(score) {
   if (typeof score !== 'number') return 'info';
@@ -137,10 +147,29 @@ const REVERIFY = {
 export function validateCandidate(candidate, graph) {
   const idx = indexGraph(graph);
   const fn = REVERIFY[candidate.rule];
-  return fn ? fn(candidate, idx) : true;
+  return fn ? fn(candidate, idx) : false; // no reverify logic for this rule id ⇒ REJECT, not pass
 }
 
-function inScope(featureId, scope) {
+// Executor→verifier gate for LLM-nominated candidates: does the DETERMINISTIC engine, run fresh
+// with no knowledge of the LLM's claim beyond "check this endpoint/family", independently flag
+// the same endpoint? Reuses RULES' own producers (no second, parallel predicate implementation
+// to drift out of sync with rules.js). Returns null (drop — never "verified") when it doesn't,
+// including for any family with no deterministic rule at all (QIX, SX today): the `for` loop
+// simply never matches, so those families can never be promoted via the LLM path either.
+// On a hit, returns the DETERMINISTIC rule's own candidate (its rule id/cwe/severity/evidence),
+// keeping only the LLM candidate's `id` — the model cannot self-certify its own guessed cwe/title.
+export function reproveLlmCandidate(candidate, graph) {
+  const idx = indexGraph(graph);
+  if (!idx.nodeById.get(candidate.endpointId)) return null;
+  for (const r of RULES) {
+    if (r.family !== candidate.family) continue;
+    const hit = r.run(idx, graph).find((c) => c.endpointId === candidate.endpointId);
+    if (hit) return { ...hit, id: candidate.id, llmNominated: true };
+  }
+  return null; // no deterministic rule exists for this family → never verified
+}
+
+export function inScope(featureId, scope) {
   if (!scope || !scope.mode || scope.mode === 'all') return true;
   if (scope.mode === 'feature') {
     const want = scope.feature;

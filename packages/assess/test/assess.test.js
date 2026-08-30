@@ -6,9 +6,10 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { Store, writeNodes, writeEdges } from '@secforge/store';
 import { mapProject } from '@secforge/map';
-import { cweName } from '@secforge/patterns';
+import { register } from '@secforge/adapters';
+import { cweName, cweCatalog, familyByPrefix } from '@secforge/patterns';
 import {
-  analyze, validateCandidate, computeCoverage,
+  analyze, validateCandidate, reproveLlmCandidate, computeCoverage, RULE_CWE,
   severityFromScore, decorateFinding, buildSnippet, loadManifest, readSourceRoot, runAssessment,
 } from '@secforge/assess';
 
@@ -230,5 +231,178 @@ describe('buildSnippet() — sha match vs stale-on-edit (source is NOT frozen)',
     assert.equal(buildSnippet(sourceRoot, new Map(), { file: 'api/orders.js', line: 1 }), null);
     const m = new Map([['nope.js', 'deadbeef']]);
     assert.equal(buildSnippet(sourceRoot, m, { file: 'nope.js', line: 1 }), null);
+  });
+});
+
+// --- Phase 2: executor→verifier separation for LLM-assist candidates ------------------------
+// The invariant under test: an LLM-nominated candidate may only become a finding if the
+// DETERMINISTIC engine, run fresh and independently, also flags the same endpoint. The model
+// can never self-certify. Without the rules.js/index.js fix these tests fail (validateCandidate's
+// old `: true` default and the unconditional-pass wiring let ANY llm candidate through).
+describe('executor→verifier separation — LLM-assist candidates', () => {
+  let tmpRoot, store;
+
+  before(async () => {
+    tmpRoot = path.join(os.tmpdir(), 'sf-e2v-' + crypto.randomBytes(4).toString('hex'));
+    store = new Store(tmpRoot);
+  });
+
+  after(async () => { await fs.rm(tmpRoot, { recursive: true, force: true }); });
+
+  async function makeProject(tag, nodes, edges) {
+    const sourceRoot = path.join(tmpRoot, tag);
+    await fs.mkdir(sourceRoot, { recursive: true });
+    const project = await store.openProject({ sourceRoot, name: tag });
+    await writeNodes(store, project.id, nodes, { snapshotId: 'snap' });
+    await writeEdges(store, project.id, edges, { snapshotId: 'snap' });
+    return { pid: project.id, graph: { nodes, edges } };
+  }
+
+  test('reproveLlmCandidate(): corroborated LLM candidate is promoted and RE-ATTRIBUTED to the deterministic rule (positive control)', () => {
+    // Unauthenticated endpoint — the deterministic engine flags this as ACX-missing-authentication.
+    const graph = {
+      nodes: [feature('f:orders', 'orders'), endpoint('ep', 'GET', '/orders/:id')],
+      edges: [edge('EXPOSES', 'f:orders', 'ep')],
+    };
+    // The LLM guessed a plausible but WRONG generic cwe (CWE-284) and a made-up rule id.
+    const llmCandidate = { id: 'candidate:1', family: 'ACX', rule: 'llm', cwe: 'CWE-284', endpointId: 'ep', featureId: 'f:orders' };
+    const reproved = reproveLlmCandidate(llmCandidate, graph);
+    assert.ok(reproved, 'a deterministic rule independently corroborates this endpoint');
+    assert.equal(reproved.id, 'candidate:1', 'the LLM candidate id is preserved');
+    assert.equal(reproved.rule, 'ACX-missing-authentication', 'wears the DETERMINISTIC rule id, not "llm"');
+    assert.equal(reproved.cwe, 'CWE-306', 'wears the deterministic cwe, not the LLM\'s guessed CWE-284');
+    assert.equal(reproved.llmNominated, true);
+  });
+
+  test('reproveLlmCandidate(): uncorroborated candidate (endpoint genuinely guarded) is dropped, never verified', () => {
+    const graph = {
+      nodes: [feature('f:orders', 'orders'), endpoint('ep', 'GET', '/orders/:id'), authNode('ac:authn', 'authentication'), authNode('ac:authz', 'authorization')],
+      edges: [edge('EXPOSES', 'f:orders', 'ep'), edge('AUTHENTICATED_BY', 'ep', 'ac:authn'), edge('AUTHORIZED_BY', 'ep', 'ac:authz')],
+    };
+    const llmCandidate = { id: 'candidate:1', family: 'ACX', rule: 'llm', cwe: 'CWE-639', endpointId: 'ep', featureId: 'f:orders' };
+    assert.equal(reproveLlmCandidate(llmCandidate, graph), null);
+  });
+
+  test('reproveLlmCandidate(): a family with NO deterministic rule (QIX/SX) never verifies, ever', () => {
+    const graph = {
+      nodes: [feature('f:orders', 'orders'), endpoint('ep', 'GET', '/orders/:id')],
+      edges: [edge('EXPOSES', 'f:orders', 'ep')],
+    };
+    assert.equal(reproveLlmCandidate({ id: 'c1', family: 'QIX', rule: 'llm', endpointId: 'ep', featureId: 'f:orders' }, graph), null);
+    assert.equal(reproveLlmCandidate({ id: 'c2', family: 'SX', rule: 'llm', endpointId: 'ep', featureId: 'f:orders' }, graph), null);
+  });
+
+  test('validateCandidate(): unknown rule id now REJECTS, not passes (regression guard on the old `: true` default)', () => {
+    const graph = { nodes: [], edges: [] };
+    assert.equal(validateCandidate({ rule: 'not-a-real-rule' }, graph), false);
+  });
+
+  test('runAssessment(): an LLM adapter proposing a candidate the deterministic engine cannot support is NEVER promoted as a verified finding', async () => {
+    // Endpoint is genuinely authenticated + authorized — deterministic engine finds NOTHING here.
+    const nodes = [feature('f:orders', 'orders'), endpoint('ep', 'GET', '/orders/:id'), authNode('ac:authn', 'authentication'), authNode('ac:authz', 'authorization')];
+    const edges = [edge('EXPOSES', 'f:orders', 'ep'), edge('AUTHENTICATED_BY', 'ep', 'ac:authn'), edge('AUTHORIZED_BY', 'ep', 'ac:authz')];
+    const { pid } = await makeProject('uncorroborated', nodes, edges);
+    register({ id: 'fake-llm-bogus', available: async () => true, ask: async () => 'ACX|bogus IDOR|GET|/orders/:id|high' });
+    const result = await runAssessment({ store, projectId: pid, scope: {}, engine: 'fake-llm-bogus' });
+    assert.equal(result.findings.length, 0, 'the model\'s plausible-looking claim never becomes a finding');
+    assert.equal(result.findings.some((f) => f.verification === 'verified'), false);
+  });
+
+  test('runAssessment(): a corroborated LLM candidate IS promoted, via the full pipeline, re-attributed to the deterministic rule', async () => {
+    // Fully unauthenticated endpoint, but the deterministic HUNT step is scoped to REX only
+    // (patterns:['REX']) so analyze() itself never proposes an ACX candidate here — only the
+    // LLM does. reproveLlmCandidate() re-runs the full RULES set fresh (ignoring `patterns`)
+    // and independently finds ACX-missing-authentication, so it still gets promoted.
+    const nodes = [feature('f:orders', 'orders'), endpoint('ep', 'GET', '/orders/:id')];
+    const edges = [edge('EXPOSES', 'f:orders', 'ep')];
+    const { pid } = await makeProject('corroborated', nodes, edges);
+    register({ id: 'fake-llm-good', available: async () => true, ask: async () => 'ACX|bogus IDOR|GET|/orders/:id|high' });
+    const result = await runAssessment({ store, projectId: pid, scope: { patterns: ['REX'] }, engine: 'fake-llm-good' });
+    assert.equal(result.findings.length, 1);
+    const f = result.findings[0];
+    assert.equal(f.rule, 'ACX-missing-authentication', 're-attributed to the deterministic rule id');
+    assert.equal(f.cwe, 'CWE-306', 're-attributed to the deterministic cwe, not the LLM\'s guess');
+    assert.equal(f.verification, 'verified');
+    assert.equal(f.verified_by, 'llm-nominated+rule-confirmed');
+  });
+
+  test('runAssessment(): LLM-assist candidates respect scope, even though summarizeFeatures() itself is unscoped (scope-leak closed)', async () => {
+    const nodes = [
+      feature('f:orders', 'orders'), endpoint('ep-orders', 'GET', '/orders'),
+      feature('f:accounts', 'accounts'), endpoint('ep-accounts', 'GET', '/accounts'),
+    ];
+    const edges = [edge('EXPOSES', 'f:orders', 'ep-orders'), edge('EXPOSES', 'f:accounts', 'ep-accounts')];
+    const { pid } = await makeProject('scopeleak', nodes, edges);
+    // The model nominates the OUT-of-scope /accounts endpoint — deterministically corroborable,
+    // but outside the requested scope (feature: f:orders only).
+    register({ id: 'fake-llm-outofscope', available: async () => true, ask: async () => 'ACX|bogus issue|GET|/accounts|high' });
+    const result = await runAssessment({ store, projectId: pid, scope: { mode: 'feature', feature: 'f:orders' }, engine: 'fake-llm-outofscope' });
+    assert.equal(result.findings.some((f) => f.route === '/accounts' || f.endpoint === 'ep-accounts'), false, 'out-of-scope LLM candidate must never reach a finding');
+  });
+});
+
+// --- Phase 2: CWE checklist (additive coverage rollup) ---------------------------------------
+describe('cweChecklist() — additive per-CWE assessed/N-A/open rollup', () => {
+  let tmpRoot, store, pid;
+
+  before(async () => {
+    tmpRoot = path.join(os.tmpdir(), 'sf-cwechk-' + crypto.randomBytes(4).toString('hex'));
+    store = new Store(tmpRoot);
+    await fs.mkdir(path.join(tmpRoot, 'src'), { recursive: true });
+    const project = await store.openProject({ sourceRoot: path.join(tmpRoot, 'src'), name: 'CWECHK' });
+    pid = project.id;
+    await writeNodes(store, pid, [
+      feature('f:orders', 'orders'),
+      endpoint('ep', 'GET', '/orders/:id'),
+      authNode('ac:authn', 'authentication'),
+    ], { snapshotId: 'snap' });
+    await writeEdges(store, pid, [
+      edge('EXPOSES', 'f:orders', 'ep'),
+      edge('AUTHENTICATED_BY', 'ep', 'ac:authn'),
+    ], { snapshotId: 'snap' });
+  });
+
+  after(async () => { await fs.rm(tmpRoot, { recursive: true, force: true }); });
+
+  test('a CWE with no detector (CWE-89, SQLi) is honestly "na" with a reason — never overclaimed as assessed', async () => {
+    const cov = await computeCoverage(store, pid);
+    const sqli = cov.cweChecklist.find((c) => c.cwe === 'CWE-89');
+    assert.ok(sqli, 'CWE-89 is present in the checklist (never silently absent)');
+    assert.equal(sqli.status, 'na');
+    assert.equal(typeof sqli.reason, 'string');
+    assert.ok(sqli.reason.length > 0);
+  });
+
+  test('a CWE with a detector (CWE-639, IDOR) shows "assessed" — clean before a finding, vulnerable after', async () => {
+    let cov = await computeCoverage(store, pid);
+    let idor = cov.cweChecklist.find((c) => c.cwe === 'CWE-639');
+    assert.equal(idor.status, 'assessed');
+    assert.equal(idor.verdict, 'clean');
+
+    await store.writeFinding(pid, { id: 'finding:F-1-idor', family: 'ACX', cwe: 'CWE-639', feature: 'f:orders', title: 'IDOR' });
+    cov = await computeCoverage(store, pid);
+    idor = cov.cweChecklist.find((c) => c.cwe === 'CWE-639');
+    assert.equal(idor.status, 'assessed');
+    assert.equal(idor.verdict, 'vulnerable');
+    assert.equal(idor.count, 1);
+  });
+
+  test('bijection: every CWE in the canonical catalog gets exactly one checklist entry — nothing silently skipped', async () => {
+    const cov = await computeCoverage(store, pid);
+    assert.equal(cov.cweChecklist.length, cweCatalog().length);
+    // percent/matrix/byCwe stay untouched by this additive field
+    assert.equal(typeof cov.percent, 'number');
+    assert.ok(Array.isArray(cov.matrix));
+    assert.ok(Array.isArray(cov.byCwe));
+  });
+});
+
+describe('FAMILIES.ACX.cwe regression guard', () => {
+  test('every RULE_CWE entry for an ACX-* rule is present in the ACX family\'s own registered cwe list', () => {
+    const acx = familyByPrefix('ACX');
+    for (const [rule, cwe] of Object.entries(RULE_CWE)) {
+      if (!rule.startsWith('ACX-')) continue;
+      assert.ok(acx.cwe.includes(cwe), `${rule} emits ${cwe} but FAMILIES.ACX.cwe is missing it`);
+    }
   });
 });
