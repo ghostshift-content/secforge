@@ -208,7 +208,7 @@
     </div>
     <span id="liveProjectTag" class="mono muted" style="font-size:11px;display:none;">live: —</span>
     <div style="flex-grow:1"></div>
-    <button class="walkbtn" onclick="window.location.href='/demo.html'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l14 8-14 8z"/></svg>Walkthrough</button>
+    <button id="walkBtn" class="walkbtn" onclick="window.location.href='/demo.html'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l14 8-14 8z"/></svg>Walkthrough</button>
     <div id="live-badge" class="enginepill" style="background:#F0FDF4;border-color:#BBF7D0;" title="backend connection"><span class="sd" style="background:var(--ok)"></span><span class="mono" style="font-size:12px;color:#166534;font-weight:600;">live</span></div>
     <div class="enginepill"><span class="dot"></span><select id="engineSelectTop" class="mono" title="Engine for this session" onchange="onEngineChange(this)" style="border:0;background:transparent;font-size:12px;color:var(--accent-ink);font-weight:600;outline:none;cursor:pointer;appearance:auto;font-family:inherit;"><option selected>Claude · opus · high</option></select></div>
     <div class="avatar"></div>
@@ -230,7 +230,7 @@
       <div class="scroll" style="flex-grow:1;padding:34px 40px;">
         <div style="display:flex;gap:34px;flex-wrap:wrap;align-items:flex-start;max-width:1180px;margin:0 auto;">
           <div style="flex:1 1 460px;display:flex;flex-direction:column;gap:18px;">
-            <div>
+            <div style="min-height:70px;">
               <div style="font-size:18px;font-weight:700;letter-spacing:-.02em;">Open a project</div>
               <div class="muted" style="margin-top:6px;line-height:1.5;max-width:52ch;">Point SecForge at a source tree. It freezes a snapshot and maps the code into a knowledge graph — feature by feature — that each session reloads from disk and never forgets.</div>
             </div>
@@ -244,7 +244,7 @@
           </div>
 
           <div style="flex:1 1 460px;display:flex;flex-direction:column;gap:18px;">
-            <div>
+            <div style="min-height:70px;">
               <div style="font-size:18px;font-weight:700;letter-spacing:-.02em;display:flex;align-items:baseline;justify-content:space-between;">Recent projects <span class="mono muted" style="font-size:12px;font-weight:400;" id="recent-count">—</span></div>
               <div class="muted" style="margin-top:6px;line-height:1.5;">Reopen a saved session — each one resumes exactly where it left off, straight from disk.</div>
             </div>
@@ -520,7 +520,7 @@
             <div class="kicker" style="margin-bottom:11px;">Every feature — click a row to scope a run to it</div>
             <div class="card" style="overflow-x:auto;box-shadow:none;">
               <table class="grid">
-                <thead><tr><th>Feature</th><th>Actions</th><th>Patterns run</th><th>Candidates</th><th>Findings</th><th title="share of assessed pattern-cells that passed">Pass rate</th><th>Last run</th></tr></thead>
+                <thead><tr><th>Feature</th><th>Actions</th><th>Patterns run</th><th>Candidates</th><th>Findings</th><th title="decided pattern-cells ÷ total — the same coverage definition as the headline">Coverage</th><th>Last run</th></tr></thead>
                 <tbody>
                   <tr style="cursor:pointer;" onclick="assessFeature('Checkout')"><td style="font-weight:600;">Checkout</td><td class="mono">9</td><td class="mono">6/7</td><td class="mono">3</td><td class="mono" style="color:var(--high)">2</td><td><div style="display:flex;align-items:center;gap:7px;"><div class="bar-track" style="width:66px;"><div class="bar-fill" style="width:78%"></div></div><span class="mono muted" style="font-size:11px">78%</span></div></td><td class="muted" style="font-size:11.5px">2h ago</td></tr>
                   <tr style="cursor:pointer;" onclick="assessFeature('Orders')"><td style="font-weight:600;">Orders</td><td class="mono">11</td><td class="mono">4/7</td><td class="mono">5</td><td class="mono" style="color:var(--crit)">1</td><td><div style="display:flex;align-items:center;gap:7px;"><div class="bar-track" style="width:66px;"><div class="bar-fill" style="width:60%;background:var(--med)"></div></div><span class="mono muted" style="font-size:11px">60%</span></div></td><td class="muted" style="font-size:11.5px">2h ago</td></tr>
@@ -741,7 +741,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
-<style>body.nav-locked .tab{opacity:.45;filter:grayscale(1);cursor:not-allowed;}
+<style>.tab:disabled{opacity:.45;filter:grayscale(1);cursor:not-allowed;}
 button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
 
 <script>
@@ -757,10 +757,16 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
     current=name;
     document.querySelectorAll('.panel').forEach(function(p){ p.classList.toggle('active', p.dataset.panel===name); });
     document.querySelectorAll('.tab').forEach(function(t){ t.classList.toggle('active', t.dataset.tab===name); });
-    // O-5: the launcher is the "choose a project" home screen — gate the tab bar's presentation
-    // whenever it's showing, even with a project still open in state (the pill shows it).
-    document.body.classList.toggle('nav-locked', name==='launcher');
+    setNavGate();
     var c=document.querySelector('.panel.active .scroll'); if(c) c.scrollTop=0;
+  }
+  // O-5: ONE boolean drives the class, the disabled/aria-disabled attributes AND the go() guard so
+  // the visual gate and the functional gate can never disagree. Gated = on the launcher, or no project.
+  function setNavGate(){
+    var gated = (current==='launcher') || !window.__sfProject;
+    document.body.classList.toggle('nav-locked', gated);
+    document.querySelectorAll('.tab').forEach(function(t){ t.disabled=gated; t.setAttribute('aria-disabled', gated?'true':'false'); });
+    var w=document.getElementById('walkBtn'); if(w){ w.disabled=gated; w.setAttribute('aria-disabled', gated?'true':'false'); } // P2-1
   }
   function mapSub(name){
     mapSubCur=name;
@@ -1397,11 +1403,10 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
     host.innerHTML = cov.matrix.map(function(row){
       var cells = row.cells || []; var total = cells.length || 1;
       var vuln = cells.filter(function(c){ return c.verdict==='vuln'; }).length;
-      // Pass rate uses the same decided/total denominator as the headline coverage:
-      // a cell is "decided" once it has a pass or vuln verdict (na/open are undecided).
-      var decided = cells.filter(function(c){ return c.verdict==='pass' || c.verdict==='vuln'; }).length;
-      var pass = cells.filter(function(c){ return c.verdict==='pass'; }).length;
-      var pct = decided ? Math.round((pass/decided)*100) : 0;
+      // P4-1: ONE coverage definition, identical to the headline computeCoverage — decided/total,
+      // where a cell is decided once its verdict is not 'open' (pass or vuln both count).
+      var decided = cells.filter(function(c){ return c.verdict!=='open'; }).length;
+      var pct = total ? Math.round((decided/total)*100) : 0;
       var name = row.name || row.feature;
       var findCount = state.findings.filter(function(f){ return f.feature===row.feature; }).length;
       var barColor = pct>=90 ? 'var(--ok)' : pct>=60 ? 'var(--accent)' : 'var(--med)';
@@ -1528,11 +1533,8 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
       if(!slot) return;
       var unauth = res.ran===false && /not authoriz|static-only|not registered|no target/i.test(res.reason||'');
       if(unauth){
-        // N-5: don't dead-end on Findings — take the user to where they'd authorise a target.
-        slot.innerHTML = 'No authorised target. <a href="#" onclick="go(\'env\');return false;" style="color:var(--accent);font-weight:600;">Register one in Env →</a>';
-        go('env');
-        var m=document.getElementById('envSaveMsg'); if(m) m.textContent='Register and authorise a target to validate findings live.';
-        var u=document.getElementById('envBaseUrl'); if(u) u.focus();
+        // N-10: always render a visible verdict here; N-5: offer (not force) the route to Env.
+        slot.innerHTML = '<span style="color:var(--med);font-weight:600;">Static-only — no authorised target.</span> <a href="#" onclick="go(\'env\');return false;" style="color:var(--accent);font-weight:600;">Register one in Env →</a>';
       } else if(res.ran===false){
         slot.textContent = 'Static-only — '+(res.reason||'not run')+(res.wouldGet?' · would GET '+res.wouldGet:'');
       } else {
