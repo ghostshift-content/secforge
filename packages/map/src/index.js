@@ -1,6 +1,9 @@
-// @secforge/map — SecForge's mapping engine, v1: deterministic snapshot → inventory → feature graph.
-// No LLM, no AST, no external engine — a small language-agnostic regex table over a frozen file
-// manifest, producing typed nodes/edges with file:line claims. Entirely our own logic.
+// @secforge/map — SecForge's mapping engine. Snapshots the source tree, extracts a deterministic,
+// multi-language inventory (@secforge/inventories), clusters + graphs it (@secforge/recon), and —
+// only when a connected LLM engine is requested — enriches the graph with an evidence-validated
+// AI ontology (actors/roles/permissions, refined feature purpose). Rules-only mapping always
+// produces FEATURE nodes; the AI layer only ever enriches, never gates feature existence
+// (mapper-design.md §CRITICAL rule 2). Zero external deps — @secforge/recon/adapters are our own.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -9,6 +12,10 @@ import { ID } from '@secforge/schemas';
 // '@secforge/store/graph' specifier is blocked by Node's package encapsulation. A direct relative
 // path reaches the file without needing to touch store's package.json.
 import { writeNodes, writeEdges, neighbourhood } from '../../store/src/graph.js';
+import { profileRepo, extractInventories, inventoryMeta } from '@secforge/inventories';
+import { deterministicSemanticPlan, buildGraph, makeEvidenceVerifier, validateOntology, planClusters } from '@secforge/recon';
+import { getAdapter } from '@secforge/adapters';
+import { synthesizeRailsRoutes } from './rails-routes.js';
 
 const fsp = fs.promises;
 const SKIP_DIR = new Set(['node_modules', '.git', 'dist', 'vendor', 'build', 'coverage', '.next', 'out']);
@@ -17,7 +24,6 @@ const MAX_BYTES = 1_000_000; // ponytail: flat cap, not a size histogram — rai
 const MAX_FILES = 25_000;
 const MAX_DEPTH = 24;
 const MAX_TOTAL_BYTES = 500_000_000; // 500MB read budget across the whole manifest
-const slugify = (s) => String(s).toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 // ---------- SNAPSHOT ----------
 // Async (fs.promises) so each await yields the event loop — a big tree slows mapping but never
@@ -70,7 +76,13 @@ function persistSnapshot(store, projectId, snapshotId, manifest) {
   fs.renameSync(snapFile + '.tmp', snapFile);
 }
 
-// ---------- INVENTORY (heuristic, file:line cited) ----------
+// Read a file from the frozen snapshot's source tree (never re-derives from anywhere else — the
+// manifest already pinned which files/bytes belong to this snapshot). Missing/unreadable → ''.
+function readSnapshotFile(sourceRoot, rel) {
+  try { return fs.readFileSync(path.join(sourceRoot, rel), 'utf8'); } catch { return ''; }
+}
+
+// ---------- LEGACY DETERMINISTIC IDENTITY (unchanged) ----------
 function matchEndpoint(line) {
   let m = /\b(?:app|router)\.(get|post|put|patch|delete)\s*\(\s*['"`]([^'"`]+)['"`]/i.exec(line);
   if (m) return { method: m[1].toUpperCase(), route: m[2] };
@@ -199,13 +211,10 @@ async function scanFile(sourceRoot, rel) {
   return rows;
 }
 
-// ---------- FEATURES: cluster inventory rows by their own directory structure ----------
-const moduleDirOf = (rel) => { const d = path.dirname(rel); return d === '.' ? 'root' : d; };
-
 // Per-file auth signals — an endpoint inherits its file's guards (before_action etc. are file-level).
-function buildFileAuth(inventory) {
+function buildFileAuth(rows) {
   const fileAuth = new Map();
-  for (const row of inventory) {
+  for (const row of rows) {
     if (row.kind !== 'AUTHN' && row.kind !== 'AUTHZ') continue;
     const fa = fileAuth.get(row.file) || {};
     if (row.kind === 'AUTHN' && fa.authn == null) fa.authn = row.line;
@@ -215,9 +224,8 @@ function buildFileAuth(inventory) {
   return fileAuth;
 }
 
-// Per-kind extra fields for one inventory.jsonl row (docs/PHASE1-ROLES-INVENTORY-DESIGN.md §2.2).
-// `guarded` on ENDPOINT rows is the one derived field — cheap because fileAuth is already built.
-function inventoryDetail(row, fileAuth) {
+// Per-kind extra fields for one legacy inventory.jsonl row (docs/PHASE1-ROLES-INVENTORY-DESIGN.md §2.2).
+function legacyInventoryDetail(row, fileAuth) {
   switch (row.kind) {
     case 'ENDPOINT': return { method: row.method, route: row.route, guarded: fileAuth.has(row.file) };
     case 'SERVICE': case 'JOB': case 'DATA_STORE': case 'ROLE': case 'ACTOR': return { name: row.name };
@@ -228,163 +236,149 @@ function inventoryDetail(row, fileAuth) {
   }
 }
 
-// snapshots/<snapshotId>/inventory.jsonl — the full per-line inventory, otherwise thrown away
-// once buildGraph() consumes it. Same tmp+rename idiom as persistSnapshot()'s manifest write.
-function persistInventory(store, projectId, snapshotId, inventory) {
+// New-surface rows (@secforge/inventories' 11 kinds, docs mapper-design.md §3) → {kind, detail}
+// for one inventory.jsonl line. Additive: ENDPOINT/DATA_STORE are reused kinds; ROUTE/GRAPHQL/
+// MODEL/TOKEN/INTEGRATION/PROCESS/AUTH_CHECK are new. Never touches the legacy ROLE/ACTOR/etc
+// vocabulary above — identity stays exclusively legacyInventoryDetail's + the AI ontology's job.
+function newSurfaceDetail(kind, row) {
+  switch (kind) {
+    case 'routes_endpoints': case 'rest_api': {
+      const resolved = row.method && (row.route || row.path);
+      return resolved
+        ? { kind: 'ENDPOINT', detail: { method: row.method, route: row.route || row.path, interface_kind: kind === 'rest_api' ? 'rest' : 'web' } }
+        : { kind: 'ROUTE', detail: { path: row.entry || row.path || null } };
+    }
+    case 'graphql':
+      return (row.operation_type && row.field_name)
+        ? { kind: 'ENDPOINT', detail: { operation_type: row.operation_type, field_name: row.field_name, interface_kind: 'graphql' } }
+        : { kind: 'GRAPHQL', detail: { entry: row.entry || null } };
+    case 'workers_jobs': return { kind: 'JOB', detail: { name: row.entry || null } };
+    case 'services_finders_policies':
+      if (row.detail === 'model') return { kind: 'MODEL', detail: { name: row.entry || null } };
+      if (row.detail === 'policy') return { kind: 'AUTH_CHECK', detail: { kind: 'policy' } };
+      return { kind: 'SERVICE', detail: { name: row.entry || null, kind: row.detail || 'service' } };
+    case 'response_shaping': return { kind: 'SERVICE', detail: { name: row.entry || null, kind: 'serializer' } };
+    case 'downloads_uploads_exports': case 'search_aggregation':
+      return { kind: 'SERVICE', detail: { name: row.entry || null, kind: 'service' } };
+    case 'tokens_actors':
+      return row.detail === 'token'
+        ? { kind: 'TOKEN', detail: { name: row.entry || null } }
+        : { kind: 'AUTH_CHECK', detail: { kind: row.detail === 'permission' ? 'ability' : 'before_action' } };
+    case 'processes_ipc': return { kind: 'PROCESS', detail: { name: row.entry || null } };
+    case 'datastores_integrations':
+      return row.detail === 'datastore' ? { kind: 'DATA_STORE', detail: { name: row.entry || null } } : { kind: 'INTEGRATION', detail: { name: row.entry || null } };
+    default: return null;
+  }
+}
+const NEW_SURFACE_KEYS = ['routes_endpoints', 'rest_api', 'graphql', 'workers_jobs', 'services_finders_policies',
+  'response_shaping', 'downloads_uploads_exports', 'search_aggregation', 'tokens_actors', 'processes_ipc', 'datastores_integrations'];
+
+// snapshots/<snapshotId>/inventory.jsonl — legacy identity rows (unchanged shape) + the new
+// multi-language surface rows, additive. Same tmp+rename idiom as persistSnapshot()'s manifest write.
+function persistInventory(store, projectId, snapshotId, legacyRows, inventories) {
   const dir = path.join(store.projectDir(projectId), 'snapshots', snapshotId);
   fs.mkdirSync(dir, { recursive: true });
-  const fileAuth = buildFileAuth(inventory);
-  const lines = inventory.map((row) => JSON.stringify({ kind: row.kind, file: row.file, line: row.line, detail: inventoryDetail(row, fileAuth) }));
+  const fileAuth = buildFileAuth(legacyRows);
+  const lines = legacyRows.map((row) => JSON.stringify({ kind: row.kind, file: row.file, line: row.line, detail: legacyInventoryDetail(row, fileAuth) }));
+  for (const key of NEW_SURFACE_KEYS) for (const row of inventories[key] || []) {
+    const mapped = newSurfaceDetail(key, row);
+    if (mapped) lines.push(JSON.stringify({ kind: mapped.kind, file: row.file, line: row.line, detail: mapped.detail }));
+  }
   const invFile = path.join(dir, 'inventory.jsonl');
   fs.writeFileSync(invFile + '.tmp', lines.join('\n') + (lines.length ? '\n' : ''));
   fs.renameSync(invFile + '.tmp', invFile);
 }
 
-function buildGraph(inventory) {
-  const nodes = new Map();
-  const addNode = (n) => { if (!nodes.has(n.id)) nodes.set(n.id, n); };
-  const edges = [];
-  const edgeIds = new Set();
-  const addEdge = (id, type, src, dst) => { if (!edgeIds.has(id)) { edgeIds.add(id); edges.push({ id, type, src, dst }); } };
+// ---------- GraphQL schema-first → resolver correlation ----------
+const JS_TS_RE = /\.(?:js|jsx|ts|tsx)$/i;
+// A resolver-body ownership comparison ("context.user.X === / !== something", either order) — a
+// real, common GraphQL resolver-guard shape that @secforge/inventories' keyword-based AUTH_DEF
+// extraction doesn't recognize (it looks for named auth calls, not inline field comparisons).
+const OWNERSHIP_CHECK_RE = /\bcontext\.user\.\w+\s*[!=]==?|[!=]==?\s*context\.user\.\w+/;
 
-  const fileAuth = buildFileAuth(inventory);
-
-  // Per-file role-check signals — an endpoint checked by hasRole('x') in the same file REQUIRES_ROLE x.
-  const fileRoles = new Map();
-  for (const row of inventory) {
-    if (row.kind !== 'ROLE_CHECK') continue;
-    const roles = fileRoles.get(row.file) || new Map();
-    if (!roles.has(row.role)) roles.set(row.role, row.line);
-    fileRoles.set(row.file, roles);
+function braceSpan(lines, start) {
+  let depth = (lines[start].match(/\{/g) || []).length - (lines[start].match(/\}/g) || []).length;
+  if (depth <= 0) return null;
+  for (let i = start + 1; i < lines.length; i++) {
+    depth += (lines[i].match(/\{/g) || []).length - (lines[i].match(/\}/g) || []).length;
+    if (depth <= 0) return { startLine: start + 1, endLine: i + 1 };
   }
+  return null;
+}
 
-  const clusters = new Map();
-  for (const row of inventory) {
-    const dir = moduleDirOf(row.file);
-    if (!clusters.has(dir)) clusters.set(dir, { rows: [], files: new Set() });
-    clusters.get(dir).rows.push(row);
-    clusters.get(dir).files.add(row.file);
-  }
-
-  const features = [];
-  for (const [dir, cluster] of [...clusters.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-    const featureId = ID.feature(dir);
-    const counts = { endpoints: 0, services: 0, jobs: 0, dataStores: 0, files: cluster.files.size };
-    addNode({ id: featureId, type: 'FEATURE', name: dir, data: { dir },
-      claims: [{ file: cluster.rows[0].file, line: cluster.rows[0].line, method: 'generated', confidence: 'medium' }] });
-
-    for (const file of [...cluster.files].sort()) {
-      const fileId = ID.file(file);
-      addNode({ id: fileId, type: 'FILE', name: file, data: {}, claims: [{ file, line: 1, method: 'manifest', confidence: 'high' }] });
-      addEdge(`edge:${featureId}:CONTAINS:${fileId}`, 'CONTAINS', featureId, fileId);
+// Bridge a schema-first GraphQL field (extracted from an SDL file with no code, no body span) to
+// its resolver implementation, so §7 body-scoped auth attribution can see the resolver's own logic
+// instead of the schema file it was extracted from. Two deterministic hops: the field's map entry
+// ("expense: resolveExpenseQuery") -> the referenced identifier -> that identifier's definition
+// site. Best-effort, never throws; an unresolved field is left exactly as extracted (schema-file
+// claim, no body — the honest-negative fallback stays intact).
+function correlateGraphqlResolvers(inventories, manifest, sourceRoot) {
+  const codeFiles = manifest.filter((m) => JS_TS_RE.test(m.path));
+  const textCache = new Map();
+  const readText = (rel) => {
+    if (textCache.has(rel)) return textCache.get(rel);
+    let text = ''; try { text = fs.readFileSync(path.join(sourceRoot, rel), 'utf8'); } catch { /* unreadable */ }
+    textCache.set(rel, text);
+    return text;
+  };
+  for (const row of inventories.graphql || []) {
+    if (row.detail !== 'graphql-sdl-field' || row.body || !row.field_name) continue;
+    let identifier = null;
+    for (const f of codeFiles) {
+      const m = readText(f.path).match(new RegExp(`\\b${row.field_name}\\s*:\\s*(\\w+)\\s*,`));
+      if (m) { identifier = m[1]; break; }
     }
-
-    for (const row of cluster.rows) {
-      const claim = { file: row.file, line: row.line, method: 'grep', confidence: 'medium' };
-      if (row.kind === 'ENDPOINT') {
-        const id = ID.endpoint(row.method, row.route);
-        addNode({ id, type: 'ENDPOINT', name: `${row.method} ${row.route}`, data: { method: row.method, route: row.route }, claims: [claim] });
-        addEdge(`edge:${featureId}:EXPOSES:${id}`, 'EXPOSES', featureId, id);
-        counts.endpoints++;
-        const fa = fileAuth.get(row.file);
-        if (fa && fa.authn != null) {
-          const acId = `authcheck:authn:${slugify(row.file)}`;
-          addNode({ id: acId, type: 'AUTH_CHECK', name: 'authenticate', data: { kind: 'authentication' }, claims: [{ file: row.file, line: fa.authn, method: 'grep', confidence: 'medium' }] });
-          addEdge(`edge:${id}:AUTHENTICATED_BY:${acId}`, 'AUTHENTICATED_BY', id, acId);
-        }
-        if (fa && fa.authz != null) {
-          const acId = `authcheck:authz:${slugify(row.file)}`;
-          addNode({ id: acId, type: 'AUTH_CHECK', name: 'authorize', data: { kind: 'authorization' }, claims: [{ file: row.file, line: fa.authz, method: 'grep', confidence: 'medium' }] });
-          addEdge(`edge:${id}:AUTHORIZED_BY:${acId}`, 'AUTHORIZED_BY', id, acId);
-        }
-      } else if (row.kind === 'SERVICE') {
-        const id = `service:${slugify(row.file)}:${row.line}`;
-        addNode({ id, type: 'SERVICE', name: row.name, data: {}, claims: [claim] });
-        addEdge(`edge:${featureId}:USES_SERVICE:${id}`, 'USES_SERVICE', featureId, id);
-        counts.services++;
-      } else if (row.kind === 'JOB') {
-        const id = `job:${slugify(row.file)}:${row.line}`;
-        addNode({ id, type: 'JOB', name: row.name, data: {}, claims: [claim] });
-        // ponytail: no dedicated "async work" edge type exists yet — HANDLED_BY stands in for both
-        // JOB and DATA_STORE below; split it if the two ever need distinct semantics.
-        addEdge(`edge:${featureId}:HANDLED_BY:${id}`, 'HANDLED_BY', featureId, id);
-        counts.jobs++;
-      } else if (row.kind === 'DATA_STORE') {
-        const id = `datastore:${slugify(row.file)}:${row.line}`;
-        addNode({ id, type: 'DATA_STORE', name: row.name, data: {}, claims: [claim] });
-        addEdge(`edge:${featureId}:HANDLED_BY:${id}`, 'HANDLED_BY', featureId, id);
-        counts.dataStores++;
-      } else if (row.kind === 'ROLE') {
-        const id = ID.role(row.name);
-        addNode({ id, type: 'ROLE', name: row.name, data: { name: row.name }, claims: [claim] });
-      } else if (row.kind === 'ACTOR') {
-        const id = ID.actor(row.name);
-        addNode({ id, type: 'ACTOR', name: row.name, data: { name: row.name }, claims: [claim] });
-      } else if (row.kind === 'PERMISSION') {
-        const id = ID.permission(row.action, row.resource);
-        addNode({ id, type: 'PERMISSION', name: row.resource ? `${row.action}:${row.resource}` : row.action, data: { action: row.action, resource: row.resource || null }, claims: [claim] });
+    if (!identifier) continue;
+    for (const f of codeFiles) {
+      const lines = readText(f.path).split(/\r?\n/);
+      const defRe = new RegExp(`^(?:export\\s+)?(?:async\\s+)?function\\s+${identifier}\\s*\\(|^(?:export\\s+)?const\\s+${identifier}\\s*=`);
+      const idx = lines.findIndex((l) => defRe.test(l.trim()));
+      if (idx === -1) continue;
+      row.file = f.path; row.line = idx + 1;
+      const span = braceSpan(lines, idx);
+      if (span) {
+        row.body = span;
+        const bodyLines = lines.slice(span.startLine, span.endLine - 1);
+        const hitIdx = bodyLines.findIndex((l) => OWNERSHIP_CHECK_RE.test(l));
+        if (hitIdx !== -1) inventories.tokens_actors.push({ file: f.path, line: span.startLine + 1 + hitIdx, entry: 'context ownership check', detail: 'permission' });
       }
-    }
-    features.push({ id: featureId, name: dir, slug: slugify(dir), counts });
-  }
-
-  // ENDPOINT --REQUIRES_ROLE--> ROLE: only when the named role was actually DECLARED as a ROLE
-  // node (the extracted role vocabulary). A role CHECK can name something that merely LOOKS like
-  // a role — matchRoleCheck's `current_user.x?` idiom matches any boolean predicate
-  // (current_user.confirmed?/.active?/...), not just roles — so gate on "a ROLE node with this id
-  // exists", never on "a check matched", or an undeclared name fabricates a relationship the
-  // source never showed (honest-coverage principle, not an enumeration of non-role predicates).
-  // Run as its own pass (not inside the cluster loop above) so it doesn't depend on directory
-  // processing order — the ROLE node may live in a directory clustered after the endpoint's.
-  for (const row of inventory) {
-    if (row.kind !== 'ENDPOINT') continue;
-    const roleChecks = fileRoles.get(row.file);
-    if (!roleChecks) continue;
-    const endpointId = ID.endpoint(row.method, row.route);
-    for (const roleName of roleChecks.keys()) {
-      const roleId = ID.role(roleName);
-      if (!nodes.has(roleId)) continue; // honest miss: role never declared as vocabulary
-      addEdge(`edge:${endpointId}:REQUIRES_ROLE:${roleId}`, 'REQUIRES_ROLE', endpointId, roleId);
+      break;
     }
   }
+}
 
-  // ROLE --GRANTS--> PERMISSION: same-line co-occurrence only (§1.4 — no cross-line wiring), and
-  // same "ROLE must be declared" gate as REQUIRES_ROLE above — a ROLE_GRANTS row's role side comes
-  // from the same non-vocabulary-checked matchRoleCheck, so it needs the identical honesty guard.
-  for (const row of inventory) {
-    if (row.kind !== 'ROLE_GRANTS') continue;
-    const roleId = ID.role(row.role);
-    if (!nodes.has(roleId)) continue; // honest miss: role never declared as vocabulary
-    const permId = ID.permission(row.action, row.resource);
-    addEdge(`edge:${roleId}:GRANTS:${permId}`, 'GRANTS', roleId, permId);
-  }
-
-  // ACTOR --HAS_ROLE--> ROLE (§1.3): a single actor project-wide inherits every declared role;
-  // with multiple actors, only ones with an observed role-association line get linked, and only
-  // to the full role set (a line-level "this actor has THIS role" signal doesn't exist statically).
-  const actorNodes = [...nodes.values()].filter((n) => n.type === 'ACTOR');
-  const roleNodes = [...nodes.values()].filter((n) => n.type === 'ROLE');
-  if (roleNodes.length) {
-    if (actorNodes.length === 1) {
-      for (const r of roleNodes) addEdge(`edge:${actorNodes[0].id}:HAS_ROLE:${r.id}`, 'HAS_ROLE', actorNodes[0].id, r.id);
-    } else if (actorNodes.length > 1) {
-      const assocActorNames = new Set(inventory.filter((r) => r.kind === 'ACTOR' && r.assoc).map((r) => r.name));
-      for (const a of actorNodes) {
-        if (!assocActorNames.has(a.name)) continue;
-        for (const r of roleNodes) addEdge(`edge:${a.id}:HAS_ROLE:${r.id}`, 'HAS_ROLE', a.id, r.id);
-      }
+// Bridge the legacy regex table's ENDPOINT/SERVICE/JOB/DATA_STORE hits forward as additive rows on
+// the new 11-key inventory — a safety net so the new multi-language pipeline is never LESS
+// recall-complete than the deterministic engine already was (e.g. a generic `mongoose.model(...)`/
+// `sequelize.define(...)` call, or any endpoint call the legacy regex table recognizes that
+// @secforge/inventories' plugins/universal fallback do not). Skips an exact file:line:entry
+// duplicate so a row already found by the new pipeline is never counted twice.
+function bridgeLegacySurfaces(inventories, legacyRows) {
+  const sigSet = (arr) => new Set(arr.map((r) => `${r.file}:${r.line}:${r.entry}`));
+  const routeSigs = sigSet(inventories.routes_endpoints);
+  const svcSigs = sigSet(inventories.services_finders_policies);
+  const jobSigs = sigSet(inventories.workers_jobs);
+  const addIfNew = (list, sigs, row) => { const sig = `${row.file}:${row.line}:${row.entry}`; if (!sigs.has(sig)) { sigs.add(sig); list.push(row); } };
+  for (const row of legacyRows) {
+    if (row.kind === 'ENDPOINT') {
+      addIfNew(inventories.routes_endpoints, routeSigs, { file: row.file, line: row.line, entry: `${row.method} '${row.route}'`, method: row.method, route: row.route, detail: 'legacy-route' });
+    } else if (row.kind === 'SERVICE') {
+      addIfNew(inventories.services_finders_policies, svcSigs, { file: row.file, line: row.line, entry: row.name, detail: 'service' });
+    } else if (row.kind === 'JOB') {
+      addIfNew(inventories.workers_jobs, jobSigs, { file: row.file, line: row.line, entry: row.name, detail: 'worker' });
+    } else if (row.kind === 'DATA_STORE') {
+      addIfNew(inventories.services_finders_policies, svcSigs, { file: row.file, line: row.line, entry: row.name, detail: 'model' });
     }
   }
-
-  return { nodes: [...nodes.values()], edges, features };
 }
 
 /**
- * Map a project into the knowledge graph: snapshot the source tree, extract a heuristic
- * inventory, cluster it into features, and persist the resulting graph.
+ * Map a project into the knowledge graph: snapshot the source tree, extract a deterministic
+ * multi-language inventory, cluster it into features, optionally enrich with an evidence-validated
+ * AI ontology, and persist the resulting graph.
  * @returns {Promise<{status:string, snapshotId:string, features:Array, coverage:object, nodeCount:number, edgeCount:number}>}
  */
-export async function mapProject({ sourceRoot, store, projectId, onProgress } = {}) {
+export async function mapProject({ sourceRoot, store, projectId, onProgress, engine = 'rules', model = null, effort } = {}) {
   if (!sourceRoot || !store || !projectId) throw new Error('mapProject requires sourceRoot, store, projectId');
   // Refuse to "map" a path that isn't a real directory — otherwise walk() swallows the readdir
   // error and returns status:MAPPED with 0 nodes, and the UI fabricates a graph for a repo that
@@ -416,33 +410,65 @@ export async function mapProject({ sourceRoot, store, projectId, onProgress } = 
   persistSnapshot(store, projectId, snapshotId, manifest);
   onProgress?.({ phase: 'snapshot', pct: 25 });
 
-  onProgress?.({ phase: 'inventory', pct: 25 });
-  const inventory = [];
-  for (const m of manifest) inventory.push(...await scanFile(sourceRoot, m.path));
-  persistInventory(store, projectId, snapshotId, inventory);
+  onProgress?.({ phase: 'inventory', pct: 30 });
+  const profileFiles = manifest.map((m) => ({ path: m.path, bytes: m.bytes, ext: path.extname(m.path).toLowerCase() }));
+  const profile = profileRepo(sourceRoot, { files: profileFiles });
+  const inventories = extractInventories({ sourceRoot, profile });
+  // Rails `resources :x` synthesis (config/routes.rb has no method+path of its own) + bridging a
+  // schema-first GraphQL field to its resolver's actual file/body — both additive, merged BEFORE
+  // clustering so the rule engine can score them like any other resolved endpoint.
+  inventories.routes_endpoints.push(...synthesizeRailsRoutes({ manifest, sourceRoot, inventories }));
+  correlateGraphqlResolvers(inventories, manifest, sourceRoot);
+
+  const legacyRows = [];
+  for (const m of manifest) legacyRows.push(...await scanFile(sourceRoot, m.path));
+  bridgeLegacySurfaces(inventories, legacyRows);
+  persistInventory(store, projectId, snapshotId, legacyRows, inventories);
   onProgress?.({ phase: 'inventory', pct: 50 });
 
-  onProgress?.({ phase: 'features', pct: 50 });
-  const { nodes, edges, features } = buildGraph(inventory);
-  onProgress?.({ phase: 'features', pct: 75 });
+  onProgress?.({ phase: 'features', pct: 55 });
+  const clusters = deterministicSemanticPlan(inventories);
 
-  onProgress?.({ phase: 'persist', pct: 75 });
-  await writeNodes(store, projectId, nodes, { snapshotId });
-  await writeEdges(store, projectId, edges, { snapshotId });
-  await store.appendEvent(projectId, { type: 'map.completed', features: features.length });
+  let ontology = null;
+  if (engine && engine !== 'rules') {
+    onProgress?.({ phase: 'semantic', pct: 65 });
+    const adapter = getAdapter(engine);
+    const raw = await planClusters(clusters, adapter, { model, effort });
+    if (raw) {
+      const verifier = makeEvidenceVerifier({ readSource: (rel) => readSnapshotFile(sourceRoot, rel) });
+      const { ontology: validated, accepted } = validateOntology(raw, verifier);
+      // accepted.features === 0 → fail closed silently: ontology stays null, deterministic
+      // clusters still become FEATURE nodes on their own (never demoted to ARCH_CLUSTER-only).
+      if (accepted.features > 0) ontology = validated;
+    }
+  }
+
+  onProgress?.({ phase: 'graph', pct: 80 });
+  const graph = buildGraph({ inventories, clusters, ontology, legacyRows, project: { id: projectId, name: projectId }, snapshotId });
+
+  onProgress?.({ phase: 'persist', pct: 90 });
+  await writeNodes(store, projectId, graph.nodes, { snapshotId });
+  await writeEdges(store, projectId, graph.edges, { snapshotId });
+  await store.appendEvent(projectId, { type: 'map.completed', features: graph.features.length });
   onProgress?.({ phase: 'persist', pct: 100 });
 
-  const filesWithHits = new Set(inventory.map((r) => r.file)).size;
-  const technical = manifest.length ? Math.round((filesWithHits / manifest.length) * 100) / 100 : 0;
+  const meta = inventoryMeta(inventories);
+  const technical = meta.source_code_files ? Math.round((meta.represented_source_files / meta.source_code_files) * 100) / 100 : 0;
+  // coverage.semantic mirrors mapper-design.md §4: real only once an AI ontology was actually
+  // accepted; rules-only (or every AI entity rejected by evidence-validator) stays honestly 0 —
+  // that in no way implies zero FEATURE nodes (see buildGraph's own fail-closed comment above).
+  const semantic = ontology ? graph.coverage.semantic_coverage / 100 : 0;
 
   return {
     status: 'MAPPED',
     snapshotId,
-    features,
+    features: graph.features,
     truncated, // true if the tree hit MAX_FILES / byte budget and was only partially mapped
-    coverage: { technical, semantic: 0 }, // ponytail: semantic/LLM coverage lands with the AI mapping pass
-    nodeCount: nodes.length,
-    edgeCount: edges.length,
+    coverage: { technical, semantic },
+    nodeCount: graph.nodes.length,
+    edgeCount: graph.edges.length,
+    engineUsed: engine,
+    aiSemantic: !!ontology,
   };
 }
 

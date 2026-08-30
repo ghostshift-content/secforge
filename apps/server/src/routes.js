@@ -167,12 +167,22 @@ export async function handleApi(req, res, url) {
       return true;
     }
 
-    // POST /api/projects/:id/map → run the mapping engine over the project's source
+    // POST /api/projects/:id/map → run the mapping engine over the project's source. Mirrors
+    // /scan's engine handling: a known-but-unreachable/non-LLM provider silently falls back to
+    // 'rules' rather than being recorded as if it ran.
     if (parts[0] === 'projects' && parts.length === 3 && parts[2] === 'map' && method === 'POST') {
       const pid = parts[1];
       const proj = (await store.listProjects()).find((p) => p.id === pid);
       if (!proj) return json(res, 404, { error: 'no such project' }), true;
-      const result = await mapProject({ sourceRoot: proj.sourceRoot, store, projectId: pid });
+      const requested = await validEngineId(body.engine);
+      let engine = 'rules';
+      if (requested !== 'rules') {
+        const conn = await checkConnection(requested);
+        if (conn.connected && conn.analysis === 'llm') engine = requested;
+      }
+      const model = (engine === requested && typeof body.model === 'string') ? body.model : null;
+      const effort = validEffort(body.effort);
+      const result = await mapProject({ sourceRoot: proj.sourceRoot, store, projectId: pid, engine, model, effort });
       return json(res, result.status === 'ERROR' ? 400 : 200, result), true;
     }
 

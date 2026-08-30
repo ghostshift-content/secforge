@@ -60,7 +60,10 @@ describe('mapProject()', () => {
     assert.equal(result.status, 'MAPPED');
     assert.ok(result.nodeCount > 0);
     assert.ok(result.edgeCount > 0);
-    assert.equal(result.features.some((f) => f.name === 'api'), true);
+    // New clustering: @secforge/recon's deterministicSemanticPlan names a small repo's feature by
+    // capability noun (from the resolved route path), not by directory — 'api/orders.js' with
+    // route '/orders/:id' clusters as 'Order', not 'api'.
+    assert.equal(result.features.some((f) => f.name === 'Order'), true);
     assert.ok(result.coverage.technical > 0);
 
     const graph = await readGraph(store, pid);

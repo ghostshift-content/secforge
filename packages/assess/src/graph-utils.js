@@ -54,12 +54,14 @@ export function hasRateLimitGuard(idx, endpointNode) {
   });
 }
 
-// DATA_STORE nodes a feature HANDLED_BY-reaches (src === featureId, per map.js's own convention).
+// DATA_STORE/MODEL nodes a feature HANDLED_BY-reaches (src === featureId, per map.js's own
+// convention). MODEL is included alongside DATA_STORE because the mapper wires ORM model classes
+// (feature-scoped) via HANDLED_BY the same way config-level data stores are (see recon/graph.js).
 export function dataStoresOfFeature(idx, featureId) {
   return (idx.edgesBySrc.get(featureId) || [])
     .filter((e) => e.type === 'HANDLED_BY')
     .map((e) => idx.nodeById.get(e.dst))
-    .filter((n) => n && n.type === 'DATA_STORE');
+    .filter((n) => n && (n.type === 'DATA_STORE' || n.type === 'MODEL'));
 }
 
 // ENDPOINT nodes a feature EXPOSES (src === featureId, per map.js's own convention).
