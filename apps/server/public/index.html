@@ -672,6 +672,12 @@
           <div id="envConfigCard" class="card" style="padding:15px;display:flex;flex-direction:column;gap:10px;">
             <div style="display:flex;align-items:center;gap:10px;"><span style="width:78px;color:var(--ink2);font-size:12.5px;">Base URL</span><input id="envBaseUrl" type="text" placeholder="https://target.example.test" style="flex-grow:1;height:32px;border:1px solid var(--border);border-radius:6px;padding:0 10px;font-family:inherit;font-size:12.5px;background:var(--panel);color:var(--ink);"></div>
             <div style="display:flex;align-items:center;gap:10px;"><span style="width:78px;color:var(--ink2);font-size:12.5px;">Scope</span><input id="envScope" type="text" placeholder="allowed hosts, comma-separated" style="flex-grow:1;height:32px;border:1px solid var(--border);border-radius:6px;padding:0 10px;font-family:inherit;font-size:12.5px;background:var(--panel);color:var(--ink);"></div>
+            <div class="kicker" style="font-size:11px;color:var(--ink3);margin-top:4px;">Credentials (optional)</div>
+            <div style="display:flex;gap:8px;"><input id="envUser" type="text" autocomplete="off" placeholder="username" style="flex:1;height:32px;border:1px solid var(--border);border-radius:6px;padding:0 10px;font-family:inherit;font-size:12.5px;background:var(--panel);color:var(--ink);"><input id="envPass" type="password" autocomplete="new-password" placeholder="password" style="flex:1;height:32px;border:1px solid var(--border);border-radius:6px;padding:0 10px;font-family:inherit;font-size:12.5px;background:var(--panel);color:var(--ink);"></div>
+            <input id="envToken" type="password" autocomplete="new-password" placeholder="bearer token (overrides username/password)" style="height:32px;border:1px solid var(--border);border-radius:6px;padding:0 10px;font-family:inherit;font-size:12.5px;background:var(--panel);color:var(--ink);">
+            <div id="envHeaders" style="display:flex;flex-direction:column;gap:6px;"></div>
+            <button class="btn" style="align-self:flex-start;font-size:12px;padding:4px 10px;" onclick="addEnvHeader()">+ Add header</button>
+            <div class="muted" style="font-size:11px;line-height:1.45;background:#FFFBEB;border:1px solid #FDE68A;border-radius:6px;padding:7px 9px;color:#92400E;">⚠ Credentials are stored <b>in plaintext</b> in the local project store (~/.secforge). Use throwaway/staging credentials, not production secrets.</div>
             <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink2);cursor:pointer;"><input id="envAuthorise" type="checkbox" style="width:15px;height:15px;">I am authorised to test this target</label>
             <div style="display:flex;gap:8px;align-items:center;"><button class="btn-primary" onclick="registerEnvTarget()">Register target</button><span id="envSaveMsg" class="muted" style="font-size:11.5px;"></span></div>
           </div>
@@ -1725,6 +1731,9 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
     if(u) u.value = t ? (t.baseUrl||'') : '';
     if(s) s.value = t ? (t.scope||[]).join(', ') : '';
     if(a) a.checked = !!(t && t.authorized);
+    // Hydrate non-secret extra headers; never echo stored secrets (authHeader) back into the DOM.
+    var hh=document.getElementById('envHeaders');
+    if(hh){ hh.innerHTML=''; var ex=(t&&t.extraHeaders)||{}; Object.keys(ex).forEach(function(k){ addEnvHeader(k, ex[k]); }); }
     var st=document.getElementById('envAuthState');
     if(st){
       var authed = !!(t && t.authorized);
@@ -1732,6 +1741,14 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
       var dot=st.querySelector('.sd'); if(dot) dot.style.background = authed ? 'var(--ok)' : 'var(--ink3)';
     }
   }
+  window.addEnvHeader = function(name, value){
+    var host=document.getElementById('envHeaders'); if(!host) return;
+    var row=document.createElement('div'); row.setAttribute('data-hdr','1'); row.style.cssText='display:flex;gap:6px;';
+    row.innerHTML='<input class="hn" placeholder="Header-Name" style="flex:1;height:30px;border:1px solid var(--border);border-radius:6px;padding:0 8px;font-family:inherit;font-size:12px;background:var(--panel);color:var(--ink);"><input class="hv" placeholder="value" style="flex:1;height:30px;border:1px solid var(--border);border-radius:6px;padding:0 8px;font-family:inherit;font-size:12px;background:var(--panel);color:var(--ink);"><button class="btn" style="padding:0 9px;" onclick="this.parentNode.remove()">×</button>';
+    host.appendChild(row);
+    if(typeof name==='string') row.querySelector('.hn').value=name;
+    if(typeof value==='string') row.querySelector('.hv').value=value;
+  };
   function refreshEnv(){
     if(!state.project) return Promise.resolve();
     return get('/api/projects/'+state.project.id+'/env').then(function(d){ applyEnvTarget(d && d.target); }).catch(function(){});
@@ -1743,7 +1760,13 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
     var baseUrl = u ? u.value.trim() : '';
     if(!baseUrl){ if(msg) msg.textContent='Base URL is required.'; return; }
     var scope = s && s.value.trim() ? s.value.split(',').map(function(x){return x.trim();}).filter(Boolean) : [];
-    var body = { baseUrl: baseUrl, scope: scope, authorized: !!(a && a.checked) };
+    var user=document.getElementById('envUser'), pass=document.getElementById('envPass'), token=document.getElementById('envToken');
+    var authHeader = null;
+    if(token && token.value.trim()) authHeader = 'Bearer '+token.value.trim();
+    else if(user && user.value.trim()) authHeader = 'Basic '+btoa(user.value+':'+(pass?pass.value:''));
+    var extraHeaders = {};
+    document.querySelectorAll('#envHeaders [data-hdr]').forEach(function(row){ var n=row.querySelector('.hn').value.trim(); if(n) extraHeaders[n]=row.querySelector('.hv').value; });
+    var body = { baseUrl: baseUrl, scope: scope, authorized: !!(a && a.checked), authHeader: authHeader, extraHeaders: extraHeaders };
     if(msg) msg.textContent='Saving…';
     post('/api/projects/'+state.project.id+'/env', body).then(function(t){
       applyEnvTarget(t); if(msg) msg.textContent='Registered'+(t && t.authorized?' · authorised':' · static-only');
