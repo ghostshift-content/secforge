@@ -43,6 +43,9 @@ export class Store {
     if (abs === path.parse(abs).root) throw new Error('refusing to open a filesystem root');
     let st; try { st = await fs.stat(abs); } catch { st = null; }
     if (!st || !st.isDirectory()) throw new Error('sourceRoot must be an existing directory');
+    // O-2: probe readability at open time — an unreadable dir (chmod 000) must fail loudly here,
+    // not silently "map" to 0 files and read as a clean scan.
+    try { await fs.readdir(abs); } catch { throw new Error('sourceRoot is not readable (permission denied) — grant read access and retry'); }
     // Optional confinement for hardened / multi-user deployments: SECFORGE_ALLOW_ROOT limits
     // which trees may be opened+scanned, mitigating arbitrary-path reads via the HTTP API.
     const allow = process.env.SECFORGE_ALLOW_ROOT;

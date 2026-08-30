@@ -222,6 +222,18 @@ export async function mapProject({ sourceRoot, store, projectId, onProgress } = 
 
   onProgress?.({ phase: 'snapshot', pct: 0 });
   const { manifest, truncated } = await buildManifest(sourceRoot);
+  // O-2: never report a successful map of a tree we read nothing from. An empty manifest is only
+  // honest for a genuinely empty directory; if the root has entries we couldn't read (permissions)
+  // or nothing we could inventory, that is an ERROR — not "MAPPED · 0 findings" reading as clean.
+  if (manifest.length === 0) {
+    let entries; try { entries = await fsp.readdir(sourceRoot); } catch { entries = null; }
+    if (entries === null) {
+      return { status: 'ERROR', error: 'source directory is not readable (permission denied)', sourceRoot, features: [], coverage: { technical: 0, semantic: 0 }, nodeCount: 0, edgeCount: 0 };
+    }
+    if (entries.length > 0) {
+      return { status: 'ERROR', error: 'read 0 files from a non-empty directory — check read permissions or that it contains supported source files', sourceRoot, features: [], coverage: { technical: 0, semantic: 0 }, nodeCount: 0, edgeCount: 0 };
+    }
+  }
   const snapshotId = hashManifest(manifest);
   persistSnapshot(store, projectId, snapshotId, manifest);
   onProgress?.({ phase: 'snapshot', pct: 25 });

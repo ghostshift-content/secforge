@@ -41,6 +41,15 @@ describe('mapProject()', () => {
     assert.equal(result.nodeCount, 0);
   });
 
+  test('ERRORs (not MAPPED) when a non-empty dir yields zero readable source (O-2)', async () => {
+    const src = path.join(tmpRoot, 'binonly');
+    await fs.mkdir(src, { recursive: true });
+    await fs.writeFile(path.join(src, 'blob.bin'), Buffer.from([0, 1, 2, 0, 3])); // NUL → skipped as binary
+    const result = await mapProject({ sourceRoot: src, store, projectId: pid });
+    assert.equal(result.status, 'ERROR');
+    assert.match(result.error, /0 files|not readable/);
+  });
+
   test('returns status MAPPED with features for a real source directory', async () => {
     const src = path.join(tmpRoot, 'proj');
     await fs.mkdir(path.join(src, 'api'), { recursive: true });
