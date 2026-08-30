@@ -194,8 +194,10 @@
 <body>
 <div class="shell">
   <div class="topbar">
-    <div class="brand"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4-3 7.5-7 9-4-1.5-7-5-7-9V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg></div>
-    <div class="brandname">SecForge</div>
+    <button onclick="go('launcher')" aria-label="SecForge — home" title="Home" style="display:flex;align-items:center;gap:8px;background:none;border:0;padding:0;margin:0;cursor:pointer;font-family:inherit;">
+      <div class="brand"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4-3 7.5-7 9-4-1.5-7-5-7-9V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg></div>
+      <div class="brandname">SecForge</div>
+    </button>
     <div class="vr"></div>
     <div style="position:relative;">
       <button class="projpill" onclick="toggleProjectMenu(event)" title="Switch project" style="border-color:var(--border);">
@@ -235,17 +237,10 @@
             <div class="card" style="border-style:dashed;padding:26px;display:flex;flex-direction:column;align-items:center;gap:13px;text-align:center;">
               <div style="width:46px;height:46px;border-radius:12px;background:var(--tint);display:flex;align-items:center;justify-content:center;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11v5"/><path d="M9.5 13.5L12 11l2.5 2.5"/></svg></div>
               <div style="font-weight:600;">Drop a source folder here</div>
-              <input id="openPathInput" class="mono" value="" placeholder="/path/to/your/project" spellcheck="false" style="font-size:12.5px;color:var(--ink2);background:var(--border2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;width:100%;text-align:left;outline:none;font-family:inherit;">
-              <button class="btn-primary" style="padding:10px 18px;" onclick="openProjectFromInput()">Open &amp; map project</button>
+              <input id="openPathInput" class="mono" value="" placeholder="/path/to/your/project" spellcheck="false" oninput="var b=document.getElementById('openBtn'); if(b) b.disabled=!this.value.trim();" onkeydown="if(event.key==='Enter'&&this.value.trim())openProjectFromInput()" style="font-size:12.5px;color:var(--ink2);background:var(--border2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;width:100%;text-align:left;outline:none;font-family:inherit;">
+              <button id="openBtn" class="btn-primary" style="padding:10px 18px;" onclick="openProjectFromInput()" disabled>Open &amp; map project</button>
             </div>
-            <div class="card" style="padding:15px 17px;">
-              <div class="kicker" style="margin-bottom:11px;">Engine for this session</div>
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                <span style="width:78px;color:var(--ink2);font-size:13px;">Provider</span>
-                <select id="engineSelectLauncher" class="mono" onchange="onEngineChange(this)" style="height:30px;border:1px solid var(--border);border-radius:6px;background:var(--panel);font-size:12.5px;color:var(--ink);font-family:inherit;padding:0 8px;"><option>Loading…</option></select>
-              </div>
-              <div class="muted" style="font-size:11.5px;margin-top:8px;line-height:1.5;">Pick any provider you have signed in. SecForge checks the connection and only runs a model you're connected to; the deterministic rules engine needs no sign-in.</div>
-            </div>
+            <div class="muted" style="font-size:11.5px;margin-top:2px;line-height:1.5;">The AI engine for this session is set in the top bar — pick any provider you've signed in; the deterministic rules engine needs no sign-in.</div>
           </div>
 
           <div style="flex:1 1 440px;display:flex;flex-direction:column;gap:12px;">
@@ -453,7 +448,7 @@
           <div class="modebox" data-mode="prompt">
             <label class="promptchk"><input type="checkbox" id="promptEnable" onchange="togglePrompt()"> Tell the session what to look for</label>
             <div class="gated" id="promptBody">
-              <textarea class="ask" id="askText" spellcheck="false" placeholder="e.g. find any place an order or invoice is loaded by id without checking the caller owns it" disabled></textarea>
+              <textarea class="ask" id="askText" spellcheck="false" oninput="if(window.updateRunButton)window.updateRunButton()" placeholder="e.g. find any place an order or invoice is loaded by id without checking the caller owns it" disabled></textarea>
               <div class="kicker" style="font-size:10px;margin:12px 0 7px;color:var(--ink3)">Examples — click to use</div>
               <div style="display:flex;flex-direction:column;gap:6px;">
                 <div class="pchip" style="text-align:left;cursor:pointer;" onclick="usePrompt(this)">missing rate limit on auth endpoints</div>
@@ -474,7 +469,7 @@
         </div>
 
         <div style="padding:14px 18px;margin-top:auto;border-top:1px solid var(--border2);position:sticky;bottom:0;background:var(--panel);">
-          <button class="btn-primary" style="width:100%;padding:11px;" onclick="runAssess()">▶ Run assessment</button>
+          <button id="runBtn" class="btn-primary" style="width:100%;padding:11px;" onclick="runAssess()">▶ Run assessment</button>
           <div style="display:flex;gap:6px;margin-top:8px;">
             <button id="sessPause" class="btn" style="flex:1;padding:7px;font-size:12px;" onclick="sessionAction('pause')">Pause</button>
             <button id="sessResume" class="btn" style="flex:1;padding:7px;font-size:12px;" onclick="sessionAction('resume')">Resume</button>
@@ -736,7 +731,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
-<style>body.nav-locked .tab{opacity:.4;pointer-events:none;filter:grayscale(1);}</style>
+<style>body.nav-locked .tab{opacity:.45;filter:grayscale(1);cursor:not-allowed;}
+button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
 
 <script>
   var current='launcher', mapSubCur='graph';
@@ -751,6 +747,9 @@
     current=name;
     document.querySelectorAll('.panel').forEach(function(p){ p.classList.toggle('active', p.dataset.panel===name); });
     document.querySelectorAll('.tab').forEach(function(t){ t.classList.toggle('active', t.dataset.tab===name); });
+    // O-5: the launcher is the "choose a project" home screen — gate the tab bar's presentation
+    // whenever it's showing, even with a project still open in state (the pill shows it).
+    document.body.classList.toggle('nav-locked', name==='launcher');
     var c=document.querySelector('.panel.active .scroll'); if(c) c.scrollTop=0;
   }
   function mapSub(name){
@@ -780,16 +779,19 @@
     var m=document.querySelector('.mcard.on'), s=document.querySelector('.segbtn.on');
     var mt=m?m.querySelector('.t').textContent.trim():'', st=s?s.textContent.trim():'';
     var el=document.getElementById('runHint'); if(el) el.textContent=mt+' · '+st;
+    if(window.updateRunButton) window.updateRunButton();
   }
   function runAssess(){ assessSub('run'); }
   function usePrompt(el){
     var cb=document.getElementById('promptEnable'); if(cb && !cb.checked){ cb.checked=true; togglePrompt(); }
     var t=document.getElementById('askText'); if(t){ t.value=(el.textContent||'').trim(); t.focus(); }
+    if(window.updateRunButton) window.updateRunButton();
   }
   function togglePrompt(){
     var cb=document.getElementById('promptEnable'); var on=cb&&cb.checked;
     var body=document.getElementById('promptBody'); if(body) body.classList.toggle('on', on);
     var t=document.getElementById('askText'); if(t){ t.disabled=!on; if(on) t.focus(); }
+    if(window.updateRunButton) window.updateRunButton();
   }
   function assessFeature(name){ go('assess'); setScope('feature'); var el=document.getElementById('scopeFeatureName'); if(el) el.textContent=name; setMode('pattern'); assessSub('run'); }
   function assessLead(){ go('assess'); setScope('feature'); setMode('prompt'); assessSub('run'); }
@@ -907,7 +909,7 @@
   function sfEmpty(msg){ return '<div class="card" style="margin:14px;padding:22px;text-align:center;box-shadow:none;background:var(--border2);border-color:var(--border);"><div class="muted" style="font-size:12.5px;line-height:1.5;max-width:380px;margin:0 auto;">'+esc(msg)+'</div></div>'; }
 
   // ---------- engine / provider / model picker (single authoritative picker) ----------
-  var SEL_IDS = ['engineSelectTop','engineSelectAssess','engineSelectLauncher'];
+  var SEL_IDS = ['engineSelectTop','engineSelectAssess'];
   function engineById(id){ return state.engines.find(function(e){ return e.id===id; }) || null; }
   function ensureModelUI(sel){
     if(sel._sfInit) return; sel._sfInit = true;
@@ -925,10 +927,20 @@
     SEL_IDS.forEach(function(id){
       var sel = document.getElementById(id); if(!sel) return; ensureModelUI(sel);
       var b = sel._sfBadge, m = sel._sfModel; if(!e) return;
-      if(e.id==='rules'){ b.textContent='No AI · deterministic'; b.style.cssText+=';background:var(--border2);color:var(--ink2);border:1px solid var(--border)'; m.innerHTML='<option>—</option>'; m.disabled=true; state.model=null; }
-      else if(e.connected!==false && e.analysis==='llm'){ b.textContent='Connected'; b.style.background='#F0FDF4'; b.style.color='#166534'; b.style.border='1px solid #BBF7D0'; b.title=e.detail||''; m.innerHTML=(e.models||[]).map(function(x){return '<option value="'+esc(x)+'">'+esc(x)+'</option>';}).join('')||'<option>—</option>'; m.disabled=false; if(state.model==null||!(e.models||[]).includes(state.model)) state.model=(e.models&&e.models[0])||null; m.value=state.model||''; }
-      else if(e.connected!==false){ b.textContent='Connected · analysis not wired'; b.style.background='#FFFBEB'; b.style.color='#92400E'; b.style.border='1px solid #FDE68A'; b.title='Signed in, but this provider’s analysis is not wired yet — the run uses the deterministic rules engine.'; m.innerHTML='<option>rules engine</option>'; m.disabled=true; state.model=null; }
-      else { b.textContent='Not connected'; b.style.background='#FFFBEB'; b.style.color='#92400E'; b.style.border='1px solid #FDE68A'; b.title=e.howToConnect||''; m.innerHTML='<option>'+esc(e.howToConnect||'not connected')+'</option>'; m.disabled=true; state.model=null; }
+      var models = e.models || [];
+      // AI-1: ALWAYS show the provider's real model list, whatever the connection state — the
+      // dropdown's job is to show what a provider offers. Connection guidance goes in the badge,
+      // never inside an <option>. The select is disabled unless the provider can actually run.
+      var usable = e.id!=='rules' && e.connected!==false && e.analysis==='llm';
+      m.innerHTML = (e.id==='rules' || !models.length) ? '<option>—</option>'
+        : models.map(function(x){ return '<option value="'+esc(x)+'">'+esc(x)+'</option>'; }).join('');
+      m.disabled = !usable;
+      if(usable){ if(state.model==null || !models.includes(state.model)) state.model = models[0]||null; m.value = state.model||''; }
+      else { state.model = null; }
+      if(e.id==='rules'){ b.textContent='No AI · deterministic'; b.style.background='var(--border2)'; b.style.color='var(--ink2)'; b.style.border='1px solid var(--border)'; b.title=''; }
+      else if(e.connected===false){ b.textContent='Not connected'; b.style.background='#FFFBEB'; b.style.color='#92400E'; b.style.border='1px solid #FDE68A'; b.title=e.howToConnect||''; }
+      else if(e.analysis!=='llm'){ b.textContent='Connected · analysis not wired'; b.style.background='#FFFBEB'; b.style.color='#92400E'; b.style.border='1px solid #FDE68A'; b.title='Signed in, but this provider’s analysis is not wired yet — a run uses the deterministic rules engine.'; }
+      else { b.textContent='Connected'; b.style.background='#F0FDF4'; b.style.color='#166534'; b.style.border='1px solid #BBF7D0'; b.title=e.detail||''; }
     });
   }
   function loadEngines(){
@@ -943,7 +955,10 @@
     if(!state.engines.length) return; // keep the sample option on fetch failure
     var html = state.engines.map(function(e){
       var suffix = e.id==='rules' ? '' : (e.connected!==false ? (e.analysis==='llm' ? ' ✓' : ' ✓ (rules)') : ' — not connected');
-      return '<option value="'+esc(e.id)+'"'+(e.id===state.engine?' selected':'')+'>'+esc((e.label||e.id)+suffix)+'</option>';
+      // AI-3: a not-connected provider is visible (so the user sees it exists + how to connect)
+      // but not selectable — that also closes the UI entry point for running an unreachable engine.
+      var dis = (e.connected===false) ? ' disabled' : '';
+      return '<option value="'+esc(e.id)+'"'+(e.id===state.engine?' selected':'')+dis+'>'+esc((e.label||e.id)+suffix)+'</option>';
     }).join('');
     SEL_IDS.forEach(function(id){
       var el = document.getElementById(id); if(!el) return;
@@ -1228,6 +1243,7 @@
         var h = document.getElementById('pickHint');
         if(h && typeof MSEL!=='undefined') h.textContent = MSEL.features.sel.length+' of '+MSEL.features.opts.length+' features selected';
       }
+      if(kind==='patterns' && window.updateRunButton) window.updateRunButton();
     };
   }
 
@@ -1319,8 +1335,20 @@
     }catch(e){}
   }
 
+  // P2-4/P2-5: don't fire a scan with nothing to scan for.
+  function assessInvalidReason(){
+    var modeBtn = document.querySelector('.mcard.on'); var mode = modeBtn ? modeBtn.dataset.mode : 'pattern';
+    if(mode==='prompt'){ var t=document.getElementById('askText'); if(!t || !t.value.trim()) return 'Enter what the session should look for'; }
+    if(mode==='pattern'){ if(typeof MSEL==='undefined' || !MSEL.patterns.sel.length) return 'Select at least one pattern'; }
+    if(!state.project || !state.session) return 'Open a project first';
+    return null;
+  }
+  window.updateRunButton = function(){ var b=document.getElementById('runBtn'); if(!b) return; var r=assessInvalidReason(); b.disabled=!!r; b.title=r||''; };
+
   var _runAssess = window.runAssess;
   window.runAssess = function(){
+    var reason = assessInvalidReason();
+    if(reason){ var hh=document.getElementById('assessRunHeader'); if(hh) hh.innerHTML='<span class="sd" style="background:var(--med);width:9px;height:9px;"></span><div><div style="font-weight:600;font-size:13.5px;">'+esc(reason)+'</div></div>'; return; }
     if(typeof _runAssess==='function') _runAssess();
     if(!state.project || !state.session) return;
     var scope = buildScanScope();
@@ -1695,6 +1723,8 @@
 
   function boot(){
     document.body.classList.add('nav-locked'); window.__sfProject=false; // S1-11: tabs stay locked until a project opens
+    document.querySelectorAll('.tab').forEach(function(t){ t.title = 'Open a project first'; }); // P2-2: hover hint on gated tabs
+    if(window.updateRunButton) window.updateRunButton();
     get('/api/health').then(function(){ setBadge(true); }).catch(function(){ setBadge(false); });
     loadEngines();
     get('/api/patterns').then(function(d){ hydratePatterns(d.families); loadPatternCards(); }).catch(function(){});

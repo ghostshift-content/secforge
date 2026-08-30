@@ -186,16 +186,24 @@ export async function handleApi(req, res, url) {
         if (activeScans.has(project)) return json(res, 409, { error: 'a scan is already running for this project' }), true; // P0-2e
         activeScans.add(project);
         try {
-          const engine = await validEngineId(body.engine);                  // N1/N2: known adapter id only, coerced to a string
+          const requested = await validEngineId(body.engine);               // N1/N2: known adapter id only, coerced to a string
+          // AI-2: a KNOWN-but-unreachable provider (or one whose analysis isn't wired) must not run
+          // as itself and have the record claim it did. Fall back to rules and record the TRUTH.
+          let engine = 'rules', reason = null;
+          if (requested !== 'rules') {
+            const conn = await checkConnection(requested);
+            if (conn.connected && conn.analysis === 'llm') engine = requested;
+            else reason = conn.connected ? 'analysis not wired' : 'not connected';
+          }
+          const model = (engine === requested && typeof body.model === 'string') ? body.model : null;
           const scope = normaliseScope(body.scope);                         // input validation vs SCOPE_KINDS/RUN_METHODS
           const cur = await mgr.status(project, sid);
           if (cur && cur.status === 'created') await mgr.start(project, sid); // N3: drive the FSM so status is real + pause works
           await mgr.configureRun(project, sid, scope);
-          await mgr.recordEngine(project, sid, { provider: engine, model: typeof body.model === 'string' ? body.model : null }); // N4
+          await mgr.recordEngine(project, sid, { provider: engine, model, requested, reason }); // N4 + AI-2: never record an engine that didn't run
           await store.clearFindings(project);                               // N5: a re-scan replaces findings; no stale results survive
-          const model = typeof body.model === 'string' ? body.model : null;
           const result = await runAssessment({ store, projectId: project, scope, engine, model });
-          return json(res, 200, result), true;
+          return json(res, 200, { ...result, modelUsed: model, requested, reason }), true; // AI-5: report what actually ran
         } finally {
           activeScans.delete(project);
         }

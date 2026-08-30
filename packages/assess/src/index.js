@@ -31,7 +31,7 @@ export function planJobs(scope = {}) {
 
 function slugFor(candidate) { return `${candidate.family}-${candidate.title}`; }
 
-function findingOf(candidate, n, engineUsed) {
+function findingOf(candidate, n, engineUsed, modelUsed = null) {
   return {
     id: ID.finding(n, slugFor(candidate)),
     family: candidate.family,
@@ -44,7 +44,8 @@ function findingOf(candidate, n, engineUsed) {
     route: candidate.route,
     evidence: candidate.evidence,
     rule: candidate.rule,
-    engine: engineUsed,
+    engine: { provider: engineUsed, model: modelUsed || null }, // AI-4: same {provider,model} shape as the session record
+
     lifecycle: 'terminal',
     outcome: 'vulnerable',
     verification: 'verified',
@@ -208,7 +209,7 @@ async function report(store, projectId, candidates, graph, engineUsed, ctx = {})
   let n = 0;
   for (const candidate of candidates) {
     n += 1;
-    const base = findingOf(candidate, n, engineUsed);
+    const base = findingOf(candidate, n, engineUsed, ctx.model);
     const snippet = buildSnippet(ctx.sourceRoot, ctx.manifest, base.evidence);
     const finding = decorateFinding(base, { snippet });
     await store.writeFinding(projectId, finding);
@@ -277,7 +278,7 @@ export async function runAssessment({ store, projectId, scope = {}, engine = 'ru
   let coverage = null;
   if (store && projectId) {
     const [sourceRoot, manifest] = await Promise.all([readSourceRoot(store, projectId), loadManifest(store, projectId)]);
-    findings = await report(store, projectId, validated, graph, engine, { sourceRoot, manifest });
+    findings = await report(store, projectId, validated, graph, engine, { sourceRoot, manifest, model });
     coverage = await computeCoverage(store, projectId);
   }
   onEvent?.({ stage: 'reporter', promoted: findings.length });
