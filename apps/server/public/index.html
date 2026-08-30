@@ -104,6 +104,14 @@
   .leg{display:flex;gap:14px;flex-wrap:wrap;align-items:center;}
   .leg span{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink2);}
   .leg i{width:11px;height:11px;border-radius:3px;display:inline-block;}
+  /* Phase E: graph overview / drill-down additions */
+  .gdomain-label{font:600 12px 'IBM Plex Sans',sans-serif;fill:var(--ink2);}
+  .gdomain-chip rect{fill:var(--border2);stroke:var(--border);}
+  .garch-chip rect{fill:var(--border2);stroke:var(--ink3);stroke-dasharray:5 4;}
+  .gbubble-gap rect{stroke:var(--crit);stroke-width:2.5;}
+  .gbubble-warn rect{stroke:var(--med);stroke-width:2.5;}
+  #kgraph{cursor:grab;}
+  #kgraph.dragging{cursor:grabbing;}
 
   table.grid{width:100%;border-collapse:collapse;font-size:12px;}
   table.grid th{background:var(--border2);font-size:10px;font-weight:600;color:var(--ink2);text-transform:uppercase;letter-spacing:.03em;text-align:left;padding:8px 10px;white-space:nowrap;}
@@ -319,46 +327,25 @@
 
         <div class="scroll" style="flex-grow:1;min-width:0;">
 
-          <!-- GRAPH -->
+          <!-- GRAPH: one-page system overview + in-place feature drill-down (Phase E) -->
           <div class="msubpanel on" data-msub="graph" style="padding:18px 24px;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
-              <div class="kicker" id="graphHeaderTitle">Knowledge graph · Checkout subgraph</div>
-              <div class="mono muted" style="font-size:11px;">nodes/edges projected from index.sqlite · every claim cites file:line</div>
-            </div>
-            <div id="kgraph" class="gwrap">
-              <svg class="gsvg" viewBox="0 0 980 400" role="img" aria-label="Knowledge graph of the Checkout feature">
-                <!-- edges (drawn first) -->
-                <line class="gedge" x1="80" y1="210" x2="295" y2="95"/><text class="glabel" x="150" y="146">calls</text>
-                <line class="gedge" x1="80" y1="210" x2="295" y2="320"/><text class="glabel" x="150" y="278">calls</text>
-                <line class="gedge" x1="295" y1="95" x2="505" y2="80"/><text class="glabel" x="360" y="80">AUTHENTICATED_BY</text>
-                <line class="gedge" x1="295" y1="95" x2="505" y2="155"/><text class="glabel" x="360" y="135">AUTHORIZED_BY</text>
-                <line class="gedge" x1="295" y1="95" x2="715" y2="120"/><text class="glabel" x="540" y="98">USES_SERVICE</text>
-                <line class="gedge" x1="295" y1="95" x2="700" y2="180"/><text class="glabel" x="470" y="168">ENQUEUES</text>
-                <line class="gedge" x1="715" y1="120" x2="885" y2="110"/><text class="glabel" x="770" y="103">WRITES</text>
-                <line class="gedge" x1="295" y1="95" x2="885" y2="250"/><text class="glabel" x="560" y="205">WRITES</text>
-                <line class="gedge" x1="295" y1="320" x2="505" y2="320" stroke="#F59E0B" stroke-dasharray="5 4"/><text class="glabel" x="360" y="313" fill="#B45309">no AUTHORIZED_BY</text>
-                <line class="gedge" x1="505" y1="320" x2="885" y2="250" stroke="#DC2626" stroke-width="2"/><text class="glabel" x="640" y="304" fill="#B91C1C" style="font-weight:600">READS · no owner scope</text>
-
-                <!-- nodes -->
-                <g class="gnode" onclick="mapSub('feature')"><rect x="20" y="192" width="120" height="36" rx="9" fill="#EEF2FF" stroke="#C7D2FE"/><text class="gtag" x="80" y="207" text-anchor="middle" fill="#4338CA">ACTOR</text><text class="gname" x="80" y="221" text-anchor="middle">customer</text></g>
-                <g class="gnode" onclick="mapSub('feature')"><rect x="205" y="75" width="180" height="40" rx="9" fill="#fff" stroke="#E7E5E4"/><text class="gtag" x="295" y="91" text-anchor="middle" fill="#0891B2">ENDPOINT</text><text class="gname" x="295" y="107" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="11">POST /checkout</text></g>
-                <g class="gnode" onclick="mapSub('feature')"><rect x="205" y="300" width="180" height="40" rx="9" fill="#FFFBEB" stroke="#FDE68A"/><text class="gtag" x="295" y="316" text-anchor="middle" fill="#0891B2">ENDPOINT</text><text class="gname" x="295" y="332" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="11">GET /orders/:id</text></g>
-                <g class="gnode" onclick="mapSub('feature')"><rect x="415" y="63" width="180" height="33" rx="9" fill="#fff" stroke="#E7E5E4"/><text class="gtag" x="505" y="78" text-anchor="middle" fill="#16A34A">AUTH_CHECK</text><text class="gname" x="505" y="90" text-anchor="middle" font-size="11">authenticate_user</text></g>
-                <g class="gnode" onclick="mapSub('feature')"><rect x="415" y="138" width="180" height="33" rx="9" fill="#fff" stroke="#E7E5E4"/><text class="gtag" x="505" y="153" text-anchor="middle" fill="#16A34A">AUTH_CHECK</text><text class="gname" x="505" y="165" text-anchor="middle" font-size="11">CartPolicy#owns?</text></g>
-                <g class="gnode"><rect x="410" y="303" width="190" height="34" rx="9" fill="#FEF2F2" stroke="#FCA5A5" stroke-dasharray="5 4"/><text class="gtag" x="505" y="318" text-anchor="middle" fill="#B91C1C">COVERAGE_GAP</text><text class="gname" x="505" y="330" text-anchor="middle" font-size="11" fill="#991B1B">no owner check</text></g>
-                <g class="gnode" onclick="mapSub('feature')"><rect x="635" y="102" width="160" height="36" rx="9" fill="#fff" stroke="#E7E5E4"/><text class="gtag" x="715" y="118" text-anchor="middle" fill="#4F46E5">SERVICE</text><text class="gname" x="715" y="132" text-anchor="middle" font-size="11">PaymentService</text></g>
-                <g class="gnode" onclick="mapSub('feature')"><rect x="625" y="163" width="150" height="34" rx="9" fill="#fff" stroke="#E7E5E4"/><text class="gtag" x="700" y="178" text-anchor="middle" fill="#78716C">JOB</text><text class="gname" x="700" y="190" text-anchor="middle" font-size="11">FulfilOrder</text></g>
-                <g class="gnode" onclick="mapSub('feature')"><rect x="825" y="92" width="120" height="36" rx="9" fill="#F5F5F4" stroke="#E7E5E4"/><text class="gtag" x="885" y="108" text-anchor="middle" fill="#78716C">DATA_STORE</text><text class="gname" x="885" y="122" text-anchor="middle" font-size="11">payments</text></g>
-                <g class="gnode" onclick="mapSub('feature')"><rect x="825" y="230" width="120" height="40" rx="9" fill="#F5F5F4" stroke="#E7E5E4"/><text class="gtag" x="885" y="247" text-anchor="middle" fill="#78716C">DATA_STORE</text><text class="gname" x="885" y="262" text-anchor="middle" font-size="11">orders</text></g>
-              </svg>
-              <div style="border-top:1px solid var(--border);padding:11px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
-                <div class="leg">
-                  <span><i style="background:#EEF2FF;border:1px solid #C7D2FE"></i>Actor</span>
-                  <span><i style="background:#fff;border:1px solid #E7E5E4"></i>Endpoint / Auth / Service</span>
-                  <span><i style="background:#F5F5F4;border:1px solid #E7E5E4"></i>Data store / Job</span>
-                </div>
-                <div class="mono muted" style="font-size:11px;">click any node → feature map</div>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <button id="graphBackBtn" class="btn" style="display:none;font-size:11.5px;padding:5px 10px;" onclick="exitToOverview()">← Overview</button>
+                <div class="kicker" id="graphHeaderTitle">System graph</div>
               </div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <div id="graphCovStrip" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+                <button class="btn" style="font-size:11.5px;padding:5px 10px;" onclick="resetGraphView()">Reset view</button>
+              </div>
+            </div>
+            <div id="graphGapList" hidden style="margin-bottom:10px;"></div>
+            <div id="kgraph" class="gwrap">
+              <div class="muted" style="padding:24px;text-align:center;font-size:12.5px;">Open a project to see its system graph.</div>
+            </div>
+            <div id="graphDossierExtra">
+              <div id="graphDepthFooter"></div>
+              <div id="graphCitationPanel"></div>
             </div>
           </div>
 
@@ -938,7 +925,9 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
     features: [], selectedFeature: null,
     graph: null, findings: [], coverage: null,
     findingFilter: 'all', selectedFinding: null,
-    families: [], cards: [], inventory: null, lastMined: []
+    families: [], cards: [], inventory: null, lastMined: [],
+    reconciliation: null, dossierCache: {},
+    graphView: { mode:'overview', featureId:null, zoom:{x:0,y:0,scale:1}, natural:{w:900,h:400}, domainCollapsed:{}, clusterExpanded:false }
   };
 
   function setBadge(ok){
@@ -1227,9 +1216,10 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
     }).join('');
   }
 
-  // ---------- map: knowledge graph svg ----------
+  // ---------- map: system graph — overview swimlanes + feature drill-down (Phase E) ----------
   var GRAPH_COLORS = {
     ACTOR:{fill:'#EEF2FF',stroke:'#C7D2FE',tag:'#4338CA'},
+    ROLE:{fill:'#EEF2FF',stroke:'#C7D2FE',tag:'#4338CA'},
     FEATURE:{fill:'#EEF2FF',stroke:'#C7D2FE',tag:'#4338CA'},
     ENDPOINT:{fill:'#fff',stroke:'#E7E5E4',tag:'#0891B2'},
     AUTH_CHECK:{fill:'#fff',stroke:'#E7E5E4',tag:'#16A34A'},
@@ -1237,55 +1227,423 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
     DATA_STORE:{fill:'#F5F5F4',stroke:'#E7E5E4',tag:'#78716C'},
     JOB:{fill:'#fff',stroke:'#E7E5E4',tag:'#78716C'}
   };
-  var GRAPH_COLS = ['ACTOR','ENDPOINT','AUTH_CHECK','SERVICE','DATA_STORE','JOB','FEATURE'];
+  var DOSSIER_COLS = ['ACTOR','ROLE','ENDPOINT','AUTH_CHECK','SERVICE','DATA_STORE','JOB','FEATURE'];
+  var BASE_W=96, BASE_H=46, MIN_W=96, MAX_W=260, GAPX=14, ROWGAP=14, DOMAIN_COLLAPSE_AT=40;
+  function clamp(v,lo,hi){ return Math.max(lo, Math.min(hi, v)); }
+  function bubbleWidth(n){ return clamp(Math.round(BASE_W*Math.sqrt(Math.max(1,n))), MIN_W, MAX_W); }
 
-  function renderGraphSvg(){
+  // Greedy shelf-packing (deterministic, no force sim) — same idea as CSS flex-wrap, computed by
+  // hand since there's no DOM layout to lean on for SVG. Biggest-first so the busiest features
+  // read first, matching how a person scans.
+  function packRow(items, maxWidth){
+    var sorted = items.slice().sort(function(a,b){ return (b.endpointCount||0)-(a.endpointCount||0); });
+    var rows=[], row=[], rowWidth=0;
+    sorted.forEach(function(it){
+      var w = bubbleWidth(it.endpointCount||1); it._w = w;
+      if(rowWidth+w > maxWidth && row.length){ rows.push(row); row=[]; rowWidth=0; }
+      row.push(it); rowWidth += w+GAPX;
+    });
+    if(row.length) rows.push(row);
+    return rows;
+  }
+
+  // Pure grouping/metrics pass over the whole-project graph — one scan of graph.edges, no BFS.
+  // Real edges only: DOMAIN--CONTAINS-->FEATURE and FEATURE--EXPOSES-->ENDPOINT drive grouping and
+  // sizing. ARCH_CLUSTER has no DOMAIN edge by construction (an unconfirmed technical cluster,
+  // never a feature) so it's grouped only by its own data.domain LABEL — kept in a visually
+  // distinct swimlane, never merged into a real DOMAIN's.
+  function overviewModel(g){
+    var nodesById = {}; (g.nodes||[]).forEach(function(n){ nodesById[n.id]=n; });
+    var outBySrc = {}, touching = {}, domainOfFeature = {};
+    (g.edges||[]).forEach(function(e){
+      (outBySrc[e.src]=outBySrc[e.src]||[]).push(e);
+      (touching[e.src]=touching[e.src]||[]).push(e);
+      (touching[e.dst]=touching[e.dst]||[]).push(e);
+      if(e.type==='CONTAINS'){
+        var s=nodesById[e.src], t=nodesById[e.dst];
+        if(s && s.type==='DOMAIN' && t && t.type==='FEATURE') domainOfFeature[e.dst]=e.src;
+      }
+    });
+    function outOfType(id, types){ return (outBySrc[id]||[]).filter(function(e){ return types.indexOf(e.type)>=0; }); }
+    function touchesType(id, types){ return (touching[id]||[]).filter(function(e){ return types.indexOf(e.type)>=0; }); }
+
+    var domains = (g.nodes||[]).filter(function(n){ return n.type==='DOMAIN'; });
+    var features = (g.nodes||[]).filter(function(n){ return n.type==='FEATURE'; });
+    var clusters = (g.nodes||[]).filter(function(n){ return n.type==='ARCH_CLUSTER'; });
+
+    var featModels = features.map(function(f){
+      var eps = outOfType(f.id, ['EXPOSES']).map(function(e){ return nodesById[e.dst]; })
+        .filter(function(n){ return n && (n.type==='ENDPOINT'||n.type==='ROUTE'||n.type==='GRAPHQL_OPERATION'); });
+      var gapCount=0, unauthnCount=0;
+      eps.forEach(function(ep){
+        var hasAuthz = touchesType(ep.id, ['AUTHORIZED_BY','GUARDED_BY']).length>0;
+        var hasAuthn = touchesType(ep.id, ['AUTHENTICATED_BY']).length>0;
+        if(hasAuthn && !hasAuthz) gapCount++; // the download_receipt shape: authenticated but not authorized
+        if(!hasAuthn) unauthnCount++;
+      });
+      var svcJobCount = outOfType(f.id, ['USES_SERVICE','HANDLED_BY']).length;
+      return { node:f, endpointCount:eps.length, gapCount:gapCount, unauthnCount:unauthnCount, svcJobCount:svcJobCount };
+    });
+
+    var byDomain = {};
+    featModels.forEach(function(fm){
+      var did = domainOfFeature[fm.node.id] || '__ungrouped__';
+      (byDomain[did]=byDomain[did]||[]).push(fm);
+    });
+    var domainGroups = domains.map(function(d){ return { id:d.id, name:d.name, features: byDomain[d.id]||[] }; });
+    if(byDomain.__ungrouped__) domainGroups.push({ id:'__ungrouped__', name:'Ungrouped', features: byDomain.__ungrouped__ });
+    domainGroups.forEach(function(dg){
+      dg.totalEndpoints = dg.features.reduce(function(s,f){ return s+f.endpointCount; }, 0);
+      dg.gapCount = dg.features.reduce(function(s,f){ return s+f.gapCount; }, 0);
+    });
+    domainGroups.sort(function(a,b){ return b.totalEndpoints-a.totalEndpoints; });
+
+    var clusterByLabel = {};
+    clusters.forEach(function(c){ var label=(c.data&&c.data.domain)||'unlabeled'; (clusterByLabel[label]=clusterByLabel[label]||[]).push(c); });
+
+    // Declared in EDGE_TYPES but never written by the current pipeline (grep-confirmed) — drawn
+    // faithfully as zero edges today, no placeholder, so the day it starts being populated needs
+    // no UI change.
+    var sharedEdges = (g.edges||[]).filter(function(e){ return e.type==='SHARES_IMPLEMENTATION_WITH'; });
+
+    return { domainGroups:domainGroups, clusterByLabel:clusterByLabel, totalFeatures:features.length, sharedEdges:sharedEdges };
+  }
+
+  function applyZoom(){
+    var svg = document.querySelector('#kgraph svg.gsvg'); if(!svg) return;
+    var z = state.graphView.zoom, n = state.graphView.natural;
+    svg.setAttribute('viewBox', z.x+' '+z.y+' '+(n.w/z.scale)+' '+(n.h/z.scale));
+  }
+  window.resetGraphView = function(){ state.graphView.zoom = {x:0,y:0,scale:1}; applyZoom(); };
+
+  // Hand-rolled zoom (wheel, zoom-to-pointer) + pan (drag) via viewBox transform — no library.
+  // Wired once to the stable #kgraph host (guarded), never re-attached across re-renders of its
+  // <svg> child (the child is what gets replaced on every render).
+  function wireZoomPan(){
+    var host = document.getElementById('kgraph'); if(!host || host._zoomWired) return;
+    host._zoomWired = true;
+    var dragging=false, lastX=0, lastY=0, moved=false;
+    host.addEventListener('wheel', function(e){
+      var svg = host.querySelector('svg.gsvg'); if(!svg) return;
+      e.preventDefault();
+      var z = state.graphView.zoom, n = state.graphView.natural;
+      var rect = svg.getBoundingClientRect();
+      var px = rect.width ? (e.clientX-rect.left)/rect.width : 0.5, py = rect.height ? (e.clientY-rect.top)/rect.height : 0.5;
+      var curW = n.w/z.scale, curH = n.h/z.scale;
+      var gx = z.x+px*curW, gy = z.y+py*curH;
+      z.scale = clamp(z.scale*(e.deltaY<0 ? 1.1 : (1/1.1)), 0.4, 3);
+      var newW = n.w/z.scale, newH = n.h/z.scale;
+      z.x = gx-px*newW; z.y = gy-py*newH;
+      applyZoom();
+    }, { passive:false });
+    host.addEventListener('mousedown', function(e){ if(e.target.closest && e.target.closest('.gnode')) return; dragging=true; moved=false; lastX=e.clientX; lastY=e.clientY; host.classList.add('dragging'); });
+    window.addEventListener('mousemove', function(e){
+      if(!dragging) return;
+      var svg = host.querySelector('svg.gsvg'); if(!svg) return;
+      var z = state.graphView.zoom, n = state.graphView.natural;
+      var rect = svg.getBoundingClientRect();
+      var sx = rect.width ? (n.w/z.scale)/rect.width : 0, sy = rect.height ? (n.h/z.scale)/rect.height : 0;
+      if(Math.abs(e.clientX-lastX)>2 || Math.abs(e.clientY-lastY)>2) moved=true;
+      z.x -= (e.clientX-lastX)*sx; z.y -= (e.clientY-lastY)*sy;
+      lastX=e.clientX; lastY=e.clientY;
+      applyZoom();
+    });
+    window.addEventListener('mouseup', function(){ dragging=false; host.classList.remove('dragging'); host._dragMoved = moved; });
+    host.addEventListener('dblclick', function(){ resetGraphView(); });
+    // A click that was really the tail end of a drag must not also fire drill-down navigation.
+    host.addEventListener('click', function(e){ if(host._dragMoved){ host._dragMoved=false; e.stopPropagation(); } }, true);
+  }
+
+  function renderCoverageStrip(){
+    var host = document.getElementById('graphCovStrip'); if(!host) return;
+    var rec = state.reconciliation;
+    if(!rec || !rec.counts){ host.innerHTML=''; return; }
+    var c = rec.counts;
+    var chips = [
+      '<span class="chip" style="background:#F0FDF4;border-color:#BBF7D0;color:#166534;">'+(c.MAPPED_TO_FEATURE||0)+' mapped</span>',
+      '<span class="chip" style="background:#ECFEFF;border-color:#A5F3FC;color:#155E75;">'+(c.SHARED_INFRASTRUCTURE||0)+' shared infra</span>',
+    ];
+    var gapN = c.UNCLEAR_COVERAGE_GAP||0;
+    // A 0-gap project shows NO gap chip at all — a silent green "0" would misread as "checked,
+    // nothing found" vs. this honest "nothing to show for this signal".
+    if(gapN>0) chips.push('<button class="chip" style="background:#FEF2F2;border-color:#FCA5A5;color:#B91C1C;cursor:pointer;font-family:inherit;" onclick="toggleGapList()">'+gapN+' gap'+(gapN===1?'':'s')+'</button>');
+    host.innerHTML = chips.join('');
+  }
+  window.toggleGapList = function(){
+    var el = document.getElementById('graphGapList'); if(!el) return;
+    if(!el.hidden){ el.hidden=true; return; }
+    var gaps = (state.reconciliation && state.reconciliation.gaps) || [];
+    el.innerHTML = gaps.length
+      ? '<div class="card" style="padding:10px 14px;max-height:220px;overflow:auto;"><div class="kicker" style="margin-bottom:6px;">Coverage gaps · '+gaps.length+'</div>'
+        + gaps.map(function(g){ return '<div class="mono" style="font-size:11.5px;padding:3px 0;color:var(--ink2);">'+esc(g.file)+':'+esc(g.line)+' <span style="color:var(--ink);">'+esc(g.kind)+'</span>'+(g.entry?' · '+esc(g.entry):'')+'</div>'; }).join('')
+        + '</div>'
+      : sfEmpty('No gap rows.');
+    el.hidden = false;
+  };
+
+  function renderOverviewSvg(){
     var g = state.graph, host = document.getElementById('kgraph');
     if(!host) return;
-    if(!g || !g.nodes || !g.nodes.length){ var old0=host.querySelector('svg.gsvg'); if(old0) old0.outerHTML = sfEmpty('No graph yet. Nothing has been mapped for this project.'); return; }
-    var colW=155, nodeW=132, nodeH=34, padX=25, padY=20, rowGap=14;
-    var byCol = {}; GRAPH_COLS.forEach(function(t){ byCol[t]=[]; });
-    var extra = [];
-    g.nodes.forEach(function(n){ if(byCol[n.type]) byCol[n.type].push(n); else extra.push(n); });
-    if(extra.length) byCol.SERVICE = byCol.SERVICE.concat(extra);
-    var maxRows = 1;
-    GRAPH_COLS.forEach(function(t){ if(byCol[t].length>maxRows) maxRows=byCol[t].length; });
-    var width = padX*2 + GRAPH_COLS.length*colW;
-    var height = padY*2 + maxRows*(nodeH+rowGap);
-    var pos = {};
-    GRAPH_COLS.forEach(function(t, ci){
-      byCol[t].forEach(function(n, ri){
-        pos[n.id] = { x: padX+ci*colW, y: padY+ri*(nodeH+rowGap), w: nodeW, h: nodeH };
+    var titleEl = document.getElementById('graphHeaderTitle');
+    // A freshly-opened project's graph always carries a lone PROJECT node (0 edges) even before
+    // anything real is mapped — g.nodes.length alone would under-detect "empty". The honest check
+    // is whether overviewModel() found anything to group (a DOMAIN/FEATURE or an ARCH_CLUSTER).
+    var model = (g && g.nodes) ? overviewModel(g) : { domainGroups:[], clusterByLabel:{}, totalFeatures:0, sharedEdges:[] };
+    if(!model.domainGroups.length && !Object.keys(model.clusterByLabel).length){
+      host.innerHTML = sfEmpty('No graph yet. Nothing has been mapped for this project.');
+      if(titleEl) titleEl.textContent = 'System graph';
+      return;
+    }
+    var width = Math.max(700, host.clientWidth || 900);
+    var padX=20, padY=16, laneLabelH=22, domainGap=26, chipH=32;
+    var y = padY, nodeParts=[], edgeParts=[], centers={};
+
+    model.domainGroups.forEach(function(dg){
+      var collapsed = state.graphView.domainCollapsed[dg.id];
+      if(collapsed===undefined) collapsed = model.totalFeatures>DOMAIN_COLLAPSE_AT;
+      var summary = dg.name+' · '+dg.features.length+' feature'+(dg.features.length===1?'':'s')+' · '+dg.totalEndpoints+' endpoint'+(dg.totalEndpoints===1?'':'s')+(dg.gapCount>0?' · '+dg.gapCount+' unauthorized':'');
+      if(collapsed){
+        var chipW = clamp(summary.length*6.4+40, 260, width-padX*2);
+        nodeParts.push('<g class="gnode gdomain-chip" data-domain-toggle="'+esc(dg.id)+'"><rect x="'+padX+'" y="'+y+'" width="'+chipW+'" height="'+chipH+'" rx="8"/><text class="gname" x="'+(padX+14)+'" y="'+(y+21)+'" font-size="12">'+esc(summary)+'</text></g>');
+        y += chipH+ROWGAP;
+        return;
+      }
+      nodeParts.push('<text class="gdomain-label" data-domain-toggle="'+esc(dg.id)+'" style="cursor:pointer;" x="'+padX+'" y="'+(y+14)+'">'+esc(summary)+'</text>');
+      y += laneLabelH;
+      if(!dg.features.length) return;
+      var rows = packRow(dg.features, width-padX*2);
+      rows.forEach(function(row){
+        var x = padX;
+        row.forEach(function(fm){
+          var w = fm._w, h = BASE_H;
+          var ringClass = fm.gapCount>0 ? ' gbubble-gap' : (fm.unauthnCount>0 ? ' gbubble-warn' : '');
+          var c = GRAPH_COLORS.FEATURE;
+          var countLabel = fm.endpointCount>0
+            ? (fm.endpointCount+' endpoint'+(fm.endpointCount===1?'':'s'))
+            : (fm.svcJobCount>0 ? (fm.svcJobCount+' job/service'+(fm.svcJobCount===1?'':'s')) : 'no endpoints');
+          centers[fm.node.id] = { x:x+w/2, y:y+h/2 };
+          nodeParts.push('<g class="gnode'+ringClass+'" data-fid="'+esc(fm.node.id)+'"><title>'+esc(fm.node.name)+'</title>'
+            + '<rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" rx="10" fill="'+c.fill+'" stroke="'+c.stroke+'"/>'
+            + '<text class="gname" x="'+(x+w/2)+'" y="'+(y+20)+'" text-anchor="middle" font-size="11">'+esc(fm.node.name)+'</text>'
+            + '<text class="gtag" x="'+(x+w/2)+'" y="'+(y+35)+'" text-anchor="middle" fill="'+c.tag+'">'+esc(countLabel)+'</text></g>');
+          x += w+GAPX;
+        });
+        y += BASE_H+ROWGAP;
+      });
+      y += domainGap-ROWGAP;
+    });
+
+    var clusterLabels = Object.keys(model.clusterByLabel);
+    if(clusterLabels.length){
+      var totalClusters=0, totalRows=0;
+      clusterLabels.forEach(function(l){ model.clusterByLabel[l].forEach(function(c){ totalClusters++; totalRows += (c.data&&c.data.row_count)||0; }); });
+      // ARCH_CLUSTER is never a confirmed feature (no DOMAIN edge, by construction) — always
+      // collapsed by default regardless of size, dashed/gray so it never reads as a real swimlane.
+      if(!state.graphView.clusterExpanded){
+        var clabel = 'Unclustered / technical — not a confirmed feature · '+totalClusters+' cluster'+(totalClusters===1?'':'s')+' · '+totalRows+' rows';
+        var cw = clamp(clabel.length*6.2+40, 320, width-padX*2);
+        nodeParts.push('<g class="gnode garch-chip" data-cluster-toggle="1"><rect x="'+padX+'" y="'+y+'" width="'+cw+'" height="'+chipH+'" rx="8"/><text class="gname" x="'+(padX+14)+'" y="'+(y+21)+'" font-size="12">'+esc(clabel)+'</text></g>');
+        y += chipH+ROWGAP;
+      } else {
+        nodeParts.push('<text class="gdomain-label" data-cluster-toggle="1" style="cursor:pointer;" x="'+padX+'" y="'+(y+14)+'">Unclustered / technical — not a confirmed feature (click to collapse)</text>');
+        y += laneLabelH;
+        clusterLabels.forEach(function(label){
+          var items = model.clusterByLabel[label].map(function(c){ return { node:c, endpointCount:(c.data&&c.data.row_count)||1 }; });
+          var rows = packRow(items, width-padX*2);
+          rows.forEach(function(row){
+            var x = padX;
+            row.forEach(function(it){
+              var w = it._w;
+              var tip = (it.node.data&&it.node.data.note) || 'technical cluster derived from directory structure — not a confirmed business feature';
+              nodeParts.push('<g class="gnode garch-chip" data-cluster-info="'+esc(tip)+'"><title>'+esc(tip)+'</title>'
+                + '<rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+BASE_H+'" rx="10"/>'
+                + '<text class="gname" x="'+(x+w/2)+'" y="'+(y+20)+'" text-anchor="middle" font-size="11">'+esc(it.node.name)+'</text>'
+                + '<text class="gtag" x="'+(x+w/2)+'" y="'+(y+35)+'" text-anchor="middle" fill="var(--ink3)">'+esc(it.endpointCount)+' rows</text></g>');
+              x += w+GAPX;
+            });
+            y += BASE_H+ROWGAP;
+          });
+        });
+      }
+      y += domainGap-ROWGAP;
+    }
+
+    // SHARES_IMPLEMENTATION_WITH — real edges only; today this list is always empty (see
+    // overviewModel), so this draws nothing rather than a fake placeholder. Curved (not straight)
+    // so a line crossing an unrelated bubble never visually implies a connection to it.
+    model.sharedEdges.forEach(function(e){
+      var a=centers[e.src], b=centers[e.dst]; if(!a||!b) return;
+      var mx=(a.x+b.x)/2, my=Math.min(a.y,b.y)-30;
+      edgeParts.push('<path class="gedge" style="stroke-dasharray:4 4;" d="M'+a.x+' '+a.y+' Q '+mx+' '+my+' '+b.x+' '+b.y+'" fill="none"/>');
+    });
+
+    var height = Math.max(200, y+padY);
+    state.graphView.natural = { w:width, h:height };
+    var svgHtml = '<svg class="gsvg" viewBox="0 0 '+width+' '+height+'" role="img" aria-label="System graph overview">'+edgeParts.join('')+nodeParts.join('')+'</svg>';
+    var footerHtml = '<div style="border-top:1px solid var(--border);padding:11px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">'
+      + '<div class="leg"><span><i style="background:#EEF2FF;border:1px solid #C7D2FE"></i>Feature</span><span><i style="background:var(--border2);border:1px dashed var(--ink3)"></i>Unconfirmed / architecture</span></div>'
+      + '<div class="mono muted" style="font-size:11px;" id="graphHint">click a feature to drill in · scroll to zoom · drag to pan</div></div>';
+    host.innerHTML = svgHtml+footerHtml;
+    if(titleEl && state.project) titleEl.textContent = 'System graph · '+state.project.name+' · '+g.nodes.length+' nodes · '+g.edges.length+' edges';
+
+    host.querySelectorAll('[data-fid]').forEach(function(el){
+      el.addEventListener('click', function(){ enterFeatureDossier(el.getAttribute('data-fid')); });
+    });
+    host.querySelectorAll('[data-domain-toggle]').forEach(function(el){
+      el.addEventListener('click', function(){
+        var id = el.getAttribute('data-domain-toggle');
+        var cur = state.graphView.domainCollapsed[id];
+        var eff = cur===undefined ? (model.totalFeatures>DOMAIN_COLLAPSE_AT) : cur;
+        state.graphView.domainCollapsed[id] = !eff;
+        renderOverviewSvg();
       });
     });
-    var edgesSvg = (g.edges||[]).map(function(e){
+    host.querySelectorAll('[data-cluster-toggle]').forEach(function(el){
+      el.addEventListener('click', function(){ state.graphView.clusterExpanded = !state.graphView.clusterExpanded; renderOverviewSvg(); });
+    });
+    host.querySelectorAll('[data-cluster-info]').forEach(function(el){
+      el.addEventListener('click', function(){ var hint=document.getElementById('graphHint'); if(hint) hint.textContent = el.getAttribute('data-cluster-info'); });
+    });
+    wireZoomPan();
+    applyZoom();
+  }
+
+  // ---------- map: feature dossier drill-down (reuses the columnar node-layout algorithm above) ----------
+  function dossierNodes(d){
+    var nodes = [];
+    function add(list, type){ (list||[]).forEach(function(n){ nodes.push({ id:n.id, type:type, name:n.name, raw:n }); }); }
+    add(d.actors,'ACTOR'); add(d.roles,'ROLE'); add(d.endpoints,'ENDPOINT'); add(d.authChecks,'AUTH_CHECK');
+    add(d.services,'SERVICE'); add(d.dataStores,'DATA_STORE'); add(d.jobs,'JOB');
+    if(d.feature) nodes.push({ id:d.feature.id, type:'FEATURE', name:d.feature.name, raw:d.feature });
+    return nodes;
+  }
+  // facts are edges in prose ("A --TYPE--> B") — a display convenience over the dossier's own
+  // fact list, never a new data source (retrieval/src/index.js's factOf already IS the edge).
+  function dossierEdges(nodes, facts){
+    var byName = {}; nodes.forEach(function(n){ if(!(n.name in byName)) byName[n.name]=n.id; });
+    var edges = [];
+    (facts||[]).forEach(function(f){
+      var m = /^(.*) --([A-Z_]+)--> (.*)$/.exec(f);
+      if(!m) return;
+      var src = byName[m[1]], dst = byName[m[3]];
+      if(src && dst) edges.push({ src:src, dst:dst });
+    });
+    return edges;
+  }
+
+  function renderDepthFooter(d){
+    var el = document.getElementById('graphDepthFooter'); if(!el) return;
+    if(!d || !d.depth){ el.innerHTML=''; return; }
+    var dep = d.depth;
+    var capChip = dep.capped ? ' <span class="guard-warn">depth walk capped at 300 nodes — this feature\'s real reach may be larger</span>' : '';
+    el.innerHTML = '<div class="mono muted" style="font-size:11.5px;margin:10px 0 0;">'+dep.endpointCount+' endpoint'+(dep.endpointCount===1?'':'s')+' · reaches '+dep.memberCount+' nodes across '+dep.filesTouched+' files, '+dep.maxChainLength+' hops deep</div>'+capChip;
+  }
+  window.showCitationFor = function(nodeId){
+    var d = state.dossierCache[state.graphView.featureId]; var el = document.getElementById('graphCitationPanel'); if(!d || !el) return;
+    var cites = (d.citations||[]).filter(function(c){ return c.node===nodeId; });
+    var ep = (d.endpoints||[]).find(function(e){ return e.id===nodeId; });
+    var title = ep ? ((ep.method||'')+' '+(ep.route||'')) : nodeId;
+    var body = cites.length ? cites.map(function(c){
+      var text = c.excerpt ? '<pre class="mono" style="background:var(--border2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:11.5px;overflow-x:auto;margin:0 0 10px;">'+esc(c.excerpt)+'</pre>'
+        : '<div class="muted" style="font-size:12px;margin:0 0 10px;">no cited excerpt for this node</div>';
+      return '<div class="mono chip" style="display:inline-block;margin:4px 6px 6px 0;">'+esc(c.file)+':'+esc(c.line)+'</div>'+text;
+    }).join('') : sfEmpty('no cited excerpt for this node');
+    el.innerHTML = '<div class="card" style="margin-top:10px;padding:12px 14px;"><div class="kicker" style="margin-bottom:6px;">'+esc(title)+' · citations</div>'+body+'</div>';
+  };
+
+  function renderFeatureDossierSvg(d){
+    var host = document.getElementById('kgraph'), titleEl = document.getElementById('graphHeaderTitle');
+    if(!host) return;
+    if(!d || d.ok===false){
+      host.innerHTML = sfEmpty('Coverage gap: '+((d&&d.reason)||'feature not found'));
+      state.graphView.natural = { w:900, h:200 };
+      renderDepthFooter(null);
+      var cp0 = document.getElementById('graphCitationPanel'); if(cp0) cp0.innerHTML='';
+      if(titleEl) titleEl.textContent = 'System graph';
+      return;
+    }
+    var nodes = dossierNodes(d), edges = dossierEdges(nodes, d.facts);
+    var colW=165, nodeW=145, nodeH=54, padX=25, padY=20, rowGap=16;
+    var byCol = {}; DOSSIER_COLS.forEach(function(t){ byCol[t]=[]; });
+    nodes.forEach(function(n){ if(byCol[n.type]) byCol[n.type].push(n); });
+    var usedCols = DOSSIER_COLS.filter(function(t){ return byCol[t].length; });
+    var maxRows = 1; usedCols.forEach(function(t){ if(byCol[t].length>maxRows) maxRows=byCol[t].length; });
+    var width = Math.max(700, padX*2+usedCols.length*colW);
+    var height = padY*2+maxRows*(nodeH+rowGap);
+    var pos = {};
+    usedCols.forEach(function(t, ci){ byCol[t].forEach(function(n, ri){ pos[n.id] = { x:padX+ci*colW, y:padY+ri*(nodeH+rowGap), w:nodeW, h:nodeH }; }); });
+    var edgesSvg = edges.map(function(e){
       var a=pos[e.src], b=pos[e.dst]; if(!a||!b) return '';
       return '<line class="gedge" x1="'+(a.x+a.w)+'" y1="'+(a.y+a.h/2)+'" x2="'+b.x+'" y2="'+(b.y+b.h/2)+'"/>';
     }).join('');
-    var nodesSvg = Object.keys(pos).map(function(id){
-      var n = g.nodes.find(function(x){ return x.id===id; }); if(!n) return '';
-      var p = pos[id]; var c = GRAPH_COLORS[n.type] || GRAPH_COLORS.SERVICE;
-      var label = (n.data && n.data.method) ? (n.data.method+' '+(n.data.route||'')) : (n.name||'');
-      return '<g class="gnode"><rect x="'+p.x+'" y="'+p.y+'" width="'+p.w+'" height="'+p.h+'" rx="9" fill="'+c.fill+'" stroke="'+c.stroke+'"/>'
+    var nodesSvg = nodes.map(function(n){
+      var p = pos[n.id]; if(!p) return '';
+      var c = GRAPH_COLORS[n.type] || GRAPH_COLORS.SERVICE;
+      var label = n.type==='ENDPOINT' ? ((n.raw.method||'')+' '+(n.raw.route||'')) : n.name;
+      var badges = '';
+      if(n.type==='ENDPOINT'){
+        badges = '<text x="'+(p.x+p.w/2)+'" y="'+(p.y+36)+'" text-anchor="middle" font-size="9" font-weight="700" fill="'+(n.raw.authn?'#16A34A':'#DC2626')+'">'+(n.raw.authn?'authn ✓':'no authn')+'</text>'
+          + '<text x="'+(p.x+p.w/2)+'" y="'+(p.y+48)+'" text-anchor="middle" font-size="9" font-weight="700" fill="'+(n.raw.authz?'#16A34A':'#DC2626')+'">'+(n.raw.authz?'authz ✓':'no authz')+'</text>';
+      }
+      var clickAttr = n.type==='ENDPOINT' ? ' data-epid="'+esc(n.id)+'"' : '';
+      return '<g class="gnode"'+clickAttr+'><title>'+esc(n.name)+'</title>'
+        + '<rect x="'+p.x+'" y="'+p.y+'" width="'+p.w+'" height="'+p.h+'" rx="9" fill="'+c.fill+'" stroke="'+c.stroke+'"/>'
         + '<text class="gtag" x="'+(p.x+p.w/2)+'" y="'+(p.y+13)+'" text-anchor="middle" fill="'+c.tag+'">'+esc(n.type)+'</text>'
-        + '<text class="gname" x="'+(p.x+p.w/2)+'" y="'+(p.y+27)+'" text-anchor="middle" font-size="10">'+esc(label)+'</text></g>';
+        + '<text class="gname" x="'+(p.x+p.w/2)+'" y="'+(p.y+25)+'" text-anchor="middle" font-size="10">'+esc(label)+'</text>'+badges+'</g>';
     }).join('');
-    var svgHtml = '<svg class="gsvg" viewBox="0 0 '+width+' '+height+'" role="img" aria-label="Knowledge graph">'+edgesSvg+nodesSvg+'</svg>';
-    var oldSvg = host.querySelector('svg.gsvg');
-    if(oldSvg) oldSvg.outerHTML = svgHtml;
+    state.graphView.natural = { w:width, h:height };
+    var svgHtml = '<svg class="gsvg" viewBox="0 0 '+width+' '+height+'" role="img" aria-label="Feature dossier graph">'+edgesSvg+nodesSvg+'</svg>';
+    var footerHtml = '<div style="border-top:1px solid var(--border);padding:11px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">'
+      + '<div class="leg"><span><i style="background:#fff;border:1px solid #E7E5E4"></i>Endpoint / Auth / Service</span><span><i style="background:#F5F5F4;border:1px solid #E7E5E4"></i>Data store / Job</span></div>'
+      + '<div class="mono muted" style="font-size:11px;" id="graphHint">click an endpoint → cited excerpt · scroll to zoom · drag to pan</div></div>';
+    host.innerHTML = svgHtml+footerHtml;
+    host.querySelectorAll('[data-epid]').forEach(function(el){
+      el.addEventListener('click', function(){ showCitationFor(el.getAttribute('data-epid')); });
+    });
+    if(titleEl) titleEl.textContent = 'Feature · '+(d.feature?d.feature.name:'');
+    renderDepthFooter(d);
+    var cp = document.getElementById('graphCitationPanel'); if(cp) cp.innerHTML='';
+    wireZoomPan();
+    applyZoom();
   }
 
-  function updateGraphHeader(g){
-    var el = document.getElementById('graphHeaderTitle');
-    if(el && state.project) el.textContent = 'Knowledge graph · '+state.project.name+' · '+((g&&g.nodes)?g.nodes.length:0)+' nodes · '+((g&&g.edges)?g.edges.length:0)+' edges';
-  }
+  window.enterFeatureDossier = function(id){
+    if(!state.project) return;
+    state.graphView.mode = 'feature'; state.graphView.featureId = id; state.graphView.zoom = {x:0,y:0,scale:1};
+    var backBtn = document.getElementById('graphBackBtn'); if(backBtn) backBtn.style.display='inline-block';
+    if(typeof selectFeatureById==='function'){ try{ selectFeatureById(id); }catch(e){} } // no-op today if the ledger's own id linkage doesn't match — harmless
+    var cached = state.dossierCache[id];
+    if(cached){ renderFeatureDossierSvg(cached); return; }
+    var host = document.getElementById('kgraph');
+    if(host) host.innerHTML = '<div class="muted" style="padding:24px;text-align:center;font-size:12.5px;">Loading feature…</div>';
+    get('/api/projects/'+state.project.id+'/features/'+encodeURIComponent(id)+'/context').then(function(d){
+      state.dossierCache[id] = d;
+      if(state.graphView.mode==='feature' && state.graphView.featureId===id) renderFeatureDossierSvg(d);
+    }).catch(function(){
+      if(host) host.innerHTML = sfEmpty('Coverage gap: could not load feature context.');
+    });
+  };
+  window.exitToOverview = function(){
+    state.graphView.mode = 'overview'; state.graphView.featureId = null; state.graphView.zoom = {x:0,y:0,scale:1};
+    var backBtn = document.getElementById('graphBackBtn'); if(backBtn) backBtn.style.display='none';
+    var cp = document.getElementById('graphCitationPanel'); if(cp) cp.innerHTML='';
+    renderDepthFooter(null);
+    renderOverviewSvg(); // reuses the already-held state.graph — no re-fetch
+  };
 
   function refreshGraph(){
     if(!state.project) return Promise.resolve();
-    return get('/api/projects/'+state.project.id+'/graph').then(function(g){
-      state.graph = g;
-      renderGraphSvg();
-      updateGraphHeader(g);
+    state.dossierCache = {}; // a re-map may change feature ids/content — never show stale dossier data
+    state.graphView = { mode:'overview', featureId:null, zoom:{x:0,y:0,scale:1}, natural:{w:900,h:400}, domainCollapsed:{}, clusterExpanded:false };
+    var backBtn = document.getElementById('graphBackBtn'); if(backBtn) backBtn.style.display='none';
+    return Promise.all([
+      get('/api/projects/'+state.project.id+'/graph'),
+      get('/api/projects/'+state.project.id+'/reconciliation').catch(function(){ return null; }),
+    ]).then(function(results){
+      state.graph = results[0];
+      state.reconciliation = results[1];
+      renderOverviewSvg();
+      renderCoverageStrip();
       renderRoles();
       if(state.selectedFeature) renderLedger(state.selectedFeature);
     }).catch(function(){});

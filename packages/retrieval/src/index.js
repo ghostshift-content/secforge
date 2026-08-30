@@ -1,7 +1,15 @@
 // @secforge/retrieval — the zero-dep "RAG": fully-cited per-feature context for future scans.
 // Reads only @secforge/store (readGraph/readFrozenSourceLines/readReconciliation). Never reads
 // live source, never fabricates a fact that isn't a real graph edge. See docs/phase-a-design.md §3.
-import { readGraph, readFrozenSourceLines } from '@secforge/store';
+import { readGraph, readFrozenSourceLines, currentSnapshotId } from '@secforge/store';
+
+// Resolve the snapshot ONCE per call. readGraph() resolves "current" on an undefined id, but
+// readFrozenSourceLines() does not — so without pinning one id here, a caller that omits snapshotId
+// (the GET /features/:fid/context route, the UI dossier) reads the current graph but gets null
+// excerpts. Pin it so the graph read AND the frozen-source excerpts come from the SAME snapshot.
+async function resolveSid(store, projectId, snapshotId) {
+  return snapshotId || (await currentSnapshotId(store, projectId));
+}
 
 // ---- bfs: bounded multi-hop over a whole readGraph() snapshot ------------------------------
 // neighbourhood() is frozen at 1-hop (packages/store/src/graph.js) — this is retrieval's own
@@ -53,12 +61,13 @@ async function citationsFor(store, projectId, snapshotId, nodes, maxCitations, w
 
 // ---- 3.1 getContextBundle ------------------------------------------------------------------
 export async function getContextBundle(store, projectId, nodeId, { hops = 1, maxCitations = 20, snapshotId } = {}) {
-  const graph = await readGraph(store, projectId, snapshotId);
+  const sid = await resolveSid(store, projectId, snapshotId);
+  const graph = await readGraph(store, projectId, sid);
   const sub = bfs(graph, nodeId, hops, 300);
   if (!sub) return { ok: false, reason: 'coverage gap: node not found', nodeId };
   const node = sub.nodes.find((n) => n.id === nodeId);
   const facts = sub.edges.map((e) => factOf(sub.nodes.find((n) => n.id === e.src), e, sub.nodes.find((n) => n.id === e.dst)));
-  const citations = await citationsFor(store, projectId, snapshotId, sub.nodes, maxCitations);
+  const citations = await citationsFor(store, projectId, sid, sub.nodes, maxCitations);
   return {
     ok: true,
     node: { id: node.id, type: node.type, name: node.name, data: node.data },
@@ -108,7 +117,8 @@ function depthWalk(graph, startIds, hops, cap) {
 }
 
 export async function retrieveFeatureContext(store, projectId, featureId, { hops = 3, maxCitations = 40, snapshotId } = {}) {
-  const graph = await readGraph(store, projectId, snapshotId);
+  const sid = await resolveSid(store, projectId, snapshotId);
+  const graph = await readGraph(store, projectId, sid);
   const nodeById = new Map(graph.nodes.map((n) => [n.id, n]));
   const feature = nodeById.get(featureId);
   if (!feature || feature.type !== 'FEATURE') return { ok: false, reason: 'coverage gap: feature not found', featureId };
@@ -159,7 +169,7 @@ export async function retrieveFeatureContext(store, projectId, featureId, { hops
   // claim line wins the file:line dedup over another member that happens to share it (e.g.
   // download_receipt's excerpt is its own controller-def line, not a sibling's).
   const citations = await citationsFor(
-    store, projectId, snapshotId,
+    store, projectId, sid,
     [...endpointNodes, feature, ...services, ...jobs, ...dataStores, ...actors, ...roles],
     maxCitations,
   );

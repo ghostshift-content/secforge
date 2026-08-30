@@ -40,3 +40,63 @@ describe('Phase 3 self-learning UI never fabricates a metric', () => {
     assert.doesNotMatch(INDEX, /%[^\n<]{0,40}(precision|confidence|accuracy)/i);
   });
 });
+
+// Phase E — one-page interactive system graph (docs/phase-e-design.md). Additive to the Map
+// panel's existing Graph subtab: overview swimlanes + honesty rings/chips + in-place feature
+// drill-down + hand-rolled zoom/pan, vanilla JS + SVG only, no external library.
+describe('Phase E: system graph overview + drill-down', () => {
+  test('overview model + deterministic packing (no force sim) are present', () => {
+    assert.match(INDEX, /function overviewModel\(/);
+    assert.match(INDEX, /function packRow\(/);
+    assert.match(INDEX, /function bubbleWidth\(/);
+  });
+  test('overview groups by the real DOMAIN--CONTAINS-->FEATURE / FEATURE--EXPOSES-->ENDPOINT edges', () => {
+    assert.match(INDEX, /type==='CONTAINS'/);
+    assert.match(INDEX, /outOfType\(f\.id, \['EXPOSES'\]\)/);
+  });
+  test('ARCH_CLUSTER is rendered as a distinct, always-collapsed-by-default swimlane', () => {
+    assert.match(INDEX, /ARCH_CLUSTER/);
+    assert.match(INDEX, /garch-chip/);
+  });
+  test('honesty rings: authenticated-but-not-authorized (red) vs no-authn (amber)', () => {
+    assert.match(INDEX, /gbubble-gap/);
+    assert.match(INDEX, /gbubble-warn/);
+    assert.match(INDEX, /AUTHORIZED_BY','GUARDED_BY'/);
+  });
+  test('reconciliation is fetched and surfaced as a coverage strip, 0 gaps shows no gap chip', () => {
+    assert.match(INDEX, /\/reconciliation'/);
+    assert.match(INDEX, /function renderCoverageStrip\(/);
+    assert.match(INDEX, /if\(gapN>0\) chips\.push/);
+  });
+  test('feature drill-down fetches the per-feature context dossier and renders authn\\/authz badges', () => {
+    assert.match(INDEX, /enterFeatureDossier = function\(/);
+    assert.match(INDEX, /\/features\/'\+encodeURIComponent\(id\)\+'\/context/);
+    assert.match(INDEX, /no authn/);
+    assert.match(INDEX, /no authz/);
+  });
+  test('citations render file:line + excerpt, depth footer carries the capped honesty chip', () => {
+    assert.match(INDEX, /showCitationFor = function\(/);
+    assert.match(INDEX, /no cited excerpt for this node/);
+    assert.match(INDEX, /depth walk capped at 300 nodes/);
+  });
+  test('hand-rolled zoom/pan via viewBox, no charting/graph library', () => {
+    assert.match(INDEX, /function wireZoomPan\(/);
+    assert.match(INDEX, /function applyZoom\(/);
+    assert.match(INDEX, /setAttribute\('viewBox'/);
+  });
+  test('empty/unmapped project reuses the existing honest empty-state helper', () => {
+    assert.match(INDEX, /No graph yet\. Nothing has been mapped for this project\./);
+  });
+});
+
+// The product is loopback-served and zero-dependency: the Phase E graph must not add any external
+// script or charting/graph library (a pre-existing Google Fonts <link> predates this work and is
+// out of scope — the rule this guards is "no new library", not "no network request ever").
+describe('Phase E adds no external script or graph library', () => {
+  test('no <script src=...> pointing at a non-local host', () => {
+    assert.doesNotMatch(INDEX, /<script[^>]+src\s*=\s*["']https?:\/\//i);
+  });
+  test('no known CDN/graph-library name anywhere in the file', () => {
+    assert.doesNotMatch(INDEX, /cdnjs\.|cdn\.jsdelivr|unpkg\.com|cytoscape|d3\.js|d3\.min|vis-network/i);
+  });
+});
