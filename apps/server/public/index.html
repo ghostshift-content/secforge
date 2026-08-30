@@ -229,9 +229,9 @@
     <div class="panel" data-panel="launcher">
       <div class="scroll" style="flex-grow:1;padding:34px 40px;">
         <div style="display:flex;gap:34px;flex-wrap:wrap;align-items:flex-start;max-width:1180px;margin:0 auto;">
-          <div style="flex:1 1 480px;display:flex;flex-direction:column;gap:18px;">
+          <div style="flex:1 1 460px;display:flex;flex-direction:column;gap:18px;">
             <div>
-              <div style="font-size:24px;font-weight:700;letter-spacing:-.02em;">Open a project</div>
+              <div style="font-size:18px;font-weight:700;letter-spacing:-.02em;">Open a project</div>
               <div class="muted" style="margin-top:6px;line-height:1.5;max-width:52ch;">Point SecForge at a source tree. It freezes a snapshot and maps the code into a knowledge graph — feature by feature — that each session reloads from disk and never forgets.</div>
             </div>
             <div class="card" style="border-style:dashed;padding:26px;display:flex;flex-direction:column;align-items:center;gap:13px;text-align:center;">
@@ -243,8 +243,11 @@
             <div class="muted" style="font-size:11.5px;margin-top:2px;line-height:1.5;">The AI engine for this session is set in the top bar — pick any provider you've signed in; the deterministic rules engine needs no sign-in.</div>
           </div>
 
-          <div style="flex:1 1 440px;display:flex;flex-direction:column;gap:12px;">
-            <div style="display:flex;align-items:baseline;justify-content:space-between;"><div style="font-size:15px;font-weight:600;">Recent projects</div><div class="mono muted" style="font-size:12px;" id="recent-count">—</div></div>
+          <div style="flex:1 1 460px;display:flex;flex-direction:column;gap:18px;">
+            <div>
+              <div style="font-size:18px;font-weight:700;letter-spacing:-.02em;display:flex;align-items:baseline;justify-content:space-between;">Recent projects <span class="mono muted" style="font-size:12px;font-weight:400;" id="recent-count">—</span></div>
+              <div class="muted" style="margin-top:6px;line-height:1.5;">Reopen a saved session — each one resumes exactly where it left off, straight from disk.</div>
+            </div>
             <div id="recent-projects">
               <div class="muted" style="padding:18px;text-align:center;font-size:12.5px;">Loading projects…</div>
             </div>
@@ -614,8 +617,9 @@
       </div>
       <div style="flex-grow:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;">
         <div style="padding:18px 26px 15px;border-bottom:1px solid var(--border);">
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span id="findHeaderSev" class="badge" style="padding:3px 9px;">—</span><div id="findHeaderTitle" style="font-size:20px;font-weight:700;letter-spacing:-.02em;">No finding selected</div><div style="flex-grow:1"></div><button class="btn" onclick="exportFinding()">Export H1</button><button id="findValidateBtn" class="btn-primary" onclick="go('env')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>Validate live</button></div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span id="findHeaderSev" class="badge" style="padding:3px 9px;">—</span><div id="findHeaderTitle" style="font-size:20px;font-weight:700;letter-spacing:-.02em;">No finding selected</div><div style="flex-grow:1"></div><button class="btn" onclick="exportFinding()">Export H1</button><button id="findValidateBtn" class="btn-primary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>Validate live</button></div>
           <div id="findHeaderChips" style="display:flex;gap:7px;margin-top:11px;flex-wrap:wrap;"></div>
+          <div id="findValidateNote" style="margin-top:10px;font-size:12px;"></div>
         </div>
         <div id="find-detail" class="scroll" style="flex-grow:1;padding:18px 26px;">
           <div class="kicker" style="margin-bottom:8px;">What happens</div>
@@ -1465,6 +1469,7 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
     var what=document.getElementById('findWhatHappens'); if(what) what.innerHTML='<span class="muted">Run an assessment to produce findings.</span>';
     var ev=document.getElementById('findEvidence'); if(ev) ev.innerHTML='<span class="muted">Select a finding to see its evidence.</span>';
     var rem=document.getElementById('findRemediation'); if(rem) rem.innerHTML='<span class="muted">—</span>';
+    var vn=document.getElementById('findValidateNote'); if(vn) vn.textContent='';
   }
   function snippetHtml(s, evLine){
     if(!s || !s.lines || !s.lines.length) return '';
@@ -1480,6 +1485,7 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
   function renderFindingDetail(f){
     if(!f){ state.selectedFinding=null; clearFindingDetail(); return; }
     state.selectedFinding = f;
+    var vn=document.getElementById('findValidateNote'); if(vn) vn.textContent=''; // N-6: reset the status slot per finding
     var score = f.cvss && typeof f.cvss.score==='number' ? f.cvss.score : null;
     var sevEl = document.getElementById('findHeaderSev');
     if(sevEl){ sevEl.textContent = (f.severity||'').toUpperCase() + (score!=null ? ' · '+score : ''); sevEl.className = 'badge '+sevClass(f.severity); }
@@ -1510,14 +1516,23 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
 
   function validateFinding(fid){
     if(!state.project) return;
+    var slot = document.getElementById('findValidateNote');
+    if(slot) slot.textContent = 'Validating…';
     post('/api/findings/'+encodeURIComponent(fid)+'/validate?project='+encodeURIComponent(state.project.id), { dryRun: true }).then(function(res){
-      var host = document.getElementById('find-detail'); if(!host) return;
-      var note = document.createElement('div');
-      note.className = 'card';
-      note.style.cssText = 'margin-bottom:16px;padding:11px 14px;box-shadow:none;background:var(--tint);border-color:var(--accent-brd);font-size:12.5px;';
-      note.textContent = 'Validate live — ran: '+res.ran+(res.reason ? ' ('+res.reason+')' : '');
-      host.insertBefore(note, host.firstChild);
-    }).catch(function(){});
+      if(!slot) return;
+      var unauth = res.ran===false && /not authoriz|static-only|not registered|no target/i.test(res.reason||'');
+      if(unauth){
+        // N-5: don't dead-end on Findings — take the user to where they'd authorise a target.
+        slot.innerHTML = 'No authorised target. <a href="#" onclick="go(\'env\');return false;" style="color:var(--accent);font-weight:600;">Register one in Env →</a>';
+        go('env');
+        var m=document.getElementById('envSaveMsg'); if(m) m.textContent='Register and authorise a target to validate findings live.';
+        var u=document.getElementById('envBaseUrl'); if(u) u.focus();
+      } else if(res.ran===false){
+        slot.textContent = 'Static-only — '+(res.reason||'not run')+(res.wouldGet?' · would GET '+res.wouldGet:'');
+      } else {
+        slot.textContent = 'Live validation ran — '+(res.verdict||'')+(res.status?' · HTTP '+res.status:'');
+      }
+    }).catch(function(){ if(slot) slot.textContent='Validation failed.'; });
   }
 
   // S2-3: export the selected finding as a HackerOne-style markdown report (local download).
@@ -1525,16 +1540,30 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
     var f = state.selectedFinding;
     if(!f){ window.alert('Select a finding first.'); return; }
     var loc = f.evidence ? (f.evidence.file+':'+f.evidence.line) : '—';
+    var cvss = f.cvss || {};
+    var snippetBlock = '';
+    if(f.snippet && f.snippet.lines && f.snippet.lines.length){
+      var start = f.snippet.startLine || 1;
+      var body = f.snippet.lines.map(function(ln,i){ var no=start+i; var hit=f.evidence&&no===f.evidence.line; return String(no).padStart(4)+':  '+ln+(hit?'   // <-- finding':''); }).join('\n');
+      snippetBlock = '## Vulnerable code\n\n`'+(f.snippet.file||'')+'`'+(f.snippet.stale?' *(source changed since the scan snapshot)*':'')+'\n\n```\n'+body+'\n```\n\n';
+    }
     var md = '# '+(f.title||'Finding')+'\n\n'
-      + '**Severity:** '+(f.severity||'')+'  \n'
-      + '**Weakness:** '+(f.cwe||'')+(f.family?' ('+f.family+')':'')+'  \n'
-      + '**Asset / route:** '+(f.route||'—')+'  \n'
+      + '**Severity:** '+(f.severity||'')+(typeof cvss.score==='number'?' (CVSS '+cvss.score+')':'')+'  \n'
+      + (cvss.vector?'**CVSS vector:** `'+cvss.vector+'`  \n':'')
+      + '**Weakness:** '+(f.cwe||'')+(f.cwe_name?' — '+f.cwe_name:'')+(f.family?' ('+f.family+')':'')+'  \n'
+      + '**Asset / route:** '+(f.method?f.method+' ':'')+(f.route||'—')+'  \n'
       + '**Location:** '+loc+'  \n'
-      + '**Rule:** '+(f.rule||f.method||'—')+'  \n'
-      + '**Confidence:** '+(f.confidence||'static')+'\n\n'
+      + '**Detected by:** rule `'+(f.rule||f.method||'—')+'`  \n'
+      + '**Assessment:** '+(f.assessment_mode||'static_confirmed')+' — no runtime validation performed unless stated\n\n'
       + '## Summary\n\n'+(f.description || f.title || '')+'\n\n'
-      + (f.remediation ? '## Remediation\n\n'+f.remediation+'\n' : '')
-      + '\n---\n_Exported by SecForge from project '+(state.project?state.project.name:'')+'._\n';
+      + '## Impact\n\n'+(f.cwe_name?f.cwe_name+'. ':'')+'An attacker exploiting '+(f.route||'this endpoint')+' can achieve the outcome described above; see the CVSS vector for the rated impact.\n\n'
+      + '## Steps to reproduce\n\n'
+      + '1. Identify the endpoint `'+(f.method?f.method+' ':'')+(f.route||'')+'` at `'+loc+'`.\n'
+      + '2. Send a request that exercises the missing control described in the summary.\n'
+      + '3. Observe the response confirms the weakness ('+(f.cwe||'')+').\n\n'
+      + snippetBlock
+      + (f.remediation ? '## Remediation\n\n'+f.remediation+'\n\n' : '')
+      + '---\n_Exported by SecForge from project '+(state.project?state.project.name:'')+' · '+(f.id||'')+'_\n';
     var blob = new Blob([md], { type: 'text/markdown' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
