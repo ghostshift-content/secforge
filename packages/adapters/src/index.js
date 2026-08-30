@@ -32,7 +32,9 @@ const errMsg = (err) => String((err && err.message) || err);
 // Effort is a recorded, best-effort knob (docs/PHASE4-ENV-PROVIDER-DESIGN.md §2). Its one real,
 // verifiable effect in this codebase is the per-call token budget for the HTTP-based LLM
 // adapters below. It is INERT (recorded only, changes nothing) for the deterministic rules
-// engine and for the unwired CLI adapters (claude-code/gemini) — never claim otherwise.
+// engine, for the still-unwired gemini CLI adapter, and for the CLI adapters that ARE wired
+// (codex/claude-code) — their askRaw takes only prompt+model, no token-budget knob — never
+// claim otherwise.
 export const EFFORT_BUDGETS = { low: 512, medium: 1024, high: 2048, max: 4096 };
 export function effortBudget(effort) { return EFFORT_BUDGETS[effort] || EFFORT_BUDGETS.medium; }
 
@@ -236,6 +238,52 @@ const codex = {
   },
 };
 
+// --- claude-code: real backend over the Claude Code CLI (`claude -p`), non-interactive + tool-less. ---
+// SecForge lists claude-opus-4-8 first, but sonnet is the speed/cost-sensible default for analysis calls.
+const CLAUDE_KNOWN_MODELS = ['claude-opus-4-8', 'claude-sonnet-5', 'claude-haiku-4-5'];
+const CLAUDE_DEFAULT_MODEL = 'claude-sonnet-5';
+// One non-interactive Claude Code run. Prompt goes over stdin (avoids ARG_MAX on large prompts,
+// unlike codex's arg-based prompt). `--tools=` + `--strict-mcp-config` + `--setting-sources ''`
+// disable every built-in/MCP tool and project config, so this is a pure text completion — it
+// never touches the filesystem (cwd: tmpdir() is belt-and-suspenders on top of that). Bounded by
+// its own timeout; throws on failure.
+function claudeAskRaw(prompt, model) {
+  return new Promise((resolve, reject) => {
+    const args = ['-p', '--output-format', 'text', '--tools=', '--strict-mcp-config', '--setting-sources', ''];
+    args.push('--model', model || CLAUDE_DEFAULT_MODEL);
+    let out = '';
+    let done = false;
+    const finish = (fn, arg) => { if (done) return; done = true; clearTimeout(timer); fn(arg); };
+    const cp = spawn('claude', args, { cwd: tmpdir(), stdio: ['pipe', 'pipe', 'ignore'] });
+    const timer = setTimeout(() => { try { cp.kill('SIGKILL'); } catch { /* ignore */ } finish(reject, new Error('claude -p timed out')); }, 180000);
+    cp.stdout.on('data', (d) => { out += d; });
+    cp.on('error', (e) => finish(reject, e));
+    cp.on('exit', (code) => {
+      if (code === 0) finish(resolve, out);
+      else finish(reject, new Error(`claude -p exited ${code}`));
+    });
+    cp.stdin.write(String(prompt));
+    cp.stdin.end();
+  });
+}
+const claudeCode = {
+  id: 'claude-code', label: 'Claude Code', provider: 'claude-code',
+  model: CLAUDE_DEFAULT_MODEL, analysis: 'llm',
+  async available() { return (await checkConnection('claude-code')).connected; },
+  async listModels() { return CLAUDE_KNOWN_MODELS; },
+  async ask(prompt, opts = {}) {
+    try { return await claudeAskRaw(prompt, opts.model || this.model); }
+    catch (err) { return JSON.stringify({ ok: false, error: errMsg(err) }); }
+  },
+  async runAgent(job = {}) {
+    try {
+      if (!(await this.available())) return { ok: false, error: 'claude-code not available' };
+      const prompt = job.prompt || `Role: ${job.role || 'agent'}\nTask: ${JSON.stringify(job)}`;
+      return { ok: true, text: await claudeAskRaw(prompt, job.model) };
+    } catch (err) { return { ok: false, error: errMsg(err) }; }
+  },
+};
+
 // --- provider connection detection: has the user logged in / configured this SDK? ---
 function onPath(bin) { try { return spawnSync('which', [bin], { timeout: 1500 }).status === 0; } catch { return false; } }
 function homeHas(...p) { try { return existsSync(join(homedir(), ...p)); } catch { return false; } }
@@ -245,8 +293,8 @@ function homeHas(...p) { try { return existsSync(join(homedir(), ...p)); } catch
 // a no-op in this build, so results are byte-identical to the deterministic rules engine.
 const CONNECTORS = {
   'claude-code': {
-    label: 'Claude Code', models: ['claude-opus-4-8', 'claude-sonnet-5', 'claude-haiku-4-5'],
-    analysis: 'rules-only',
+    label: 'Claude Code', models: CLAUDE_KNOWN_MODELS,
+    analysis: 'llm', // wired: runs `claude -p` non-interactively (tools disabled)
     howToConnect: 'run: claude  (and log in)',
     check() {
       if (process.env.ANTHROPIC_API_KEY) return { connected: true, detail: 'ANTHROPIC_API_KEY set' };
@@ -301,8 +349,9 @@ export async function checkConnection(id) {
   catch { return { id, connected: false, analysis: c.analysis, detail: 'connection check failed' }; }
 }
 
-// A CLI-SDK adapter (claude-code / codex / gemini): connection is real; non-interactive analysis
-// is not wired in this build, so ask() is a safe no-op and the deterministic engine runs.
+// A still-unwired CLI-SDK adapter (gemini): connection is real; non-interactive analysis is not
+// wired in this build, so ask() is a safe no-op and the deterministic engine runs. codex and
+// claude-code have graduated out of this helper — they're real adapters defined above.
 // ask()/runAgent() return a structured { ok:false, unwired:true } so callers can detect the no-op
 // rather than mistake a canned string for a real answer (analysis:'rules-only' says so up front).
 function cliAdapter(id) {
@@ -319,7 +368,7 @@ function cliAdapter(id) {
 
 const REGISTRY = new Map([
   ['rules', rules],
-  ['claude-code', cliAdapter('claude-code')],
+  ['claude-code', claudeCode],
   ['codex', codex],
   ['gemini', cliAdapter('gemini')],
   ['ollama', ollama],
