@@ -13,9 +13,12 @@ import { ID } from '@secforge/schemas';
 // path reaches the file without needing to touch store's package.json.
 import { writeNodes, writeEdges, writeReconciliation, neighbourhood } from '../../store/src/graph.js';
 import { profileRepo, extractInventories, inventoryMeta } from '@secforge/inventories';
-import { deterministicSemanticPlan, buildGraph, makeEvidenceVerifier, validateOntology, planClusters } from '@secforge/recon';
-import { getAdapter } from '@secforge/adapters';
+import { deterministicSemanticPlan } from '@secforge/recon';
+// Same reach-past-exports convention as the @secforge/store import above — inventoryRows isn't
+// re-exported from recon/src/index.js and recon source is out of scope for this change (Phase C).
+import { inventoryRows } from '../../recon/src/semantic-planner.js';
 import { synthesizeRailsRoutes } from './rails-routes.js';
+import { freezeForward, persistOntologyPlan, checkIncrementalEligibility, persistFeatureRowCount, remapGraph } from './incremental.js';
 
 const fsp = fs.promises;
 const SKIP_DIR = new Set(['node_modules', '.git', 'dist', 'vendor', 'build', 'coverage', '.next', 'out']);
@@ -45,7 +48,11 @@ async function walk(dir, base, out, depth = 0) {
 // Reads each file's full buffer once (to hash it) AND freezes that SAME buffer to
 // tmpDir/source/<rel> — zero extra reads, no TOCTOU window between "hash" and "freeze"
 // (Phase A §1). Replaces the old buildManifest, which only hashed.
-async function buildManifestAndFreeze(sourceRoot, tmpDir) {
+//
+// `forward` ({priorManifestMap, priorSourceDir}, Phase C incremental path): a file whose sha256
+// matches the PRIOR snapshot's is hardlink/copy-forwarded instead of rewritten — same bytes,
+// cheaper write; the byte read (needed to hash it anyway) is unchanged.
+async function buildManifestAndFreeze(sourceRoot, tmpDir, forward = null) {
   const srcOut = path.join(tmpDir, 'source');
   await fsp.mkdir(srcOut, { recursive: true }); // zero-file repos still produce an (empty) source/
   const manifest = [];
@@ -62,10 +69,15 @@ async function buildManifestAndFreeze(sourceRoot, tmpDir) {
     try { buf = await fsp.readFile(abs); } catch { continue; }
     if (buf.subarray(0, 8000).includes(0)) continue; // binary heuristic: NUL byte in the head
     total += stat.size;
-    manifest.push({ path: rel, bytes: stat.size, sha256: crypto.createHash('sha256').update(buf).digest('hex') });
-    const dest = path.join(srcOut, rel);
-    await fsp.mkdir(path.dirname(dest), { recursive: true });
-    await fsp.writeFile(dest, buf); // freeze exactly what we hashed
+    const sha256 = crypto.createHash('sha256').update(buf).digest('hex');
+    manifest.push({ path: rel, bytes: stat.size, sha256 });
+    if (forward && forward.priorManifestMap.get(rel) === sha256) {
+      freezeForward(forward.priorSourceDir, srcOut, rel); // unchanged since the prior snapshot
+    } else {
+      const dest = path.join(srcOut, rel);
+      await fsp.mkdir(path.dirname(dest), { recursive: true });
+      await fsp.writeFile(dest, buf); // freeze exactly what we hashed
+    }
   }
   return { manifest, truncated: truncatedFiles || total >= MAX_TOTAL_BYTES };
 }
@@ -84,11 +96,6 @@ function persistSnapshot(store, projectId, snapshotId, manifest) {
   fs.renameSync(snapFile + '.tmp', snapFile);
 }
 
-// Read a file from the frozen snapshot's source tree (never re-derives from anywhere else — the
-// manifest already pinned which files/bytes belong to this snapshot). Missing/unreadable → ''.
-function readSnapshotFile(sourceRoot, rel) {
-  try { return fs.readFileSync(path.join(sourceRoot, rel), 'utf8'); } catch { return ''; }
-}
 
 // ---------- LEGACY DETERMINISTIC IDENTITY (unchanged) ----------
 function matchEndpoint(line) {
@@ -384,9 +391,14 @@ function bridgeLegacySurfaces(inventories, legacyRows) {
  * Map a project into the knowledge graph: snapshot the source tree, extract a deterministic
  * multi-language inventory, cluster it into features, optionally enrich with an evidence-validated
  * AI ontology, and persist the resulting graph.
- * @returns {Promise<{status:string, snapshotId:string, features:Array, coverage:object, nodeCount:number, edgeCount:number}>}
+ *
+ * `incremental` ('auto' | true | false): 'auto' (default) and `true` attempt Phase C's diff-remap
+ * whenever a prior snapshot exists and every eligibility guard passes — re-mapping only the
+ * features a code change touched and reusing prior AI work + frozen source for the rest, else
+ * degrading transparently to a full map. `false` always takes today's full-map path, verbatim.
+ * @returns {Promise<{status:string, snapshotId:string, features:Array, coverage:object, nodeCount:number, edgeCount:number, incremental:boolean, remappedFeatures:string[], reusedFeatures:string[], changedFiles:string[]}>}
  */
-export async function mapProject({ sourceRoot, store, projectId, onProgress, engine = 'rules', model = null, effort } = {}) {
+export async function mapProject({ sourceRoot, store, projectId, onProgress, engine = 'rules', model = null, effort, incremental = 'auto' } = {}) {
   if (!sourceRoot || !store || !projectId) throw new Error('mapProject requires sourceRoot, store, projectId');
   // Refuse to "map" a path that isn't a real directory — otherwise walk() swallows the readdir
   // error and returns status:MAPPED with 0 nodes, and the UI fabricates a graph for a repo that
@@ -400,12 +412,19 @@ export async function mapProject({ sourceRoot, store, projectId, onProgress, eng
     return { status: 'ERROR', error: 'source path does not exist or is not a directory', sourceRoot, features: [], coverage: { technical: 0, semantic: 0 }, nodeCount: 0, edgeCount: 0 };
   }
 
+  // Phase C guards #1/#3/#4, decided before the freeze-forward optimization below; guard #2
+  // (clustering threshold) is checked in remapGraph() once the inventory row count is known.
+  const eligibility = await checkIncrementalEligibility(store, projectId, incremental);
+  const attemptIncremental = eligibility.attempt;
+  let remapReason = eligibility.reason;
+
   onProgress?.({ phase: 'snapshot', pct: 0 });
   // Build-then-rename (mirrors codengram's ingestion/index.js:139-142): snapshotId is only known
   // AFTER the walk (it's a hash of the manifest), so we can't write straight into
   // snapshots/<snapshotId>/ — build into a private tmp dir under snapshots/ first.
   const tmpDir = path.join(store.projectDir(projectId), 'snapshots', `.building-${process.pid}-${crypto.randomBytes(6).toString('hex')}`);
-  const { manifest, truncated } = await buildManifestAndFreeze(sourceRoot, tmpDir);
+  const forward = attemptIncremental ? { priorManifestMap: eligibility.priorManifestMap, priorSourceDir: eligibility.priorSourceDir } : null;
+  const { manifest, truncated } = await buildManifestAndFreeze(sourceRoot, tmpDir, forward);
   // O-2: never report a successful map of a tree we read nothing from. An empty manifest is only
   // honest for a genuinely empty directory; if the root has entries we couldn't read (permissions)
   // or nothing we could inventory, that is an ERROR — not "MAPPED · 0 findings" reading as clean.
@@ -450,24 +469,22 @@ export async function mapProject({ sourceRoot, store, projectId, onProgress, eng
   onProgress?.({ phase: 'features', pct: 55 });
   const clusters = deterministicSemanticPlan(inventories);
 
-  let ontology = null;
-  if (engine && engine !== 'rules') {
-    onProgress?.({ phase: 'semantic', pct: 65 });
-    const adapter = getAdapter(engine);
-    const raw = await planClusters(clusters, adapter, { model, effort });
-    if (raw) {
-      const verifier = makeEvidenceVerifier({ readSource: (rel) => readSnapshotFile(sourceRoot, rel) });
-      const { ontology: validated, accepted } = validateOntology(raw, verifier);
-      // accepted.features === 0 → fail closed silently: ontology stays null, deterministic
-      // clusters still become FEATURE nodes on their own (never demoted to ARCH_CLUSTER-only).
-      if (accepted.features > 0) ontology = validated;
-    }
-  }
-
-  onProgress?.({ phase: 'graph', pct: 80 });
-  const graph = buildGraph({ inventories, clusters, ontology, legacyRows, project: { id: projectId, name: projectId }, snapshotId });
+  // remapGraph() (incremental.js) owns the rest of Phase C: guard #2, incremental AI-plan reuse
+  // vs a full fresh derivation, the one buildGraph() call, and the lossless self-check + fallback.
+  onProgress?.({ phase: 'semantic', pct: 65 });
+  const featureRowCount = inventoryRows(inventories).length;
+  const { graph, ontology, incrementalUsed, remapReason: finalRemapReason, reusedFeatureIds, llmCalled, ontologyReusedCount, diff } =
+    await remapGraph({
+      store, projectId, snapshotId, manifest, eligibility, featureRowCount, clusters, inventories, legacyRows,
+      project: { id: projectId, name: projectId }, engine, model, effort,
+      // Reads the frozen snapshot's own tree — never re-derives from anywhere else. Missing/unreadable -> ''.
+      readSnapshotFile: (rel) => { try { return fs.readFileSync(path.join(sourceRoot, rel), 'utf8'); } catch { return ''; } },
+    });
+  remapReason = finalRemapReason;
 
   onProgress?.({ phase: 'persist', pct: 90 });
+  persistFeatureRowCount(store, projectId, snapshotId, featureRowCount);
+  if (ontology) persistOntologyPlan(store, projectId, snapshotId, ontology);
   await writeNodes(store, projectId, graph.nodes, { snapshotId });
   await writeEdges(store, projectId, graph.edges, { snapshotId });
   await writeReconciliation(store, projectId, graph.reconciliation, { snapshotId });
@@ -481,6 +498,12 @@ export async function mapProject({ sourceRoot, store, projectId, onProgress, eng
   // that in no way implies zero FEATURE nodes (see buildGraph's own fail-closed comment above).
   const semantic = ontology ? graph.coverage.semantic_coverage / 100 : 0;
 
+  // Every reported FEATURE id that isn't reused — dirty or brand new — computed post-hoc from the
+  // actual graph, not trusted from the plan (buildGraph is the source of truth for this run's ids).
+  const remappedFeatures = [...new Set(
+    graph.reconciliation.filter((r) => r.status === 'MAPPED_TO_FEATURE' && r.feature_id && !reusedFeatureIds.includes(r.feature_id)).map((r) => r.feature_id),
+  )];
+
   return {
     status: 'MAPPED',
     snapshotId,
@@ -491,6 +514,17 @@ export async function mapProject({ sourceRoot, store, projectId, onProgress, eng
     edgeCount: graph.edges.length,
     engineUsed: engine,
     aiSemantic: !!ontology,
+    // Phase C — additive incremental-remap report; `remapReason` explains a false `incremental`
+    // (first map, an ineligible guard, or a self-check mismatch).
+    incremental: incrementalUsed,
+    remapReason,
+    remappedFeatures,
+    reusedFeatures: incrementalUsed ? reusedFeatureIds : [],
+    changedFiles: diff ? diff.changed : [],
+    addedFiles: diff ? diff.added : [],
+    deletedFiles: diff ? diff.deleted : [],
+    llmCalled,
+    ontologyReusedCount,
   };
 }
 

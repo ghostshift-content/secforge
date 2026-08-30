@@ -220,6 +220,13 @@ export async function readGraph(store, projectId, snapshotId) {
   return { nodes, edges };
 }
 
+// The current snapshot id for a project (meta.current_snapshot_id), or null if none is recorded
+// yet. Public read used by incremental remap (Phase C) to find the PRIOR snapshot to diff against.
+export async function currentSnapshotId(store, projectId) {
+  const db = await ensureDb(store, projectId);
+  return getCurrent(db);
+}
+
 // 1-hop neighbourhood: the node itself plus every node/edge directly touching it. Two indexed
 // queries (src/dst, then a keyed IN lookup) instead of loading the whole graph into JS.
 export async function neighbourhood(store, projectId, nodeId, snapshotId) {
