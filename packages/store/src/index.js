@@ -8,6 +8,7 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { ID } from '@secforge/schemas';
+import { closeDb } from './graph.js';
 
 // Data root (never the source tree). Override with SECFORGE_DATA.
 export const DATA_ROOT = process.env.SECFORGE_DATA || path.join(os.homedir(), '.secforge', 'projects');
@@ -125,6 +126,11 @@ export class Store {
     if (!projectIdVal || typeof projectIdVal !== 'string' || projectIdVal.includes('/') || projectIdVal.includes('..')) {
       throw new Error('invalid project id');
     }
+    // Close the cached DatabaseSync handle BEFORE removing the directory out from under it —
+    // projectId is a deterministic hash of sourceRoot, so re-opening the same source path later
+    // reuses this cache key; an unclosed handle would keep writing into the deleted-but-still-open
+    // (unlinked) inode and silently lose data on the next process restart.
+    closeDb(this, projectIdVal);
     const dir = this.projectDir(projectIdVal);
     await fs.rm(dir, { recursive: true, force: true });
     return { deleted: projectIdVal };
@@ -133,4 +139,4 @@ export class Store {
 
 export { projectId, ID };
 // Graph layer (nodes/edges/claims) — re-exported so consumers reach it via @secforge/store.
-export { writeNodes, writeEdges, readGraph, neighbourhood } from './graph.js';
+export { writeNodes, writeEdges, readGraph, neighbourhood, closeDb } from './graph.js';
