@@ -110,6 +110,17 @@ Fixed & self-verified this session (commits c677482 → 3c81811):
 - [x] **O-6** Env credential fields (Basic/bearer/extra headers) with an explicit plaintext-storage warning. — 3c81811
 - [x] **P2-1/P2-3** in-page tour retired (Walkthrough → watermarked /demo.html); #proj-acme lives only in the mock. — (prior)
 
+Round 6 (against 582764f) — verified fixes:
+- [x] **O-5** one computed boolean drives class + disabled + aria-disabled + go() guard (tabs use native `disabled`). — fea6bb6
+- [x] **N-10** Validate live always renders its verdict in the single slot; no silent no-op, no auto-nav. — fea6bb6
+- [x] **P2-1** Walkthrough gated on the same boolean. — fea6bb6
+- [x] **O-1** launcher heading blocks share a min-height → first cards align. — fea6bb6
+- [x] **P4-1** by-feature column uses the SAME decided/total definition as the headline (relabelled "Coverage"). — fea6bb6
+- [x] **P4-2** 4-feature fixture (fixture-multi) registered so the scope count + coverage can be exercised. — 3d91e53
+- [x] **P3-5** honest findings "Validation trail" section (rule fired; no independent re-proof; not the fake checks). — 3d91e53
+- [x] **S5-1b** UI smoke test guards the fabrication class + the gate-source (69 tests). — 3d91e53
+- [x] **P0-2e / AI-5 / P4-5** already in-tree and verified live (a stale server shows old behavior — restart). — c677482/331863e/3241ad9
+
 Backlog (release-design surfaces — need map-engine extraction first, not defects):
 - [ ] **P3-1** Map/Inventories — per-file inventory lists + 5-category reconciliation (map engine writes no inventory files yet).
 - [ ] **P3-2** Map/Roles — actor catalog + role→ability matrix (engine emits no ACTOR/ROLE nodes yet).
