@@ -350,3 +350,80 @@ describe('buildGraph() — CRX weak-crypto map signal wiring', () => {
     assert.ok(edge(edges, 'DEFINES', feature.id, sym.id));
   });
 });
+
+// Per-feature maps (additive design §2a): every routes_endpoints/rest_api ENDPOINT crosses the
+// same untrusted-client -> application trust boundary.
+describe('buildGraph() — trust boundary wiring', () => {
+  test('an ENDPOINT crosses a shared TRUST_BOUNDARY node via CROSSES_BOUNDARY', () => {
+    const inventories = inv({
+      routes_endpoints: [{ file: 'app/controllers/orders_controller.rb', line: 10, entry: "get '/orders/:id'" }],
+    });
+    const ontology = { features: [{ name: 'Orders', slug: 'orders', domain: 'core', include_paths: ['orders_controller'] }] };
+    const { nodes, edges } = buildGraph({ inventories, ontology, project, snapshotId: 's1' });
+    const ep = byType(nodes, 'ENDPOINT')[0];
+    const boundary = byType(nodes, 'TRUST_BOUNDARY')[0];
+    assert.ok(ep && boundary);
+    assert.ok(edge(edges, 'CROSSES_BOUNDARY', ep.id, boundary.id));
+  });
+
+  test('two endpoints share exactly one TRUST_BOUNDARY node (dedup guard)', () => {
+    const inventories = inv({
+      routes_endpoints: [
+        { file: 'app/controllers/orders_controller.rb', line: 10, entry: "get '/orders/:id'" },
+        { file: 'app/controllers/orders_controller.rb', line: 20, entry: "post '/orders'" },
+      ],
+    });
+    const ontology = { features: [{ name: 'Orders', slug: 'orders', domain: 'core', include_paths: ['orders_controller'] }] };
+    const { nodes, edges } = buildGraph({ inventories, ontology, project, snapshotId: 's1' });
+    assert.equal(byType(nodes, 'TRUST_BOUNDARY').length, 1);
+    assert.equal(edges.filter((e) => e.type === 'CROSSES_BOUNDARY').length, 2);
+  });
+});
+
+// Per-feature maps (additive design §2b): two features that share a SERVICE/AUTH_CHECK are
+// flagged as likely-same-functionality.
+describe('buildGraph() — same-functionality (SHARES_IMPLEMENTATION_WITH) wiring', () => {
+  test('two features using the same service node get a SHARES_IMPLEMENTATION_WITH edge', () => {
+    // Same file -> same ID.scoped('service', row.file) node id (nodeForRow dedups by id), but two
+    // distinct rows so validateLeadPlan's single-winner-per-row scoring can assign one each to
+    // Orders (matches "orders") and Billing (matches "billing") — mirrors two features that both
+    // call into one shared service module.
+    const inventories = inv({
+      services_finders_policies: [
+        { file: 'app/services/shared_service.rb', line: 1, entry: 'orders helper', detail: 'service' },
+        { file: 'app/services/shared_service.rb', line: 2, entry: 'billing helper', detail: 'service' },
+      ],
+    });
+    const ontology = {
+      features: [
+        { name: 'Orders', slug: 'orders', domain: 'core', include_entries: ['orders'] },
+        { name: 'Billing', slug: 'billing', domain: 'core', include_entries: ['billing'] },
+      ],
+    };
+    const { nodes, edges } = buildGraph({ inventories, ontology, project, snapshotId: 's1' });
+    assert.equal(byType(nodes, 'SERVICE').length, 1, 'both rows must resolve to the same shared service node');
+    const [orders, billing] = byType(nodes, 'FEATURE');
+    assert.ok(orders && billing);
+    assert.ok(
+      edge(edges, 'SHARES_IMPLEMENTATION_WITH', orders.id, billing.id) || edge(edges, 'SHARES_IMPLEMENTATION_WITH', billing.id, orders.id),
+      'expected SHARES_IMPLEMENTATION_WITH between the two features sharing one service node',
+    );
+  });
+
+  test('two features using unrelated services get no SHARES_IMPLEMENTATION_WITH edge', () => {
+    const inventories = inv({
+      services_finders_policies: [
+        { file: 'app/services/orders_service.rb', line: 1, entry: 'orders_service.rb', detail: 'service' },
+        { file: 'app/services/billing_service.rb', line: 1, entry: 'billing_service.rb', detail: 'service' },
+      ],
+    });
+    const ontology = {
+      features: [
+        { name: 'Orders', slug: 'orders', domain: 'core', include_paths: ['orders_service'] },
+        { name: 'Billing', slug: 'billing', domain: 'core', include_paths: ['billing_service'] },
+      ],
+    };
+    const { nodes, edges } = buildGraph({ inventories, ontology, project, snapshotId: 's1' });
+    assert.equal(edges.filter((e) => e.type === 'SHARES_IMPLEMENTATION_WITH').length, 0);
+  });
+});

@@ -133,9 +133,18 @@ function nodeForRow(g, featureId, kind, row) {
     case 'routes_endpoints': case 'rest_api': {
       if (row.detail === 'controller-helper') return mk({ type: 'SYMBOL', id: ID.scoped('symbol', row.file, row.entry), name: String(row.entry).replace(/^helper\s+/, ''), data: { kind: 'controller-helper' } }, 'DEFINES');
       const mr = methodRouteOf(row);
-      return mr
+      const nodeId = mr
         ? mk({ type: 'ENDPOINT', id: ID.endpoint(mr.method, mr.route), name: `${mr.method} ${mr.route}`, data: { method: mr.method, route: mr.route, interface_kind: kind === 'rest_api' ? 'rest' : 'web' } }, 'EXPOSES')
         : mk({ type: 'ROUTE', id: ID.scoped('route', row.file, row.line, row.entry), name: String(row.entry || '').slice(0, 60), data: { path: row.entry } }, 'EXPOSES');
+      // Every client-facing HTTP surface crosses the same untrusted-client->application trust
+      // boundary — one boundary node total per graph (dedup guard below). GraphQL/workers_jobs are
+      // deliberately left unwired, same scope.
+      const boundaryId = 'trust_boundary:untrusted-client-to-application';
+      if (!g.nodes.has(boundaryId)) {
+        g.addNode({ type: 'TRUST_BOUNDARY', id: boundaryId, name: 'Untrusted client → application', data: { kind: 'network', confidence: 'high' } });
+      }
+      g.addEdge('CROSSES_BOUNDARY', nodeId, boundaryId);
+      return nodeId;
     }
     case 'graphql': {
       const gf = graphqlFields(row);
@@ -475,6 +484,7 @@ export function buildGraph({ inventories = {}, clusters = null, ontology = null,
   const endpointRows = []; // { nodeId, row, isGraphql } — auth-wired in a SECOND pass (below), once
                             // every TOKEN/AUTH_CHECK node in the feature exists (row order within a
                             // feature is not guaranteed to put tokens_actors before routes_endpoints).
+  const serviceUsers = new Map(); // nodeId (service:*/authcheck:*) -> Set(featureId) — same-functionality detection
   for (const f of features) {
     const domId = ensureDomain(f.domain);
     const featId = ID.feature(featureKey(f));
@@ -486,7 +496,19 @@ export function buildGraph({ inventories = {}, clusters = null, ontology = null,
         noteEndpoint(nodeId, row.file);
         endpointRows.push({ nodeId, row, isGraphql: kind === 'graphql' });
       }
+      if (nodeId && /^service:|^authcheck:/.test(nodeId)) {
+        if (!serviceUsers.has(nodeId)) serviceUsers.set(nodeId, new Set());
+        serviceUsers.get(nodeId).add(featId);
+      }
       reconciliation.push(reconOf(kind, row, nodeId ? 'MAPPED_TO_FEATURE' : 'UNCLEAR_COVERAGE_GAP', nodeId ? featId : null));
+    }
+  }
+  // Two features that both use the same SERVICE/AUTH_CHECK likely implement the same functionality
+  // — surfaced as an undirected pairwise edge, same-functionality detection (design §2b).
+  for (const [, users] of serviceUsers) {
+    const list = [...users];
+    for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+      g.addEdge('SHARES_IMPLEMENTATION_WITH', list[i], list[j]);
     }
   }
   for (const { nodeId, row, isGraphql } of endpointRows) wireEndpointAuth(g, nodeId, row, inventories, isGraphql, railsAuth, cookieSession);

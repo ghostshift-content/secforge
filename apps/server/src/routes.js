@@ -7,7 +7,7 @@ import path from 'node:path';
 import { SessionManager } from '@secforge/session';
 import { Store, readGraph, readReconciliation, reconciliationCounts } from '@secforge/store';
 import { buildFeedForward, answer } from '@secforge/retrieval';
-import { runAssessment, computeCoverage, buildReport } from '@secforge/assess';
+import { runAssessment, computeCoverage, buildReport, renderFeatureMap } from '@secforge/assess';
 import { runMapOrchestration, runScanOrchestration, subscribe as subscribePhase } from '@secforge/orchestration';
 import { FAMILIES, loadCanonicalCards, cweCatalog, importCustomFolder } from '@secforge/patterns';
 import { mapProject } from '@secforge/map';
@@ -174,6 +174,29 @@ export async function handleApi(req, res, url) {
     if (parts[0] === 'projects' && parts.length === 5 && parts[2] === 'features' && parts[4] === 'context' && method === 'GET') {
       const fid = decodeURIComponent(parts[3]);
       return json(res, 200, await buildFeedForward(store, parts[1], fid)), true;
+    }
+
+    // GET /api/projects/:id/features/:fid/map → the rendered per-feature security map (markdown),
+    // built from the same dossier /context already returns, plus the graph's trust-boundary/
+    // shared-implementation edges. Additive sibling of /context — same coverage-gap convention.
+    if (parts[0] === 'projects' && parts.length === 5 && parts[2] === 'features' && parts[4] === 'map' && method === 'GET') {
+      const pid = parts[1], fid = decodeURIComponent(parts[3]);
+      const [ctx, graph] = await Promise.all([buildFeedForward(store, pid, fid), readGraph(store, pid)]);
+      const body = ctx.ok ? renderFeatureMap(ctx, graph) : `# Coverage gap\n\n${ctx.reason}\n`;
+      res.writeHead(200, { 'content-type': 'text/markdown; charset=utf-8' });
+      res.end(body);
+      return true;
+    }
+
+    // GET /api/projects/:id/features-map → an index of every feature's map (markdown), read-only.
+    if (parts[0] === 'projects' && parts.length === 3 && parts[2] === 'features-map' && method === 'GET') {
+      const pid = parts[1];
+      const graph = await readGraph(store, pid);
+      const features = graph.nodes.filter((n) => n.type === 'FEATURE');
+      const body = ['# Feature maps', '', ...features.map((f) => `- [${f.name}](./${encodeURIComponent(f.id)}/map)`)].join('\n');
+      res.writeHead(200, { 'content-type': 'text/markdown; charset=utf-8' });
+      res.end(body);
+      return true;
     }
 
     // GET /api/projects/:id/report?format=h1|md|json → whole-assessment report, read-only.

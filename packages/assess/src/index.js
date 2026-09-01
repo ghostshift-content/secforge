@@ -383,4 +383,5 @@ export { analyze, validateCandidate, reproveLlmCandidate, inScope, computeCovera
 export { severityFromScore, RULE_CVSS, RULE_CWE } from './rules.js';
 export { decorateFinding, buildSnippet, loadManifest, readSourceRoot, readCurrentSnapshotId } from './decorate.js';
 export { buildReport, renderMarkdown, reportJson } from './report.js';
+export { renderFeatureMap } from './feature-map.js';
 export { citationIndex, citationFromLine, makeSnapshotVerifier, frozenVerify } from './grounding.js';

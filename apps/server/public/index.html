@@ -1595,7 +1595,9 @@ button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(.4);}</style>
     var svgHtml = '<svg class="gsvg" viewBox="0 0 '+width+' '+height+'" role="img" aria-label="Feature dossier graph">'+edgesSvg+nodesSvg+'</svg>';
     var footerHtml = '<div style="border-top:1px solid var(--border);padding:11px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">'
       + '<div class="leg"><span><i style="background:#fff;border:1px solid #E7E5E4"></i>Endpoint / Auth / Service</span><span><i style="background:#F5F5F4;border:1px solid #E7E5E4"></i>Data store / Job</span></div>'
-      + '<div class="mono muted" style="font-size:11px;" id="graphHint">click an endpoint → cited excerpt · scroll to zoom · drag to pan</div></div>';
+      + '<div class="mono muted" style="font-size:11px;" id="graphHint">click an endpoint → cited excerpt · scroll to zoom · drag to pan</div>'
+      + (state.project && d.feature ? '<a class="btn" style="font-size:11px;padding:4px 8px;" target="_blank" href="/api/projects/'+encodeURIComponent(state.project.id)+'/features/'+encodeURIComponent(d.feature.id)+'/map">Full map ↗</a>' : '')
+      + '</div>';
     host.innerHTML = svgHtml+footerHtml;
     host.querySelectorAll('[data-epid]').forEach(function(el){
       el.addEventListener('click', function(){ showCitationFor(el.getAttribute('data-epid')); });
