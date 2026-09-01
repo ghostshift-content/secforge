@@ -45,6 +45,44 @@ describe('universalInventory — polyglot fallback', () => {
     assert.ok(inv.services_finders_policies.some((r) => r.file === 'lib/opaque.rb' && r.detail === 'source-module'));
   });
 
+  test('detects a csurf() call as a csrf guard signal', () => {
+    const root = tmpTree({
+      'src/server.js': "const csrf = require('csurf');\napp.use(csrf());\n",
+    });
+    const ctx = buildContext(root);
+    const inv = universalInventory(ctx);
+    assert.ok(inv.tokens_actors.some((r) => r.detail === 'csrf'));
+  });
+
+  test('detects express-session/req.session as POSITIVE cookie/session evidence (RIX-csrf design)', () => {
+    const root = tmpTree({
+      'src/server.js': "const session = require('express-session');\napp.use(session({ secret: 'x' }));\napp.post('/x', (req, res) => { req.session.userId = 1; });\n",
+    });
+    const ctx = buildContext(root);
+    const inv = universalInventory(ctx);
+    assert.ok(inv.tokens_actors.some((r) => r.detail === 'session-cookie'));
+  });
+
+  test('a bearer-token API with no session usage never surfaces session-cookie evidence', () => {
+    const root = tmpTree({
+      'src/server.js': "app.post('/x', (req, res) => { jwt.verify(req.headers.authorization); });\n",
+    });
+    const ctx = buildContext(root);
+    const inv = universalInventory(ctx);
+    assert.equal(inv.tokens_actors.some((r) => r.detail === 'session-cookie'), false);
+  });
+
+  test('detects an unambiguous weak-crypto primitive (DES) but not aes-256-gcm', () => {
+    const root = tmpTree({
+      'src/weak.js': "crypto.createCipheriv('des-ede3', key, iv);\n",
+      'src/strong.js': "crypto.createCipheriv('aes-256-gcm', key, iv);\n",
+    });
+    const ctx = buildContext(root);
+    const inv = universalInventory(ctx);
+    assert.ok(inv.services_finders_policies.some((r) => r.file === 'src/weak.js' && r.detail === 'weak-crypto'));
+    assert.equal(inv.services_finders_policies.some((r) => r.file === 'src/strong.js' && r.detail === 'weak-crypto'), false);
+  });
+
   test('minified/bundled JS is excluded from extraction', () => {
     const root = tmpTree({ 'public/assets/lib.min.js': "app.get('/x',function(){});" });
     const ctx = buildContext(root);

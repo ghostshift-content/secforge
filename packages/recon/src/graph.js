@@ -147,6 +147,7 @@ function nodeForRow(g, featureId, kind, row) {
     case 'workers_jobs': return mk({ type: 'JOB', id: ID.scoped('job', row.file, row.line, row.entry), name: String(row.entry || '').slice(0, 60) }, 'HANDLED_BY');
     case 'services_finders_policies': {
       if (row.detail === 'source-module') return mk({ type: 'SYMBOL', id: ID.scoped('symbol', row.file, row.entry), name: row.entry, data: { kind: 'source-module' } }, 'DEFINES');
+      if (row.detail === 'weak-crypto') return mk({ type: 'SYMBOL', id: ID.scoped('symbol', row.file, row.entry), name: row.entry, data: { kind: 'weak-crypto' } }, 'DEFINES');
       if (row.detail === 'policy') return mk({ type: 'AUTH_CHECK', id: ID.scoped('authcheck', row.file), name: row.entry, data: { kind: 'policy' } }, 'AUTHORIZED_BY');
       if (row.detail === 'model') return mk({ type: 'MODEL', id: ID.scoped('model', row.file), name: String(row.entry || '').replace(/\.\w+$/, ''), data: { kind: 'model' } }, 'HANDLED_BY');
       return mk({ type: 'SERVICE', id: ID.scoped('service', row.file), name: row.entry, data: { kind: row.detail === 'finder' ? 'finder' : 'service' } }, 'USES_SERVICE');
@@ -158,9 +159,21 @@ function nodeForRow(g, featureId, kind, row) {
       g.addEdge('RETURNS_DATA', serializer, flowId);
       return serializer;
     }
-    case 'tokens_actors': return row.detail === 'token'
-      ? mk({ type: 'TOKEN', id: ID.scoped('token', row.file, row.line), name: String(row.entry || '').slice(0, 60), data: { kind: 'token' } }, 'AUTHENTICATED_BY')
-      : mk({ type: 'AUTH_CHECK', id: ID.scoped('authcheck', row.file, 'actor'), name: String(row.entry || '').slice(0, 60), data: { kind: row.detail === 'permission' ? 'ability' : 'before_action' } }, 'AUTHENTICATED_BY');
+    case 'tokens_actors': {
+      if (row.detail === 'token') return mk({ type: 'TOKEN', id: ID.scoped('token', row.file, row.line), name: String(row.entry || '').slice(0, 60), data: { kind: 'token' } }, 'AUTHENTICATED_BY');
+      // CSRF guard — belongs in the same "security layer" edge bucket as GUARDED_BY (not
+      // AUTHENTICATED_BY: it's neither "who" nor "may you"). Line-scoped id (not the shared
+      // per-file 'actor' id below) so wireEndpointAuth can look it up the same way it looks up a
+      // 'token' row's node id.
+      if (row.detail === 'csrf') return mk({ type: 'AUTH_CHECK', id: ID.scoped('authcheck', row.file, row.line, 'csrf'), name: String(row.entry || '').slice(0, 60), data: { kind: 'csrf-guard' } }, 'GUARDED_BY');
+      // POSITIVE cookie/session-auth evidence (RIX-csrf design) — a real signal graph-utils'
+      // hasCookieSessionAuth() looks for; line-scoped like the csrf-guard bucket above.
+      if (row.detail === 'session-cookie') return mk({ type: 'AUTH_CHECK', id: ID.scoped('authcheck', row.file, row.line, 'session-cookie'), name: String(row.entry || '').slice(0, 60), data: { kind: 'session-cookie' } }, 'AUTHENTICATED_BY');
+      // A raw `class X < ActionController::Base|API` declaration is only inventory-layer fuel for
+      // railsControllerCookieSession()'s resolution below — not itself a security check to graph.
+      if (row.detail === 'action-controller-base') return null;
+      return mk({ type: 'AUTH_CHECK', id: ID.scoped('authcheck', row.file, 'actor'), name: String(row.entry || '').slice(0, 60), data: { kind: row.detail === 'permission' ? 'ability' : 'before_action' } }, 'AUTHENTICATED_BY');
+    }
     case 'downloads_uploads_exports': case 'search_aggregation':
       return mk({ type: 'SERVICE', id: ID.scoped('service', row.file, row.line, kind), name: String(row.entry || '').slice(0, 50), data: { kind: 'service' } }, 'USES_SERVICE');
     default: return null;
@@ -220,12 +233,31 @@ function railsControllerAuth(inventories) {
   };
 }
 
-function wireEndpointAuth(g, endpointId, row, inventories, isGraphql, railsAuth) {
+// Project-wide Rails cookie-session base-class resolver (design §RIX-csrf), built from
+// 'action-controller-base' tokens_actors rows @secforge/inventories/rails.js surfaces for a
+// controller's own `class X < ActionController::Y` declaration. Mirrors railsControllerAuth's own
+// default-resolution precedent: a controller with no declared base falls back to whichever base
+// controller (ApplicationController, by convention) declares one. ActionController::API resolves
+// to false — CSRF is never applicable there, positively exempting the whole app.
+function railsControllerCookieSession(inventories) {
+  const byFile = new Map();
+  for (const r of inventories.tokens_actors || []) {
+    if (r.detail !== 'action-controller-base') continue;
+    byFile.set(r.file, r.controllerParent);
+  }
+  let defaultBase = null;
+  for (const [file, base] of byFile) if (/(^|\/)application_controller\.rb$/i.test(file)) { defaultBase = base; break; }
+  return { isCookieSession: (file) => (byFile.get(file) || defaultBase) === 'ActionController::Base' };
+}
+
+function wireEndpointAuth(g, endpointId, row, inventories, isGraphql, railsAuth, cookieSession) {
   const tokenRows = inventories.tokens_actors || [];
   const authzRows = [
     ...(inventories.services_finders_policies || []).filter((r) => r.detail === 'policy'),
     ...tokenRows.filter((r) => r.detail === 'permission'),
   ];
+  const csrfRows = tokenRows.filter((r) => r.detail === 'csrf');
+  const sessionCookieRows = tokenRows.filter((r) => r.detail === 'session-cookie');
   const sameFile = (r) => r.file === row.file;
 
   if (isGraphql) {
@@ -251,6 +283,29 @@ function wireEndpointAuth(g, endpointId, row, inventories, isGraphql, railsAuth)
   for (const r of inBody) {
     const acId = r.detail === 'policy' ? ID.scoped('authcheck', r.file) : ID.scoped('authcheck', r.file, 'actor');
     if (g.nodes.has(acId)) g.addEdge('AUTHORIZED_BY', endpointId, acId);
+  }
+
+  // CSRF guard is declared once (protect_from_forgery / csurf() etc.), same-file scope — same
+  // "declared once, covers the file" precedent already used for API-token tokens_actors rows.
+  const csrfRow = csrfRows.find(sameFile);
+  if (csrfRow) {
+    const csrfId = ID.scoped('authcheck', csrfRow.file, csrfRow.line, 'csrf');
+    if (g.nodes.has(csrfId)) g.addEdge('GUARDED_BY', endpointId, csrfId);
+  }
+
+  // POSITIVE cookie/session-auth evidence (RIX-csrf design) — same-file scope, same precedent as
+  // the csrf-guard bucket above. Explicit session[]/cookies.signed/cookies.encrypted/express-session/
+  // req.session/cookie-session/Set-Cookie/form-render evidence wins outright; failing that, a
+  // Rails-recognized endpoint whose controller resolves to ActionController::Base still counts —
+  // an ActionController::API app resolves false and gets no edge, so RIX-csrf never fires there.
+  const sessionCookieRow = sessionCookieRows.find(sameFile);
+  if (sessionCookieRow) {
+    const scId = ID.scoped('authcheck', sessionCookieRow.file, sessionCookieRow.line, 'session-cookie');
+    if (g.nodes.has(scId)) g.addEdge('AUTHENTICATED_BY', endpointId, scId);
+  } else if (!isGraphql && RAILS_ENDPOINT_DETAILS.has(row.detail) && cookieSession.isCookieSession(row.file)) {
+    const scId = ID.scoped('authcheck', row.file, 'action-controller-base');
+    if (!g.nodes.has(scId)) g.addNode({ type: 'AUTH_CHECK', id: scId, name: 'ActionController::Base', data: { kind: 'session-cookie' } });
+    g.addEdge('AUTHENTICATED_BY', endpointId, scId);
   }
 }
 
@@ -416,6 +471,7 @@ export function buildGraph({ inventories = {}, clusters = null, ontology = null,
   const reconciliation = [];
 
   const railsAuth = railsControllerAuth(inventories);
+  const cookieSession = railsControllerCookieSession(inventories);
   const endpointRows = []; // { nodeId, row, isGraphql } — auth-wired in a SECOND pass (below), once
                             // every TOKEN/AUTH_CHECK node in the feature exists (row order within a
                             // feature is not guaranteed to put tokens_actors before routes_endpoints).
@@ -433,7 +489,7 @@ export function buildGraph({ inventories = {}, clusters = null, ontology = null,
       reconciliation.push(reconOf(kind, row, nodeId ? 'MAPPED_TO_FEATURE' : 'UNCLEAR_COVERAGE_GAP', nodeId ? featId : null));
     }
   }
-  for (const { nodeId, row, isGraphql } of endpointRows) wireEndpointAuth(g, nodeId, row, inventories, isGraphql, railsAuth);
+  for (const { nodeId, row, isGraphql } of endpointRows) wireEndpointAuth(g, nodeId, row, inventories, isGraphql, railsAuth, cookieSession);
   buildArchitecture(g, archClusters, reconciliation);
   // ARCH_CLUSTER-anchored endpoints still get §7 auth wiring (a partially-mapped or blocked run
   // must not silently under-report ACX findings just because no ontology confirmed the feature).
@@ -446,7 +502,7 @@ export function buildGraph({ inventories = {}, clusters = null, ontology = null,
     const id = ID.endpoint(mr.method, mr.route);
     if (!g.nodes.has(id)) continue;
     noteEndpoint(id, row.file);
-    wireEndpointAuth(g, id, row, inventories, isGraphql, railsAuth);
+    wireEndpointAuth(g, id, row, inventories, isGraphql, railsAuth, cookieSession);
   }
 
   if (ontology) buildOntology(g, ontology, features);

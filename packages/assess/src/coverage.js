@@ -9,12 +9,16 @@ import { RULE_CWE } from './rules.js';
 
 // Families this v1 engine actually has rules for (see rules.js). Everything else reads 'na' —
 // honest about what was assessed rather than pretending full 24-family coverage.
-const APPLICABLE_FAMILIES = new Set(['ACX', 'REX', 'SDX']);
+const APPLICABLE_FAMILIES = new Set(['ACX', 'REX', 'SDX', 'RIX', 'CRX']);
 
-function hasSurfaceFor(family, endpoints, dataStores) {
+function hasSurfaceFor(family, endpoints, dataStores, feature) {
   if (family === 'ACX') return endpoints.length > 0;
   if (family === 'REX') return endpoints.some((e) => STATE_CHANGING_METHODS.has((e.data?.method || '').toUpperCase()));
   if (family === 'SDX') return endpoints.length > 0 && dataStores.length > 0;
+  if (family === 'RIX') return endpoints.length > 0;
+  // CRX is a whole-codebase code-pattern family with no endpoint/datastore-shaped surface — any
+  // feature with any mapped code counts, since a weak-crypto call could appear anywhere in it.
+  if (family === 'CRX') return (feature?.data?.row_count || 0) > 0;
   return false;
 }
 
@@ -82,7 +86,7 @@ export async function computeCoverage(store, projectId) {
     const dataStores = dataStoresOfFeature(idx, feature.id);
     const cells = families.map((family) => ({
       family,
-      verdict: cellVerdict(family, feature.id, findings, hasSurfaceFor(family, endpoints, dataStores)),
+      verdict: cellVerdict(family, feature.id, findings, hasSurfaceFor(family, endpoints, dataStores, feature)),
     }));
     return { feature: feature.id, name: feature.name, cells };
   });

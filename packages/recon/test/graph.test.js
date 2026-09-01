@@ -277,3 +277,76 @@ describe('buildGraph() — legacyRows (ROLE/ACTOR/PERMISSION) keep working along
     assert.ok(edge(edges, 'REQUIRES_ROLE', ep.id, role.id));
   });
 });
+
+// RIX-csrf-missing-token map signal wiring (detector-expansion design §2.1/§3 WP3): the FIRST
+// real emitter of the GUARDED_BY edge type.
+describe('buildGraph() — RIX-csrf map signal wiring', () => {
+  test('a tokens_actors csrf row in the same file adds a GUARDED_BY edge, endpoint -> csrf-guard AUTH_CHECK node', () => {
+    const inventories = inv({
+      routes_endpoints: [{ file: 'src/routes/account.js', line: 5, entry: "post '/account/email'" }],
+      tokens_actors: [{ file: 'src/routes/account.js', line: 2, entry: 'app.use(csrf())', detail: 'csrf' }],
+    });
+    const ontology = { features: [{ name: 'Account', slug: 'account', domain: 'core', include_paths: ['routes/account'] }] };
+    const { nodes, edges } = buildGraph({ inventories, ontology, project, snapshotId: 's1' });
+    const ep = byType(nodes, 'ENDPOINT').find((n) => n.data.route === '/account/email');
+    assert.ok(ep, 'expected the synthesized POST /account/email endpoint');
+    const guard = byType(nodes, 'AUTH_CHECK').find((n) => n.data.kind === 'csrf-guard');
+    assert.ok(guard, 'expected a csrf-guard AUTH_CHECK node');
+    assert.ok(edge(edges, 'GUARDED_BY', ep.id, guard.id));
+  });
+
+  test('no csrf row in the file → no GUARDED_BY edge, no csrf-guard node', () => {
+    const inventories = inv({
+      routes_endpoints: [{ file: 'src/routes/account.js', line: 5, entry: "post '/account/email'" }],
+    });
+    const ontology = { features: [{ name: 'Account', slug: 'account', domain: 'core', include_paths: ['routes/account'] }] };
+    const { nodes, edges } = buildGraph({ inventories, ontology, project, snapshotId: 's1' });
+    assert.equal(byType(nodes, 'AUTH_CHECK').some((n) => n.data.kind === 'csrf-guard'), false);
+    assert.equal(edges.some((e) => e.type === 'GUARDED_BY'), false);
+  });
+});
+
+// POSITIVE cookie/session-auth evidence wiring (RIX-csrf design — zero false positives): an
+// ActionController::Base controller wires AUTHENTICATED_BY -> AUTH_CHECK{kind:'session-cookie'};
+// an ActionController::API controller (Meridian rails-api's own shape) never does.
+describe('buildGraph() — cookie/session positive-evidence wiring (RIX-csrf zero-false-positive gate)', () => {
+  test('an ActionController::Base controller wires AUTHENTICATED_BY to a session-cookie AUTH_CHECK', () => {
+    const file = 'app/controllers/sessions_controller.rb';
+    const inventories = inv({
+      routes_endpoints: [{ file, line: 5, method: 'POST', route: '/sessions', entry: 'action create', detail: 'rails-synth' }],
+      tokens_actors: [{ file, line: 1, entry: 'class SessionsController < ActionController::Base', detail: 'action-controller-base', controllerClass: 'SessionsController', controllerParent: 'ActionController::Base' }],
+    });
+    const ontology = { features: [{ name: 'Sessions', slug: 'sessions', domain: 'core', include_paths: ['controllers/sessions'] }] };
+    const { nodes, edges } = buildGraph({ inventories, ontology, project, snapshotId: 's1' });
+    const ep = byType(nodes, 'ENDPOINT').find((n) => n.data.route === '/sessions');
+    const sc = byType(nodes, 'AUTH_CHECK').find((n) => n.data.kind === 'session-cookie');
+    assert.ok(sc, 'expected a session-cookie AUTH_CHECK node');
+    assert.ok(edge(edges, 'AUTHENTICATED_BY', ep.id, sc.id));
+  });
+
+  test('an ActionController::API controller wires NO session-cookie AUTH_CHECK (rules-only exempt, matches Meridian rails-api)', () => {
+    const file = 'app/controllers/users_controller.rb';
+    const inventories = inv({
+      routes_endpoints: [{ file, line: 5, method: 'POST', route: '/users', entry: 'action create', detail: 'rails-synth' }],
+      tokens_actors: [{ file, line: 1, entry: 'class UsersController < ActionController::API', detail: 'action-controller-base', controllerClass: 'UsersController', controllerParent: 'ActionController::API' }],
+    });
+    const ontology = { features: [{ name: 'Users', slug: 'users', domain: 'core', include_paths: ['controllers/users'] }] };
+    const { nodes } = buildGraph({ inventories, ontology, project, snapshotId: 's1' });
+    assert.equal(byType(nodes, 'AUTH_CHECK').some((n) => n.data.kind === 'session-cookie'), false);
+  });
+});
+
+// CRX-weak-crypto-primitive map signal wiring (detector-expansion design §2.2/§3 WP4).
+describe('buildGraph() — CRX weak-crypto map signal wiring', () => {
+  test('a services_finders_policies weak-crypto row produces a SYMBOL node via DEFINES', () => {
+    const inventories = inv({
+      services_finders_policies: [{ file: 'src/crypto.js', line: 3, entry: "createCipheriv('des-ede3', key, iv)", detail: 'weak-crypto' }],
+    });
+    const ontology = { features: [{ name: 'Crypto', slug: 'crypto', domain: 'core', include_paths: ['crypto.js'] }] };
+    const { nodes, edges } = buildGraph({ inventories, ontology, project, snapshotId: 's1' });
+    const sym = byType(nodes, 'SYMBOL').find((n) => n.data.kind === 'weak-crypto');
+    assert.ok(sym, 'expected a weak-crypto SYMBOL node');
+    const feature = byType(nodes, 'FEATURE')[0];
+    assert.ok(edge(edges, 'DEFINES', feature.id, sym.id));
+  });
+});

@@ -5,6 +5,7 @@ import { ID } from '@secforge/schemas';
 import {
   STATE_CHANGING_METHODS, indexGraph, featureOfEndpoint,
   hasAuthn, hasAuthz, isObjectRead, hasRateLimitGuard, dataStoresOfFeature,
+  hasCookieSessionAuth, hasCsrfGuard,
 } from './graph-utils.js';
 
 function evidenceOf(node) {
@@ -17,8 +18,11 @@ function evidenceOf(node) {
 export const RULE_CVSS = Object.freeze({
   'ACX-missing-authentication':     { vector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N', score: 7.5 },
   'ACX-idor-no-owner-check':        { vector: 'CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N', score: 6.5 },
+  'ACX-missing-authorization':      { vector: 'CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:N', score: 6.5 },
   'REX-no-rate-limit':              { vector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L', score: 5.3 },
   'SDX-unauth-datastore-reachable': { vector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N', score: 7.5 },
+  'RIX-csrf-missing-token':         { vector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:H/A:N', score: 6.5 },
+  'CRX-weak-crypto-primitive':      { vector: 'CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N', score: 5.9 },
 });
 
 // The CWE each deterministic rule actually detects — the honest denominator for a per-CWE
@@ -27,8 +31,11 @@ export const RULE_CVSS = Object.freeze({
 export const RULE_CWE = Object.freeze({
   'ACX-idor-no-owner-check':        'CWE-639',
   'ACX-missing-authentication':     'CWE-306',
+  'ACX-missing-authorization':      'CWE-862',
   'REX-no-rate-limit':              'CWE-770',
   'SDX-unauth-datastore-reachable': 'CWE-200',
+  'RIX-csrf-missing-token':         'CWE-352',
+  'CRX-weak-crypto-primitive':      'CWE-327',
 });
 
 // Standard CVSS v3.1 qualitative severity bands.
@@ -117,11 +124,76 @@ function ruleSdx(idx, graph) {
   return out;
 }
 
+// ACX / CWE-862: a state-changing endpoint with authentication but NO authorization check — the
+// "logged in but not allowed" write-path shape, distinct from ACX-idor (a GET object-read).
+function ruleMissingAuthz(idx, graph) {
+  const out = [];
+  for (const ep of graph.nodes) {
+    if (ep.type !== 'ENDPOINT') continue;
+    const method = (ep.data?.method || '').toUpperCase();
+    if (!STATE_CHANGING_METHODS.has(method)) continue;
+    if (!hasAuthn(idx, ep.id) || hasAuthz(idx, ep.id)) continue;
+    const feature = featureOfEndpoint(idx, ep.id);
+    out.push({
+      family: 'ACX', cwe: 'CWE-862', rule: 'ACX-missing-authorization',
+      title: `${ep.name} changes state for an authenticated caller with no authorization check`,
+      featureId: feature?.id || null, endpointId: ep.id, method, route: ep.data?.route || null,
+      severity: severityOf('ACX-missing-authorization'), evidence: evidenceOf(ep),
+    });
+  }
+  return out;
+}
+
+// RIX / CWE-352: a state-changing endpoint with POSITIVE cookie/session-auth evidence and no CSRF
+// guard signal — a browser CSRF can ride that ambient credential. Gated on POSITIVE evidence only
+// (hasCookieSessionAuth), never on the mere absence of a bearer token: a token/JWT API (or an
+// ActionController::API app, which has no cookie session at all) never fires.
+function ruleCsrf(idx, graph) {
+  const out = [];
+  for (const ep of graph.nodes) {
+    if (ep.type !== 'ENDPOINT') continue;
+    const method = (ep.data?.method || '').toUpperCase();
+    if (!STATE_CHANGING_METHODS.has(method)) continue;
+    if (!hasCookieSessionAuth(idx, ep.id)) continue; // no positive cookie/session evidence → exempt
+    if (hasCsrfGuard(idx, ep.id)) continue; // guard present → rejected
+    const feature = featureOfEndpoint(idx, ep.id);
+    out.push({
+      family: 'RIX', cwe: 'CWE-352', rule: 'RIX-csrf-missing-token',
+      title: `${ep.name} changes state for a cookie/session caller with no CSRF guard`,
+      featureId: feature?.id || null, endpointId: ep.id, method, route: ep.data?.route || null,
+      severity: severityOf('RIX-csrf-missing-token'), evidence: evidenceOf(ep),
+    });
+  }
+  return out;
+}
+
+// CRX / CWE-327: a SYMBOL node flagged as a broken/deprecated crypto primitive (DES/3DES/RC4/ECB
+// only — deliberately narrow to avoid false-positiving on ambiguous bare md5/sha1 usage). Walks
+// SYMBOL nodes, not ENDPOINT nodes — presence of the symbol IS the finding, no guard to check.
+function ruleWeakCrypto(idx, graph) {
+  const out = [];
+  for (const n of graph.nodes) {
+    if (n.type !== 'SYMBOL' || n.data?.kind !== 'weak-crypto') continue;
+    const defEdge = (idx.edgesByDst.get(n.id) || []).find((e) => e.type === 'DEFINES');
+    const feature = defEdge && graph.nodes.find((f) => f.id === defEdge.src && f.type === 'FEATURE');
+    out.push({
+      family: 'CRX', cwe: 'CWE-327', rule: 'CRX-weak-crypto-primitive',
+      title: `${n.name} uses a broken/deprecated cryptographic primitive`,
+      featureId: feature?.id || null, endpointId: null, method: null, route: null,
+      severity: severityOf('CRX-weak-crypto-primitive'), evidence: evidenceOf(n),
+    });
+  }
+  return out;
+}
+
 const RULES = [
   { family: 'ACX', run: ruleIdor },
   { family: 'ACX', run: ruleMissingAuth },
+  { family: 'ACX', run: ruleMissingAuthz },
   { family: 'REX', run: ruleRex },
   { family: 'SDX', run: ruleSdx },
+  { family: 'RIX', run: ruleCsrf },
+  { family: 'CRX', run: ruleWeakCrypto },
 ];
 
 // Independent VALIDATE pass: re-derive a single candidate's predicate against the graph.
@@ -141,6 +213,23 @@ const REVERIFY = {
   'SDX-unauth-datastore-reachable': (c, idx) => {
     const ep = idx.nodeById.get(c.endpointId);
     return !!ep && !hasAuthn(idx, c.endpointId) && !hasAuthz(idx, c.endpointId) && dataStoresOfFeature(idx, c.featureId).length > 0;
+  },
+  'ACX-missing-authorization': (c, idx) => {
+    const ep = idx.nodeById.get(c.endpointId);
+    return !!ep && STATE_CHANGING_METHODS.has((ep.data?.method || '').toUpperCase()) &&
+      hasAuthn(idx, c.endpointId) && !hasAuthz(idx, c.endpointId);
+  },
+  'RIX-csrf-missing-token': (c, idx) => {
+    const ep = idx.nodeById.get(c.endpointId);
+    return !!ep && STATE_CHANGING_METHODS.has((ep.data?.method || '').toUpperCase()) &&
+      hasCookieSessionAuth(idx, c.endpointId) && !hasCsrfGuard(idx, c.endpointId);
+  },
+  'CRX-weak-crypto-primitive': (c, idx) => {
+    for (const n of idx.nodeById.values()) {
+      if (n.type === 'SYMBOL' && n.data?.kind === 'weak-crypto' &&
+        n.claims?.some((cl) => cl.file === c.evidence?.file && cl.line === c.evidence?.line)) return true;
+    }
+    return false;
   },
 };
 

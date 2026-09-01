@@ -136,12 +136,17 @@ function railsControllerActions(ctx) {
 
 // Controller's own `class X < Y` declaration (first match — a controller has exactly one).
 function controllerClassInfo(lines) {
-  for (const raw of lines) {
-    const m = raw.match(/^\s*class\s+([\w:]+)\s*<\s*([\w:]+)/);
-    if (m) return { className: m[1], parentClass: m[2] };
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^\s*class\s+([\w:]+)\s*<\s*([\w:]+)/);
+    if (m) return { className: m[1], parentClass: m[2], classLine: i + 1 };
   }
-  return { className: '', parentClass: '' };
+  return { className: '', parentClass: '', classLine: 1 };
 }
+
+// A controller line carrying explicit cookie/session evidence — POSITIVE "this is a browser
+// cookie/session request" signal, independent of the class-hierarchy check above (e.g. a Rails
+// API-mode controller that still reads a signed cookie for one endpoint).
+const SESSION_COOKIE_RE = /\bsession\s*\[|\bcookies\.(?:signed|encrypted)\b/;
 
 // Rails refinement 1 (mapper-design.md §7): `before_action`/`skip_before_action` are class-body
 // macros — AUTHENTICATION is a controller-FILE (or ancestor controller) property, never scoped to
@@ -150,18 +155,32 @@ function controllerClassInfo(lines) {
 // class/parent name so @secforge/recon/graph.js can resolve inheritance (e.g. ApplicationController)
 // to compute a project-wide authenticated-by-default baseline. AUTHORIZATION stays body-scoped —
 // unaffected, still comes from the generic `authorize`/`can?` grep below.
+// Also surfaces the same class-body-macro shape for CSRF: `protect_from_forgery` (detail:'csrf')
+// and `skip_before_action ...verify_authenticity_token` (detail:'skip-csrf') — the Rails-canonical
+// form of the universal CSRF_GUARD_RE signal (universal.js).
 function railsControllerAuthRows(ctx) {
   const rows = [];
   for (const file of ctx.files.filter((f) => f.ext === '.rb' && /_controller\.rb$/.test(f.name))) {
     const lines = ctx.read(file.path).split(/\r?\n/);
-    const { className, parentClass } = controllerClassInfo(lines);
+    const { className, parentClass, classLine } = controllerClassInfo(lines);
+    // RIX-csrf map signal (positive): a controller declaring `< ActionController::Base` is a
+    // cookie-session controller; `< ActionController::API` is recorded too so
+    // @secforge/recon/graph.js's resolver can positively exempt it — CSRF never applies there.
+    if (/^ActionController::(?:Base|API)$/.test(parentClass)) {
+      rows.push({ file: file.path, line: classLine, entry: `class ${className} < ${parentClass}`,
+        detail: 'action-controller-base', controllerClass: className, controllerParent: parentClass });
+    }
     for (let i = 0; i < lines.length; i++) {
       const text = lines[i].trim();
+      const push = (detail) => rows.push({ file: file.path, line: i + 1, entry: text, detail,
+        controllerClass: className, controllerParent: parentClass });
+      if (/^protect_from_forgery\b/.test(text)) { push('csrf'); continue; }
       const isSkip = /^skip_before_action\b/.test(text);
+      if (isSkip && /verify_authenticity_token/i.test(text)) { push('skip-csrf'); continue; }
+      if (SESSION_COOKIE_RE.test(text)) { push('session-cookie'); continue; }
       if (!isSkip && !/^before_action\b/.test(text)) continue;
       if (!/authenticate/i.test(text)) continue;
-      rows.push({ file: file.path, line: i + 1, entry: text, detail: isSkip ? 'skip-authn' : 'authn',
-        controllerClass: className, controllerParent: parentClass });
+      push(isSkip ? 'skip-authn' : 'authn');
     }
   }
   return rows;

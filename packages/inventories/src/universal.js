@@ -55,6 +55,17 @@ export const item = (h, entry, detail = '') => ({ file: h.file, line: h.line, en
 
 const ROUTE_DEF = /\b(?:(?:app|router|route|api|bp|blueprint|srv|mux|group|http|r|Router|Route)\s*\.\s*(?:get|post|put|patch|delete|options|head|use|all|route|handle|handlefunc|match|any|resource|apiresource|add_route|add_url_rule)\s*\()|@(?:Get|Post|Put|Patch|Delete|Request|Api|Web)Mapping\b|@(?:app|router|blueprint|bp)\.(?:get|post|put|patch|delete|route)\b|Route::(?:get|post|put|patch|delete|any|match|resource|apiResource|group)\s*\(|#\[(?:Route|ApiRoute|FrontpageRoute|Get|Post|Put|Delete|Patch)\b|@(?:Path|GET|POST|PUT|DELETE|PATCH)\b|\b(?:path|re_path|url)\s*\(\s*[rf]?['"]|http\.HandleFunc\s*\(/i;
 const AUTH_DEF = /@(?:PreAuthorize|PostAuthorize|Secured|RolesAllowed|Authorize|Authenticated|PermitAll|DenyAll)\b|IsGranted|isGranted\s*\(|hasR(?:ole|oles|equest)|hasAnyRole|hasAuthority\s*\(|requireLogin|ensureLoggedIn|authenticate[_(]|current_user\b|getUser\(|@login_required|checkPermission|authorize[!(]|before_action[^,\n]*auth|passport\.|jwt\.verify|verifyToken|Auth::(?:check|user|guard)|#\[[A-Za-z]*(?:Admin|Auth|Role|Public|Require|Secur|Anonym|Grant|Permission|Guard|Login|Restrict|Permit|Deny)[A-Za-z]*\]/i;
+// CSRF guard vocabulary — a real "this endpoint's write is CSRF-protected" signal, not "there is a
+// CSRF token somewhere in this codebase": scoped to the guard call/middleware/config, not any use
+// of the word "token" alone.
+const CSRF_GUARD_RE = /\b(?:csrf_token|csrf_meta_tag|protect_from_forgery|authenticity_token|csurf|csrfProtection|CSRFProtect|verifyCsrfToken|X-CSRF-Token)\b/i;
+// POSITIVE cookie/session evidence (RIX-csrf design) — a real "this request rides a browser
+// cookie/session" signal, never inferred from the mere absence of a bearer token. A bearer/JWT
+// API surfaces none of these.
+const SESSION_COOKIE_RE = /\bexpress-session\b|\breq\.session\b|\bcookie-session\b|\bcookies\.set\s*\(|Set-Cookie|\bres\.render\s*\(/i;
+// Unambiguous broken/deprecated crypto primitives only (DES/3DES/RC4/ECB-mode) — deliberately
+// narrow to avoid false-positiving on ambiguous bare md5/sha1 usage (ETags, cache keys, etc).
+const WEAK_CRYPTO_RE = /createCipheriv\s*\(\s*['"](?:des|des-ede3|rc4)|Cipher\.getInstance\(\s*["'](?:DES|RC4|Blowfish)|Digest::(?:DES)\b|-ecb['")]/i;
 const DOWNLOAD_DEF = /\b(?:(?:function|def|func)\s+\w*(?:upload|download|export|attachment)\w*|(?:public|private|protected|async|static)\s+(?:\w+\s+)?\w*(?:upload|download|export|attachment)\w*\s*\(|sendFile\s*\(|send_file\b|send_data\b|FileResponse\s*\(|Content-Disposition\b|move_uploaded_file\s*\(|presigned\w*\s*\()/i;
 const SEARCH_DEF = /\b(?:(?:function|def|func)\s+\w*(?:search|query|aggregate|facet)\w*|(?:public|private|protected|async|static)\s+(?:\w+\s+)?\w*(?:search|query|aggregate|facet)\w*\s*\(|Elasticsearch\w*\s*\(|OpenSearch\w*\s*\(|Solr\w*\s*\(|Meilisearch\w*\s*\(|Algolia\w*\s*\()/i;
 const GRAPHQL_DEF = /\b(?:type\s+(?:Query|Mutation|Subscription)\b|extend\s+type\b|@Resolver\b|@Query\b|@Mutation\b|GraphQLObjectType|buildSchema\b|gql`)/i;
@@ -168,6 +179,9 @@ export function universalInventory(ctx) {
       api_class: rest ? 'Source API route' : '', purpose: rest ? 'REST API operation' : 'Web route' });
   }
   for (const h of ctx.grep(AUTH_DEF, { nameRe: isCodeFile }).filter(notBundled)) out.tokens_actors.push(item(h, h.text.slice(0, 90), 'auth'));
+  for (const h of ctx.grep(CSRF_GUARD_RE, { nameRe: isCodeFile }).filter(notBundled)) out.tokens_actors.push(item(h, h.text.slice(0, 90), 'csrf'));
+  for (const h of ctx.grep(SESSION_COOKIE_RE, { nameRe: isCodeFile }).filter(notBundled)) out.tokens_actors.push(item(h, h.text.slice(0, 90), 'session-cookie'));
+  for (const h of ctx.grep(WEAK_CRYPTO_RE, { nameRe: isCodeFile }).filter(notBundled)) out.services_finders_policies.push(item(h, h.text.slice(0, 90), 'weak-crypto'));
   for (const h of ctx.grep(DOWNLOAD_DEF, { nameRe: isCodeFile }).filter(notBundled)) out.downloads_uploads_exports.push(item(h, h.text.slice(0, 90), 'file-io'));
   for (const h of ctx.grep(SEARCH_DEF, { nameRe: isCodeFile }).filter(notBundled)) out.search_aggregation.push(item(h, h.text.slice(0, 90), 'search'));
   for (const h of ctx.grep(GRAPHQL_DEF, { nameRe: /\.(?:graphql|gql|js|jsx|ts|tsx|py|rb|php|java|kt|go)$/i }).filter(notBundled)) out.graphql.push(item(h, h.text.slice(0, 90), 'graphql-operation'));

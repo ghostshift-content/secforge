@@ -60,7 +60,11 @@ function findingOf(candidate, n, engineUsed, modelUsed = null, effort = 'medium'
 // ---- optional LLM-assist HUNT step (gated on `engine`) ------------------------------------
 // Deterministic rules.js is the always-on source of truth; this only ever ADDS candidates on
 // top of it, and any adapter failure degrades silently to "no extra candidates".
-const LLM_FAMILIES = new Set(['ACX', 'QIX', 'SX']); // access-control / injection / SSRF only
+// Only families with a real deterministic rule can ever be promoted (reproveLlmCandidate() drops
+// anything else) — QIX/SX have no rule (no dataflow tracing in this mapper, see design doc §0/§5),
+// so inviting the model to guess at them and inflating buildGroundedPrompt with instructions the
+// pipeline can never use would be dishonest. Grows only when a real corroborating rule lands.
+export const LLM_FAMILIES = new Set(['ACX']);
 const FAMILY_CWE = Object.fromEntries(FAMILIES.map((f) => [f.prefix, f.cwe[0]]));
 // PHASE4 §2.2: effort also bounds how many extra LLM-nominated candidates the assist step may
 // surface — the second real, honest effect (alongside the adapters' token-budget scaling).
@@ -142,10 +146,10 @@ function buildGroundedPrompt(bundle, caps) {
     'Cited source — use ONLY these when naming a location:',
     ...citations.map(fmtCitation),
     '',
-    'List LIKELY access-control (IDOR/broken authorization), injection (SQL/command), or SSRF',
-    'issues for THIS feature only. One line per issue:',
+    'List LIKELY access-control (IDOR/broken authorization) issues for THIS feature only.',
+    'One line per issue:',
     'FAMILY|title|METHOD|ROUTE|severity|file:line',
-    'FAMILY is ACX, QIX, or SX; ROUTE copied EXACTLY from Endpoints; file:line copied EXACTLY',
+    'FAMILY is ACX; ROUTE copied EXACTLY from Endpoints; file:line copied EXACTLY',
     'from Cited source above. If you cannot point to one of the citations above for an issue,',
     'do not report it — never invent or estimate a file or line number.',
   ].join('\n');

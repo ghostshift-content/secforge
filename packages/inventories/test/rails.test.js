@@ -131,3 +131,82 @@ describe('controller-level before_action/skip_before_action authn (design §7 re
     assert.equal(inv.tokens_actors.some((r) => r.detail === 'authn'), false);
   });
 });
+
+describe('controller-level protect_from_forgery / skip verify_authenticity_token (RIX-csrf map signal)', () => {
+  test('protect_from_forgery surfaces as a "csrf" row', () => {
+    const root = tmpTree({
+      'app/controllers/application_controller.rb': [
+        'class ApplicationController < ActionController::Base',
+        '  protect_from_forgery with: :exception',
+        'end',
+        '',
+      ].join('\n'),
+    });
+    const inv = railsPlugin.inventory(buildContext(root));
+    const row = inv.tokens_actors.find((r) => r.detail === 'csrf');
+    assert.ok(row, 'expected a "csrf" row for protect_from_forgery');
+    assert.equal(row.controllerClass, 'ApplicationController');
+  });
+
+  test('skip_before_action ...verify_authenticity_token surfaces as a "skip-csrf" row', () => {
+    const root = tmpTree({
+      'app/controllers/webhooks_controller.rb': [
+        'class WebhooksController < ApplicationController',
+        '  skip_before_action :verify_authenticity_token',
+        'end',
+        '',
+      ].join('\n'),
+    });
+    const inv = railsPlugin.inventory(buildContext(root));
+    const row = inv.tokens_actors.find((r) => r.detail === 'skip-csrf');
+    assert.ok(row, 'expected a "skip-csrf" row');
+    assert.equal(inv.tokens_actors.some((r) => r.detail === 'csrf'), false);
+  });
+});
+
+describe('cookie/session positive-evidence signal (RIX-csrf design — zero false positives)', () => {
+  test('an ActionController::Base controller surfaces an "action-controller-base" row (cookie-session)', () => {
+    const root = tmpTree({
+      'app/controllers/application_controller.rb': [
+        'class ApplicationController < ActionController::Base',
+        '  protect_from_forgery with: :exception',
+        'end',
+        '',
+      ].join('\n'),
+    });
+    const inv = railsPlugin.inventory(buildContext(root));
+    const row = inv.tokens_actors.find((r) => r.detail === 'action-controller-base');
+    assert.ok(row, 'expected an "action-controller-base" row');
+    assert.equal(row.controllerParent, 'ActionController::Base');
+  });
+
+  test('an ActionController::API controller is recorded but never yields cookie-session evidence', () => {
+    const root = tmpTree({
+      'app/controllers/application_controller.rb': [
+        'class ApplicationController < ActionController::API',
+        'end',
+        '',
+      ].join('\n'),
+    });
+    const inv = railsPlugin.inventory(buildContext(root));
+    const row = inv.tokens_actors.find((r) => r.detail === 'action-controller-base');
+    assert.ok(row, 'expected an "action-controller-base" row recording the API base');
+    assert.equal(row.controllerParent, 'ActionController::API');
+    assert.equal(inv.tokens_actors.some((r) => r.detail === 'session-cookie'), false);
+  });
+
+  test('explicit session[]/cookies.signed usage surfaces a "session-cookie" row even outside the class check', () => {
+    const root = tmpTree({
+      'app/controllers/sessions_controller.rb': [
+        'class SessionsController < ApplicationController',
+        '  def create',
+        "    session[:user_id] = user.id",
+        '  end',
+        'end',
+        '',
+      ].join('\n'),
+    });
+    const inv = railsPlugin.inventory(buildContext(root));
+    assert.ok(inv.tokens_actors.some((r) => r.detail === 'session-cookie'));
+  });
+});

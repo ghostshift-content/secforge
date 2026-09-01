@@ -45,6 +45,24 @@ export function isObjectRead(ep) {
   return (ep.data?.method || '').toUpperCase() === 'GET' && PARAM_RE.test(ep.data?.route || '');
 }
 
+// POSITIVE cookie/session-auth evidence — never inferred from the mere absence of a bearer token.
+// An AUTHENTICATED_BY edge to an AUTH_CHECK{kind:'session-cookie'} node: explicit session[]/
+// cookies.signed/cookies.encrypted usage, a Rails ActionController::Base ancestry, or a universal
+// express-session/req.session/cookie-session/Set-Cookie/form-render signal. An ActionController::API
+// app or a bearer-token API surfaces none of these, so CSRF correctly never fires there.
+export function hasCookieSessionAuth(idx, endpointId) {
+  return touching(idx, endpointId).some(
+    (e) => e.type === 'AUTHENTICATED_BY' && idx.nodeById.get(e.dst)?.data?.kind === 'session-cookie',
+  );
+}
+
+// A CSRF guard is present: a GUARDED_BY edge to an AUTH_CHECK{kind:'csrf-guard'} node.
+export function hasCsrfGuard(idx, endpointId) {
+  return touching(idx, endpointId).some(
+    (e) => e.type === 'GUARDED_BY' && idx.nodeById.get(e.dst)?.data?.kind === 'csrf-guard',
+  );
+}
+
 export function hasRateLimitGuard(idx, endpointNode) {
   if (endpointNode.data?.rateLimited) return true;
   return touching(idx, endpointNode.id).some((e) => {

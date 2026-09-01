@@ -62,7 +62,10 @@ describe('analyze() — deterministic rules', () => {
       nodes: [feature('f:orders', 'orders'), endpoint('ep', 'POST', '/orders'), authNode('ac:authn', 'authentication')],
       edges: [edge('EXPOSES', 'f:orders', 'ep'), edge('AUTHENTICATED_BY', 'ep', 'ac:authn')],
     };
-    const cands = analyze(graph, {});
+    // Scoped to REX only: this fixture is authn-but-not-authz + ambient-credential-no-csrf-guard
+    // too, so ACX-missing-authorization and RIX-csrf-missing-token legitimately ALSO fire on it now
+    // (see their own dedicated tests) — patterns:['REX'] isolates the REX-specific assertion below.
+    const cands = analyze(graph, { patterns: ['REX'] });
     assert.equal(cands.length, 1);
     assert.equal(cands[0].rule, 'REX-no-rate-limit');
     assert.equal(cands[0].family, 'REX');
@@ -76,6 +79,35 @@ describe('analyze() — deterministic rules', () => {
       edges: [edge('EXPOSES', 'f:orders', 'ep'), edge('AUTHENTICATED_BY', 'ep', 'ac:authn')],
     };
     assert.equal(analyze(graph, {}).some((c) => c.rule === 'REX-no-rate-limit'), false);
+  });
+
+  test('missing-authorization: state-changing endpoint with authn but no authz → ACX/CWE-862', () => {
+    const graph = {
+      nodes: [feature('f:orders', 'orders'), endpoint('ep', 'POST', '/orders/:id/cancel'), authNode('ac:authn', 'authentication')],
+      edges: [edge('EXPOSES', 'f:orders', 'ep'), edge('AUTHENTICATED_BY', 'ep', 'ac:authn')],
+    };
+    const cands = analyze(graph, {});
+    const c = cands.find((x) => x.rule === 'ACX-missing-authorization');
+    assert.ok(c, 'expected an ACX-missing-authorization candidate');
+    assert.equal(c.family, 'ACX');
+    assert.equal(c.cwe, 'CWE-862');
+    assert.equal(validateCandidate(c, graph), true);
+  });
+
+  test('missing-authorization is suppressed once an AUTHORIZED_BY edge is present', () => {
+    const graph = {
+      nodes: [feature('f:orders', 'orders'), endpoint('ep', 'POST', '/orders/:id/cancel'), authNode('ac:authn', 'authentication'), authNode('ac:authz', 'authorization')],
+      edges: [edge('EXPOSES', 'f:orders', 'ep'), edge('AUTHENTICATED_BY', 'ep', 'ac:authn'), edge('AUTHORIZED_BY', 'ep', 'ac:authz')],
+    };
+    assert.equal(analyze(graph, {}).some((c) => c.rule === 'ACX-missing-authorization'), false);
+  });
+
+  test('missing-authorization does not fire on a GET (read, not a write)', () => {
+    const graph = {
+      nodes: [feature('f:orders', 'orders'), endpoint('ep', 'GET', '/orders'), authNode('ac:authn', 'authentication')],
+      edges: [edge('EXPOSES', 'f:orders', 'ep'), edge('AUTHENTICATED_BY', 'ep', 'ac:authn')],
+    };
+    assert.equal(analyze(graph, {}).some((c) => c.rule === 'ACX-missing-authorization'), false);
   });
 
   test('pattern scope filters by family', () => {

@@ -32,6 +32,12 @@ function describeFinding(f, name) {
       return `${loc} is state-changing but carries no rate-limit or throttle signal, so a caller can invoke it without any volume limit.${tail}`;
     case 'SDX-unauth-datastore-reachable':
       return `${loc} is unauthenticated and its feature reaches a data store, exposing potentially sensitive data to an unauthorized actor.${tail}`;
+    case 'ACX-missing-authorization':
+      return `${loc} is state-changing for an authenticated caller, but no authorization check gates it, so any authenticated user can perform this action.${tail}`;
+    case 'RIX-csrf-missing-token':
+      return `${loc} is state-changing and relies on an ambient (cookie/session) credential with no CSRF guard, so a cross-site request can ride the caller's session.${tail}`;
+    case 'CRX-weak-crypto-primitive':
+      return `${loc} uses a broken or deprecated cryptographic primitive (DES/3DES/RC4/ECB), which can be feasibly broken by an attacker.${tail}`;
     default:
       return `${loc}: ${f.title || 'finding'}.${tail}`;
   }
@@ -48,6 +54,12 @@ function remediationFor(rule) {
       return 'Apply a rate limit / throttle to this state-changing endpoint (per-IP and/or per-account). This finding clears when a rate-limit/throttle guard (GUARDED_BY) is detected on this endpoint in the graph.';
     case 'SDX-unauth-datastore-reachable':
       return 'Require authentication on endpoints that reach this data store, or isolate the store behind an authorized service. This finding clears when the reaching endpoint gains an AUTHENTICATED_BY or AUTHORIZED_BY edge in the graph.';
+    case 'ACX-missing-authorization':
+      return 'Add an ownership/role/policy check before this action runs. This finding clears when an AUTHORIZED_BY or GUARDED_BY edge is detected on this endpoint in the graph.';
+    case 'RIX-csrf-missing-token':
+      return 'Require a CSRF token (or SameSite-cookie-equivalent protection) on this state-changing endpoint. This finding clears when a GUARDED_BY csrf-guard edge is detected on this endpoint in the graph.';
+    case 'CRX-weak-crypto-primitive':
+      return 'Replace this primitive with a modern authenticated algorithm (e.g. AES-256-GCM). This finding clears when the weak-crypto SYMBOL node is no longer present in the graph.';
     default:
       return 'Review this endpoint against the referenced pattern card and add the missing guard.';
   }
