@@ -4,8 +4,13 @@
   "private": true,
   "type": "module",
   "description": "SecForge — self-contained security scanning workbench. Map a codebase into a knowledge base, then run tracked, feature-by-feature security assessments.",
-  "engines": { "node": ">=23.4" },
-  "workspaces": ["packages/*", "apps/*"],
+  "engines": {
+    "node": ">=23.4"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
     "start": "node apps/server/src/server.js",
     "serve": "node apps/server/src/server.js",
@@ -13,5 +18,13 @@
     "doctor": "node apps/cli/bin/secforge.js doctor",
     "test": "node --test packages/**/test/*.test.js apps/**/test/*.test.js"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ghostshift-content/secforge.git"
+  },
+  "homepage": "https://github.com/ghostshift-content/secforge#readme",
+  "bugs": {
+    "url": "https://github.com/ghostshift-content/secforge/issues"
+  }
 }
