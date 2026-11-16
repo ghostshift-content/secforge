@@ -1,16 +1,20 @@
 # SecForge — UI ↔ API ↔ package wiring map
 
 Every UI surface maps to an API route (served by `apps/server`) which delegates to a package.
-The UI (`apps/server/public/index.html`) currently renders with illustrative data; the routes
-below are live in the skeleton (sessions/store real, engines stubbed) so wiring the UI's
-`fetch()` calls to them is a mechanical follow-up, not a redesign.
+The UI is `apps/server/public/index.html` plus two Map-tab modules it loads: `map-graph.js`
+(system graph + feature flow, hand-rolled SVG) and `map-views.js` (Features/Interfaces/Identity/
+Coverage/Export tables and the 13-section feature document). Every pane renders real store data
+or an explicit empty state.
 
 | UI surface / action | API route | Package(s) | Status |
 |---|---|---|---|
 | Launcher → open / resume project | `POST /api/projects` | `session` → `store` | **real** |
 | Launcher → recent projects list | `GET /api/projects` | `store` | **real** |
-| Map tab → knowledge graph | `GET /api/projects/:id/graph` | `map` | **live** |
-| Map tab → feature map / ledger / inventories / roles / consolidated | (served from `phase1-maps/` in store) | `map` → `store` | stub (Phase 1) |
+| Map tab → Graph (radial system brain + per-feature layered flow, `public/map-graph.js`) | `GET /api/projects/:id/graph` · `/reconciliation` · `/features/:fid/context` | `map` · `retrieval` | **live** |
+| Map tab → Features / Interfaces / Identity / Coverage tables (`public/map-views.js`) | `GET /api/projects/:id/graph` · `/reconciliation` (counts + gaps + full `rows`) | `map` → `store` | **live** |
+| Map tab → Feature map (the 13-section document) | `GET /api/projects/:id/features/:fid/map` | `map` (`renderFeatureDoc`) | **live** |
+| Map tab → Export (the `phase1-maps/` bundle written per snapshot) | `GET /api/projects/:id/maps` · `GET /api/projects/:id/maps/<path>` | `map` (`renderPhase1Maps`) | **live** |
+| Map → semantic layer (agentic Lead reads the FROZEN snapshot with Read/Glob/Grep) | `POST /api/projects/:id/map` `{engine, model, effort}` | `recon` (`lead.js`) → `adapters` (`explore`) | **live** for `claude-code` / `codex`; one-shot `ask` for other engines |
 | Assess → run screen → **Run assessment** | `POST /api/sessions/:id/scan?project=` | `session` + `assess` → `orchestrator` + `agents` + `adapters` | wired (engine stub, Phase 2/4) |
 | Assess → scope picker (feature / pick / all) | request body `scope` | `schemas` (SCOPE_KINDS) | **real contract** |
 | Assess → method (pattern / prompt / full) + pattern picker | request body `scope.method` / `scope.patterns` | `patterns` (families + CWE) | **real registry** |

@@ -10,6 +10,7 @@
     "@secforge/inventories": "0.0.0",
     "@secforge/recon": "0.0.0",
     "@secforge/schemas": "0.0.0",
-    "@secforge/store": "0.0.0"
+    "@secforge/store": "0.0.0",
+    "@secforge/retrieval": "0.0.0"
   }
 }

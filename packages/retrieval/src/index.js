@@ -234,3 +234,6 @@ export async function buildFeedForward(store, projectId, featureId, opts = {}) {
   const bundle = await retrieveFeatureContext(store, projectId, featureId, opts);
   return { preamble: GROUNDING_PREAMBLE, generatedAt: new Date().toISOString(), ...bundle };
 }
+
+// ---- 5. The per-snapshot retrieval store ("where does X live?") --------------------------------
+export { buildChunks, writeRagIndex, locate, rankChunks, tokenize, RAG_VERSION } from './rag.js';

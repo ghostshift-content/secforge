@@ -19,6 +19,9 @@ import { deterministicSemanticPlan } from '@secforge/recon';
 import { inventoryRows } from '../../recon/src/semantic-planner.js';
 import { synthesizeRailsRoutes } from './rails-routes.js';
 import { freezeForward, persistOntologyPlan, checkIncrementalEligibility, persistFeatureRowCount, remapGraph } from './incremental.js';
+import { renderPhase1Maps } from './phase1-maps.js';
+import { writeRagIndex } from '@secforge/retrieval';
+import { scanFile, buildFileAuth, legacyInventoryDetail } from './legacy-identity.js';
 
 const fsp = fs.promises;
 const SKIP_DIR = new Set(['node_modules', '.git', 'dist', 'vendor', 'build', 'coverage', '.next', 'out']);
@@ -82,6 +85,11 @@ async function buildManifestAndFreeze(sourceRoot, tmpDir, forward = null) {
   return { manifest, truncated: truncatedFiles || total >= MAX_TOTAL_BYTES };
 }
 
+// The PROJECT node's display name — project.json's name (the source dir's basename), never the opaque id.
+function projectName(store, projectId) {
+  try { return JSON.parse(fs.readFileSync(path.join(store.projectDir(projectId), 'project.json'), 'utf8')).name || projectId; } catch { return projectId; }
+}
+
 const hashManifest = (manifest) => crypto.createHash('sha256').update(JSON.stringify(manifest)).digest('hex');
 
 function persistSnapshot(store, projectId, snapshotId, manifest) {
@@ -92,164 +100,17 @@ function persistSnapshot(store, projectId, snapshotId, manifest) {
   fs.renameSync(manifestFile + '.tmp', manifestFile);
   const snapFile = path.join(dir, 'snapshot.json');
   const bytes = manifest.reduce((s, m) => s + m.bytes, 0);
-  fs.writeFileSync(snapFile + '.tmp', JSON.stringify({ content_hash: snapshotId, file_count: manifest.length, bytes, source_frozen: true }, null, 2));
+  // Same content → same snapshotId → this rewrite happens BEFORE remapGraph() reads the "prior"
+  // snapshot.json (which is this very file). Keep the fields a later phase added (feature_row_count,
+  // Phase C guard #2) so an unchanged-tree re-map stays eligible for incremental reuse.
+  let prior = {}; try { prior = JSON.parse(fs.readFileSync(snapFile, 'utf8')); } catch { /* first time */ }
+  const keep = prior && prior.content_hash === snapshotId && prior.feature_row_count != null ? { feature_row_count: prior.feature_row_count } : {};
+  fs.writeFileSync(snapFile + '.tmp', JSON.stringify({ content_hash: snapshotId, file_count: manifest.length, bytes, source_frozen: true, ...keep }, null, 2));
   fs.renameSync(snapFile + '.tmp', snapFile);
 }
 
 
-// ---------- LEGACY DETERMINISTIC IDENTITY (unchanged) ----------
-function matchEndpoint(line) {
-  let m = /\b(?:app|router)\.(get|post|put|patch|delete)\s*\(\s*['"`]([^'"`]+)['"`]/i.exec(line);
-  if (m) return { method: m[1].toUpperCase(), route: m[2] };
-  m = /@(?:app|blueprint|bp)\.route\s*\(\s*['"]([^'"]+)['"]/i.exec(line);
-  if (m) {
-    const methods = /methods\s*=\s*\[([^\]]+)\]/i.exec(line);
-    const method = methods?.[1].match(/['"](\w+)['"]/)?.[1] || 'GET';
-    return { method: method.toUpperCase(), route: m[1] };
-  }
-  m = /^\s*(get|post|put|patch|delete)\s+['"]([^'"]+)['"]/i.exec(line); // Rails routes.rb
-  if (m) return { method: m[1].toUpperCase(), route: m[2] };
-  return null;
-}
-const matchService = (line) => /\bclass\s+([A-Za-z0-9_]*Service)\b/.exec(line)?.[1] || null;
-const matchJob = (line) => /\bclass\s+([A-Za-z0-9_]*(?:Job|Worker))\b/.exec(line)?.[1] || null;
-const matchDataStore = (line) =>
-  /\bclass\s+([A-Za-z0-9_]+)\s*<\s*(?:ApplicationRecord|ActiveRecord::Base)/.exec(line)?.[1] ||
-  /\bclass\s+([A-Za-z0-9_]+)\s*\(\s*models\.Model\s*\)/.exec(line)?.[1] ||
-  /(?:mongoose\.model|sequelize\.define)\(\s*['"]([A-Za-z0-9_]+)['"]/.exec(line)?.[1] ||
-  /\bclass\s+([A-Za-z0-9_]*Model)\b/.exec(line)?.[1] ||
-  null;
-
-// Auth guards (heuristic, language-agnostic). AUTHN = "who are you", AUTHZ = "may you".
-const AUTHN_RE = /before_action\s+:authenticate|authenticate_user!?|\blogin_required\b|requires?_login|requireAuth|ensureAuthenticated|isAuthenticated|passport\.authenticate|@login_required|@requires_auth|\[Authorize\]|verify(?:_?token|Token)|AuthGuard/i;
-const AUTHZ_RE = /\bauthorize!?\b|\bcan\?|\bpolicy\b|\bowns?_|\bowner\b|current_user\.\w+\.(?:find|where)|@PreAuthorize|\bPundit\b|authorize_resource|cancancan/i;
-
-// ---------- ACTOR / ROLE / PERMISSION (docs/PHASE1-ROLES-INVENTORY-DESIGN.md §1) ----------
-// ROLE — declared role vocabulary (constants/enums/config arrays). Can yield several names per line.
-function matchRoles(line) {
-  let m = /\benum\s+role:\s*\{([^}]+)\}/i.exec(line);               // Rails: enum role: { admin: 0, editor: 1 }
-  if (m) return [...m[1].matchAll(/([A-Za-z_]\w*)\s*:/g)].map((x) => x[1]);
-  m = /\benum\s+Role\b[^{]*\{([^}]+)\}/.exec(line);                  // Java/TS: enum Role { ADMIN, EDITOR }
-  if (m) return m[1].split(',').map((s) => s.trim().split(/[=\s(]/)[0]).filter(Boolean);
-  m = /\bROLE_([A-Z][A-Z0-9_]*)\s*[:=]/.exec(line);                  // ROLE_ADMIN = ...
-  if (m) return [m[1]];
-  m = /\broles?\s*[:=]\s*\[([^\]]+)\]/i.exec(line);                  // roles: ['admin','editor'] / ROLES = [...]
-  if (m) return [...m[1].matchAll(/['"]([\w-]+)['"]/g)].map((x) => x[1]);
-  return [];
-}
-
-// PERMISSION — ability vocabulary declared at a call site.
-function matchPermission(line) {
-  let m = /\bcan\s+(:\w+|\[[^\]]+\])\s*,\s*([A-Za-z0-9_:]+)/.exec(line); // CanCanCan: can :read, Project
-  if (m) return { action: m[1].replace(/[:\[\]\s]/g, ''), resource: m[2] };
-  m = /hasAuthority\(\s*['"]([\w:-]+)['"]\s*\)/i.exec(line);            // Spring: hasAuthority('EDIT_POST')
-  if (m) return { action: m[1], resource: null };
-  m = /Gate::define\(\s*['"]([\w-]+)['"]/i.exec(line);                  // Laravel: Gate::define('update-post', ...)
-  if (m) return { action: m[1], resource: null };
-  m = /permission_required\(\s*['"]([\w.]+)['"]/i.exec(line);           // Django: permission_required('app.can_edit')
-  if (m) return { action: m[1], resource: null };
-  return null;
-}
-
-// ROLE_CHECK — an authz decision that NAMES a role (first match wins).
-function matchRoleCheck(line) {
-  let m = /\b(?:requireRole|hasRole|has_role\?|is_role\?)\s*\(\s*['"]([\w-]+)['"]/i.exec(line);
-  if (m) return m[1];
-  m = /@Roles\(\s*\{?\s*['"]([\w-]+)['"]/i.exec(line);                  // NestJS/Spring decorator
-  if (m) return m[1];
-  m = /current_user\.(\w+)\?/.exec(line);                               // Rails idiom: current_user.admin?
-  if (m) return m[1];
-  m = /\brole\?\(\s*:(\w+)\s*\)/.exec(line);                            // role?(:admin)
-  if (m) return m[1];
-  return null;
-}
-
-// ACTOR — the auth-user model. Curated, honest, conservative: a data-store-shaped class whose
-// name is a known actor noun, OR any class carrying a devise call / role association — the
-// association line is tracked separately (`assoc`) so buildGraph's multi-actor HAS_ROLE gating
-// (§1.3) can tell "this class's role association was literally seen" from "just uses devise".
-const ACTOR_NOUN_RE = /^(User|Account|Member|Admin|Customer|Employee|Staff|Actor|Person)$/;
-const ACTOR_ROLE_ASSOC_RE = /has_(?:and_belongs_to_)?many\s+:roles\b|belongs_to\s+:role\b|has_one\s+:role\b/;
-const ACTOR_SIGNAL_RE = new RegExp(`\\bdevise\\s*:|${ACTOR_ROLE_ASSOC_RE.source}`);
-
-async function scanFile(sourceRoot, rel) {
-  let text;
-  try { text = await fsp.readFile(path.join(sourceRoot, rel), 'utf8'); } catch { return []; }
-  const rows = [];
-  const lines = text.split(/\r?\n/);
-  let lastClass = null; // {name, line} — nearest preceding class-def line, for ACTOR signal attribution
-  const actorRowsByName = new Map(); // one ACTOR row per class name per file; `assoc` can upgrade in place
-  const noteActor = (name, line, assocSignal) => {
-    let row = actorRowsByName.get(name);
-    if (!row) {
-      row = { kind: 'ACTOR', file: rel, line, name, assoc: !!assocSignal };
-      actorRowsByName.set(name, row);
-      rows.push(row);
-    } else if (assocSignal) row.assoc = true;
-  };
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (AUTHN_RE.test(line)) rows.push({ kind: 'AUTHN', file: rel, line: i + 1 });
-    if (AUTHZ_RE.test(line)) rows.push({ kind: 'AUTHZ', file: rel, line: i + 1 });
-
-    for (const name of matchRoles(line)) rows.push({ kind: 'ROLE', file: rel, line: i + 1, name });
-
-    // PERMISSION + ROLE_CHECK are independent; co-occurrence on the SAME line is the only
-    // ROLE_GRANTS evidence this engine trusts (§1.4 — no cross-line wiring, by design).
-    const permission = matchPermission(line);
-    const roleCheck = matchRoleCheck(line);
-    if (permission) rows.push({ kind: 'PERMISSION', file: rel, line: i + 1, action: permission.action, resource: permission.resource });
-    if (roleCheck) rows.push({ kind: 'ROLE_CHECK', file: rel, line: i + 1, role: roleCheck });
-    if (permission && roleCheck) {
-      rows.push({ kind: 'ROLE_GRANTS', file: rel, line: i + 1, role: roleCheck, action: permission.action, resource: permission.resource });
-    }
-
-    // Track the enclosing class on ANY class-decl line (Ruby `class X` / `class X < Y`, JS
-    // `class X extends Y`, Python `class X(Base):`) — not just the data-store-shaped subset
-    // matchDataStore recognizes. Otherwise a devise/:roles signal inside a later, non-model class
-    // stays attributed to an earlier, unrelated model class (FIX 2 — misattributed actor).
-    const classDecl = /\bclass\s+([A-Za-z0-9_]+)/.exec(line);
-    if (classDecl) lastClass = { name: classDecl[1], line: i + 1 };
-
-    const ds = matchDataStore(line); // narrower data-store shape — also the ACTOR-noun signal
-    if (ds && ACTOR_NOUN_RE.test(ds)) noteActor(ds, i + 1, false);
-    if (lastClass && ACTOR_SIGNAL_RE.test(line)) noteActor(lastClass.name, lastClass.line, ACTOR_ROLE_ASSOC_RE.test(line));
-
-    const ep = matchEndpoint(line);
-    if (ep) { rows.push({ kind: 'ENDPOINT', file: rel, line: i + 1, method: ep.method, route: ep.route }); continue; }
-    const svc = matchService(line);
-    if (svc) { rows.push({ kind: 'SERVICE', file: rel, line: i + 1, name: svc }); continue; }
-    const job = matchJob(line);
-    if (job) { rows.push({ kind: 'JOB', file: rel, line: i + 1, name: job }); continue; }
-    if (ds) { rows.push({ kind: 'DATA_STORE', file: rel, line: i + 1, name: ds }); continue; }
-  }
-  return rows;
-}
-
-// Per-file auth signals — an endpoint inherits its file's guards (before_action etc. are file-level).
-function buildFileAuth(rows) {
-  const fileAuth = new Map();
-  for (const row of rows) {
-    if (row.kind !== 'AUTHN' && row.kind !== 'AUTHZ') continue;
-    const fa = fileAuth.get(row.file) || {};
-    if (row.kind === 'AUTHN' && fa.authn == null) fa.authn = row.line;
-    if (row.kind === 'AUTHZ' && fa.authz == null) fa.authz = row.line;
-    fileAuth.set(row.file, fa);
-  }
-  return fileAuth;
-}
-
-// Per-kind extra fields for one legacy inventory.jsonl row (docs/PHASE1-ROLES-INVENTORY-DESIGN.md §2.2).
-function legacyInventoryDetail(row, fileAuth) {
-  switch (row.kind) {
-    case 'ENDPOINT': return { method: row.method, route: row.route, guarded: fileAuth.has(row.file) };
-    case 'SERVICE': case 'JOB': case 'DATA_STORE': case 'ROLE': case 'ACTOR': return { name: row.name };
-    case 'PERMISSION': return { action: row.action, resource: row.resource || null };
-    case 'ROLE_CHECK': return { role: row.role };
-    case 'ROLE_GRANTS': return { role: row.role, action: row.action, resource: row.resource || null };
-    default: return {};
-  }
-}
+// Legacy line-regex identity/surface extraction lives in ./legacy-identity.js (same behaviour, split for size).
 
 // New-surface rows (@secforge/inventories' 11 kinds, docs mapper-design.md §3) → {kind, detail}
 // for one inventory.jsonl line. Additive: ENDPOINT/DATA_STORE are reused kinds; ROUTE/GRAPHQL/
@@ -480,22 +341,54 @@ export async function mapProject({ sourceRoot, store, projectId, onProgress, onC
   // vs a full fresh derivation, the one buildGraph() call, and the lossless self-check + fallback.
   onProgress?.({ phase: 'semantic', pct: 65 });
   const featureRowCount = inventoryRows(inventories).length;
-  const { graph, ontology, incrementalUsed, remapReason: finalRemapReason, reusedFeatureIds, llmCalled, ontologyReusedCount, diff } =
+  // The Lead and the evidence validator both work on the FROZEN copy (snapshots/<sid>/source), so a
+  // citation is proven against exactly the bytes the Lead read — never the live, possibly-moved-on tree.
+  const frozenDir = path.join(snapshotDir, 'source');
+  const readSnapshotFile = (rel) => {
+    try { return fs.readFileSync(path.join(frozenDir, rel), 'utf8'); } catch { /* not frozen (file skipped by caps) */ }
+    try { return fs.readFileSync(path.join(sourceRoot, rel), 'utf8'); } catch { return ''; }
+  };
+  const leadCtx = {
+    cwd: frozenDir, profile, inventories, checkpointDir: path.join(snapshotDir, 'lead'),
+    onEvent: (e) => onProgress?.({ phase: 'semantic', pct: 65, lead: e }),
+  };
+  const { graph, ontology, incrementalUsed, remapReason: finalRemapReason, reusedFeatureIds, llmCalled, ontologyReusedCount, diff, lead } =
     await remapGraph({
       store, projectId, snapshotId, manifest, eligibility, featureRowCount, clusters, inventories, legacyRows,
-      project: { id: projectId, name: projectId }, engine, model, effort,
-      // Reads the frozen snapshot's own tree — never re-derives from anywhere else. Missing/unreadable -> ''.
-      readSnapshotFile: (rel) => { try { return fs.readFileSync(path.join(sourceRoot, rel), 'utf8'); } catch { return ''; } },
+      project: { id: projectId, name: projectName(store, projectId) }, engine, model, effort, readSnapshotFile, ctx: leadCtx,
     });
   remapReason = finalRemapReason;
 
   onProgress?.({ phase: 'persist', pct: 90 });
   persistFeatureRowCount(store, projectId, snapshotId, featureRowCount);
   if (ontology) persistOntologyPlan(store, projectId, snapshotId, ontology);
+  // Lead provenance travels with the snapshot: written when a Lead ran this time; when a prior
+  // ontology was REUSED (incremental / rules-only reopen) the stored record is surfaced as `reused`.
+  let leadOut = lead || null;
+  const leadFile = path.join(snapshotDir, 'lead.json');
+  if (lead) { try { fs.writeFileSync(leadFile, JSON.stringify({ ...lead, at: new Date().toISOString() }, null, 2)); } catch { /* best effort */ } }
+  else if (ontology) { try { leadOut = { ...JSON.parse(fs.readFileSync(leadFile, 'utf8')), reused: true }; } catch { /* no stored provenance */ } }
   await writeNodes(store, projectId, graph.nodes, { snapshotId });
   await writeEdges(store, projectId, graph.edges, { snapshotId });
   await writeReconciliation(store, projectId, graph.reconciliation, { snapshotId });
-  await store.appendEvent(projectId, { type: 'map.completed', features: graph.features.length });
+  // The portable phase1-maps bundle — a pure projection of the graph just persisted (features/,
+  // roles/, ledgers/, consolidated/, graph/). Best-effort: a render failure never fails the map.
+  let maps = null;
+  try {
+    const r = renderPhase1Maps({
+      graph, reconciliation: graph.reconciliation, inventories, features: graph.features,
+      project: { id: projectId, name: projectName(store, projectId), sourceRoot }, snapshotId, coverage: graph.coverage,
+      provenance: { engine, model, llmCalled, aiSemantic: !!ontology, leadSessionId: leadOut?.sessionId || null, leadTurns: leadOut?.turns ?? null, accepted: leadOut?.accepted || null, rejected: leadOut?.rejected ?? null, leadReused: !!leadOut?.reused },
+      outDir: snapshotDir,
+    });
+    maps = { root: r.root, files: r.files.length };
+  } catch (err) { maps = { root: null, files: 0, error: String(err?.message || err) }; }
+  // The snapshot's small retrieval store (`rag/`): one chunk per feature / entry point / role /
+  // permission with file:line pointers, so a later "test X" (Assess prompt, GET /locate, or an agent
+  // grepping the folder) knows where to look. Pure projection of the graph above; best-effort.
+  let rag = null;
+  try { rag = writeRagIndex(snapshotDir, graph, { snapshotId }); } catch (err) { rag = { root: null, files: 0, chunks: 0, error: String(err?.message || err) }; }
+  await store.appendEvent(projectId, { type: 'map.completed', features: graph.features.length, maps: maps.files, rag: rag.chunks });
   onProgress?.({ phase: 'persist', pct: 100 });
 
   const meta = inventoryMeta(inventories);
@@ -532,9 +425,14 @@ export async function mapProject({ sourceRoot, store, projectId, onProgress, onC
     deletedFiles: diff ? diff.deleted : [],
     llmCalled,
     ontologyReusedCount,
+    lead: leadOut, // agentic Lead provenance (engine/model/turns/sessionId/accepted/rejected; reused:true when a stored ontology was kept), null when one-shot or rules-only
+    maps, // { root, files } of the phase1-maps bundle written for this snapshot (files:0 + error when the render failed)
+    rag, // { root, files, chunks } of the snapshot's retrieval store (chunks:0 + error when the write failed)
   };
 }
 
 export async function featureGraph(store, projectId, featureId) {
   return neighbourhood(store, projectId, featureId);
 }
+
+export { renderPhase1Maps, renderFeatureDoc } from './phase1-maps.js';

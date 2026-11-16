@@ -74,7 +74,7 @@ export function inventoryRows(inventories) {
 // ONE universal rule for every language — NO hardcoded taxonomy. A large codebase clusters by
 // MODULE directory (its real modules), a small one by capability NOUN. Precision beyond structure
 // comes from validateLeadPlan (reads the actual code via the AI ontology), never a curated list.
-export function deterministicSemanticPlan(inventories, { moduleThreshold = 80 } = {}) {
+export function deterministicSemanticPlan(inventories, { moduleThreshold = 80, splitThreshold = 40 } = {}) {
   const rows = inventoryRows(inventories);
   const bigRepo = rows.length >= moduleThreshold;
   const features = new Map();
@@ -86,7 +86,23 @@ export function deterministicSemanticPlan(inventories, { moduleThreshold = 80 } 
     else if (!bigRepo && features.get(key).domain === 'core' && selected.domain !== 'core') features.get(key).domain = selected.domain;
     features.get(key).rows.push({ kind: wrapped.kind, row: wrapped.row });
   }
-  return [...features.values()].sort((a, b) => a.domain.localeCompare(b.domain) || a.slug.localeCompare(b.slug));
+  // Second level, rules-only precision: a MODULE cluster that lumps more than `splitThreshold` rows
+  // (a flat Rails app/, one big src/) is re-partitioned by capability NOUN (route resource / file
+  // stem) so a no-LLM map still reads "Rails Api · Expense", "Rails Api · Approval" instead of one
+  // 70-endpoint blob. Singleton nouns stay together in "<Module> · Other" — never 1-row features.
+  const out = [];
+  for (const f of features.values()) {
+    if (!bigRepo || f.rows.length <= splitThreshold) { out.push(f); continue; }
+    const byNoun = new Map();
+    for (const r of f.rows) { const n = fallbackKey(r.row); const k = n.slug || 'other'; if (!byNoun.has(k)) byNoun.set(k, { slug: k, name: n.name, rows: [] }); byNoun.get(k).rows.push(r); }
+    const other = { slug: `${f.slug}-other`, domain: f.domain, name: `${f.name} · Other`, rows: [], confidence: 'low', planning_method: 'module-noun-cohesion' };
+    for (const n of byNoun.values()) {
+      if (n.rows.length < 2) { other.rows.push(...n.rows); continue; }
+      out.push({ slug: `${f.slug}-${n.slug}`, domain: f.domain, name: `${f.name} · ${n.name}`, rows: n.rows, confidence: 'low', planning_method: 'module-noun-cohesion' });
+    }
+    if (other.rows.length) out.push(other);
+  }
+  return out.sort((a, b) => a.domain.localeCompare(b.domain) || a.slug.localeCompare(b.slug));
 }
 
 // Context-budget scaffolding for the AI-semantic layer: a BOUNDED summary of the deterministic

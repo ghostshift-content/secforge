@@ -161,7 +161,7 @@ function parsePlanResponse(text) {
 // Group by domain:top-two-path-segments and byte-budget-pack, ported from codengram's createReconWorkstreams
 // (claude-runtime/index.js:208-249), trimmed to just the grouping/packing this module needs (no session/id
 // bookkeeping — each ask() call below is already stateless).
-function chunkClusters(summarizedClusters, { maxBytes, maxClusters = 60 } = {}) {
+export function chunkClusters(summarizedClusters, { maxBytes, maxClusters = 60 } = {}) {
   const groups = new Map();
   for (const cluster of summarizedClusters || []) {
     const firstPath = String(cluster.paths?.[0] || '');

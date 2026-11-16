@@ -1,0 +1,58 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: meridian
+      POSTGRES_PASSWORD: meridian
+      POSTGRES_DB: meridian_gateway
+    ports:
+      - "5432:5432"
+    volumes:
+      - meridian_postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  rails-api:
+    build: ./rails-api
+    environment:
+      RAILS_ENV: development
+      DATABASE_URL: postgres://meridian:meridian@postgres:5432/meridian_api
+      REDIS_URL: redis://redis:6379/0
+      INTERNAL_SECRET: meridian-dev-secret
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "3000:3000"
+
+  gateway:
+    build: ./graphql-gateway
+    environment:
+      PORT: 4000
+      RAILS_API_URL: http://rails-api:3000
+      DATABASE_URL: postgres://meridian:meridian@postgres:5432/meridian_gateway
+      JWT_SECRET: meridian-dev-secret
+      INTERNAL_SECRET: meridian-dev-secret
+    depends_on:
+      - postgres
+      - rails-api
+    ports:
+      - "4000:4000"
+
+  reconciliation-worker:
+    build: ./graphql-gateway
+    command: node ../services/reconciliation-worker.js
+    environment:
+      RAILS_API_URL: http://rails-api:3000
+      INTERNAL_SECRET: meridian-dev-secret
+      RECONCILE_INTERVAL_MS: 60000
+    depends_on:
+      - rails-api
+
+volumes:
+  meridian_postgres_data:

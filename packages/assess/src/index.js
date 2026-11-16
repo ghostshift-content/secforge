@@ -9,7 +9,7 @@ import { readGraph, writeNodes, writeEdges } from '@secforge/store';
 import { jobEnvelope } from '@secforge/schemas';
 import { getAdapter } from '@secforge/adapters';
 import { FAMILIES } from '@secforge/patterns';
-import { buildFeedForward } from '@secforge/retrieval';
+import { buildFeedForward, locate } from '@secforge/retrieval';
 import { analyze, validateCandidate, reproveLlmCandidate, inScope } from './rules.js';
 import { decorateFinding, buildSnippet, loadManifest, readSourceRoot, readCurrentSnapshotId } from './decorate.js';
 import { citationIndex, citationFromLine } from './grounding.js';
@@ -124,7 +124,18 @@ function fmtCitation(c) {
   const excerpt = (c.excerpt || '').slice(0, 500);
   return `- ${c.file}:${c.line}\n${excerpt}`;
 }
-function buildGroundedPrompt(bundle, caps) {
+// `focus` = the tester's own ask plus what the rag store located for THIS feature — the model is
+// told where the map says X lives, but the grounding/citation rules below are unchanged.
+function fmtFocus(focus, featureId) {
+  if (!focus?.prompt) return [];
+  const mine = (focus.located?.endpoints || []).filter((e) => e.feature === featureId).slice(0, 10);
+  return [
+    `Focus (what the tester asked to test): ${focus.prompt}`,
+    ...(mine.length ? ['Where the map says it lives in this feature:', ...mine.map((e) => `- ${e.title}  [${e.files.join(', ')}]`)] : []),
+    '',
+  ];
+}
+function buildGroundedPrompt(bundle, caps, focus = null) {
   const endpoints = bundle.endpoints || [];
   const shown = endpoints.slice(0, caps.maxEndpoints);
   const moreEndpoints = endpoints.length - shown.length;
@@ -135,6 +146,7 @@ function buildGroundedPrompt(bundle, caps) {
     '',
     `Feature: ${bundle.feature?.name || bundle.feature?.id} (${bundle.feature?.id})`,
     '',
+    ...fmtFocus(focus, bundle.feature?.id),
     'Endpoints:',
     ...shown.map(fmtEndpoint),
     ...(moreEndpoints > 0 ? [`  ...and ${moreEndpoints} more endpoint(s) not shown`] : []),
@@ -217,7 +229,7 @@ function parseLlmCandidates(text, routeIndex, citationIdx) {
 // only, feed each one forward via @secforge/retrieval's buildFeedForward, and gate every returned
 // candidate on citing a file:line from THAT feature's own citation pool. Never throws; degrades to
 // zero extra candidates (and reports every feature it didn't call) on any adapter trouble.
-async function llmAssist(store, projectId, graph, engine, existingCandidates, model, effort = 'medium', scope = {}, snapshotId = null) {
+async function llmAssist(store, projectId, graph, engine, existingCandidates, model, effort = 'medium', scope = {}, snapshotId = null, located = null) {
   const none = { extra: [], featuresSkipped: 0, llmCitationDropped: 0 };
   if (!engine || engine === 'rules' || !store || !projectId) return none;
 
@@ -249,7 +261,7 @@ async function llmAssist(store, projectId, graph, engine, existingCandidates, mo
       const bundle = await buildFeedForward(store, projectId, feature.id, { maxCitations: caps.maxCitations, snapshotId });
       if (!bundle.ok || !bundle.endpoints?.length || !bundle.citations?.length) { featuresSkipped++; continue; } // nothing to ground an answer against
       const citationIdx = citationIndex(bundle);
-      const prompt = buildGroundedPrompt(bundle, caps);
+      const prompt = buildGroundedPrompt(bundle, caps, scope.method === 'prompt' ? { prompt: scope.prompt, located } : null);
       const text = await withTimeout(adapter.ask(prompt, { model, effort }), LLM_TIMEOUT_MS);
       const { candidates, citationDropped } = parseLlmCandidates(text, routeIndex, citationIdx);
       llmCitationDropped += citationDropped;
@@ -321,10 +333,11 @@ async function report(store, projectId, candidates, graph, engineUsed, ctx = {})
  * to deterministic-only, it never fails the run.
  * @returns {Promise<{jobs:number, candidates:Array, findings:Array, coverage:object|null, engineUsed:string, featuresSkipped:number, llmCitationDropped:number}>}
  */
-export async function runAssessment({ store, projectId, scope = {}, engine = 'rules', model = null, effort = 'medium', onEvent } = {}) {
-  const jobs = planJobs(scope);
-  onEvent?.({ stage: 'framer', status: 'done', jobs: jobs.length });
+// "Test X" → where X lives. Features scoring under this fraction of the best match are left out of
+// the narrowed scope (they still appear in result.located for the tester to see).
+const LOCATE_FLOOR = 0.35, LOCATE_MAX_FEATURES = 5;
 
+export async function runAssessment({ store, projectId, scope = {}, engine = 'rules', model = null, effort = 'medium', onEvent } = {}) {
   // Pin the WHOLE scan to one snapshot id, resolved once up front, so this run's grounding (§1/§2)
   // and its evidence snippets (§3) are always about the exact same immutable snapshot — even if a
   // mapProject run lands a new snapshot for the same project concurrently.
@@ -334,11 +347,27 @@ export async function runAssessment({ store, projectId, scope = {}, engine = 'ru
     snapshotId = await readCurrentSnapshotId(store, projectId);
     graph = await readGraph(store, projectId, snapshotId || undefined);
   }
+
+  // A free-text ask ("test receipt download") is resolved through the snapshot's rag/ store so both
+  // the rule pass and the LLM pass look only where the map says X lives. An explicit feature/pick
+  // scope from the tester always wins over the located one; a coverage gap leaves the scope as-is.
+  let located = null;
+  if (store && projectId && scope.method === 'prompt' && String(scope.prompt || '').trim()) {
+    located = await locate(store, projectId, scope.prompt, { snapshotId: snapshotId || undefined }).catch(() => null);
+    if (located?.ok && scope.mode === 'all' && located.features.length) {
+      const floor = located.features[0].score * LOCATE_FLOOR;
+      scope = { ...scope, mode: 'pick', features: located.features.filter((f) => f.score >= floor).slice(0, LOCATE_MAX_FEATURES).map((f) => f.id), locatedFrom: 'prompt' };
+    }
+  }
+  onEvent?.({ stage: 'locate', located: located ? { features: located.features.length, endpoints: located.endpoints.length, coverageGap: located.coverageGap } : null });
+
+  const jobs = planJobs(scope);
+  onEvent?.({ stage: 'framer', status: 'done', jobs: jobs.length });
   for (const job of jobs) onEvent?.({ stage: 'hunter', job: job.id, feature: job.feature, engine });
 
   const candidates = analyze(graph, { scope, patterns: scope.patterns });
   const { extra: llmExtra, featuresSkipped, llmCitationDropped } = await llmAssist(
-    store, projectId, graph, engine, candidates, model, effort, scope, snapshotId,
+    store, projectId, graph, engine, candidates, model, effort, scope, snapshotId, located,
   ).catch(() => ({ extra: [], featuresSkipped: 0, llmCitationDropped: 0 }));
   let n = candidates.length;
   const allCandidates = candidates.concat(
@@ -376,7 +405,12 @@ export async function runAssessment({ store, projectId, scope = {}, engine = 'ru
   }
   onEvent?.({ stage: 'reporter', promoted: findings.length });
 
-  return { jobs: jobs.length, candidates: validated, findings, coverage, engineUsed: engine, featuresSkipped, llmCitationDropped };
+  return {
+    jobs: jobs.length, candidates: validated, findings, coverage, engineUsed: engine, featuresSkipped, llmCitationDropped,
+    // where the "test X" ask was resolved to (null when the run wasn't a prompt); scope is the
+    // narrowed scope actually used, so the tester sees exactly which features were assessed.
+    located: located ? { ...located, chunks: undefined, scope: { mode: scope.mode, features: scope.features || null } } : null,
+  };
 }
 
 export { analyze, validateCandidate, reproveLlmCandidate, inScope, computeCoverage, ID };

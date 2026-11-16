@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { ID } from '@secforge/schemas';
-import { planClusters, makeEvidenceVerifier, validateOntology, buildGraph } from '@secforge/recon';
+import { planClusters, planLead, deriveOntology, makeEvidenceVerifier, validateOntology, buildGraph } from '@secforge/recon';
 import { getAdapter } from '@secforge/adapters';
 // Relative imports: @secforge/recon's and @secforge/store's package.json only open their root
 // ("."), so a bare '@secforge/recon/ai-semantic' or '@secforge/store/graph' specifier is blocked
@@ -167,7 +167,7 @@ const countOntology = (o) => (o ? o.features.length + o.actors.length + o.roles.
  */
 export async function planIncrementalRemap({
   store, projectId, priorSnapshotId, priorReconRows, diff, currentClusters,
-  engine, adapter, model, effort, readSnapshotFile,
+  engine, adapter, model, effort, readSnapshotFile, ctx = {},
 } = {}) {
   const byFile = fileToFeatureIndex(priorReconRows);
   const touched = new Set([...diff.changed, ...diff.deleted]);
@@ -180,10 +180,28 @@ export async function planIncrementalRemap({
   const addedOrChanged = new Set([...diff.added, ...diff.changed]);
   const dirtyClusters = dirtyClustersOf(currentClusters, addedOrChanged);
 
-  let ontology = null, llmCalled = false;
-  if (engine && engine !== 'rules') {
+  let ontology = null, llmCalled = false, lead = null;
+  // Store-is-truth: a prior, evidence-validated AI ontology is REUSED on a rules-only re-map when no
+  // feature is dirty (an unchanged tree, or a change outside every mapped feature) — reopening a
+  // project with the default engine must never silently downgrade an AI map to directory clusters.
+  // Any dirty feature under 'rules' falls through to a full deterministic map (nothing to re-plan it with).
+  if ((!engine || engine === 'rules') && reusedRaw && !dirtyClusters.length && countOntology(reusedRaw) > 0) {
+    const verifier = makeEvidenceVerifier({ readSource: readSnapshotFile });
+    const { ontology: validated, accepted } = validateOntology(reusedRaw, verifier);
+    if (accepted.features > 0) ontology = validated;
+  } else if (engine && engine !== 'rules') {
     let freshRaw = null;
-    if (dirtyClusters.length) { llmCalled = true; freshRaw = await planClusters(dirtyClusters, adapter, { model, effort }); }
+    if (dirtyClusters.length) {
+      llmCalled = true;
+      // Same engine choice as a full map: the agentic Lead reads the frozen snapshot when the adapter
+      // can explore, else the one-shot planner — but only over the DIRTY clusters either way.
+      if (adapter && typeof adapter.explore === 'function' && ctx.cwd) {
+        const r = await planLead(dirtyClusters, adapter, { cwd: ctx.cwd, profile: ctx.profile, inventories: ctx.inventories, model, effort, onEvent: ctx.onEvent, checkpointDir: ctx.checkpointDir });
+        freshRaw = r ? r.plan : null; lead = r ? { engine, model: model || adapter.model || null, ...r.meta } : { engine, ok: false };
+      } else {
+        freshRaw = await planClusters(dirtyClusters, adapter, { model, effort });
+      }
+    }
     const merged = mergeReconPlans([reusedRaw, freshRaw].filter(Boolean));
     if (merged.features.length || merged.actors.length || merged.roles.length || merged.permissions.length) {
       const verifier = makeEvidenceVerifier({ readSource: readSnapshotFile });
@@ -195,9 +213,13 @@ export async function planIncrementalRemap({
   }
 
   const priorFeatureIds = new Set(priorReconRows.map((r) => r.feature_id).filter(Boolean));
-  const reusedFeatureIds = [...priorFeatureIds].filter((fid) => !dirty.has(fid));
+  // The lossless self-check (checkLosslessReuse) may only cover features the plan actually reproduces:
+  // when an ontology is reused, that is its own feature ids; a prior ledger written by a DIFFERENT
+  // planner (e.g. a rules-only run over the same snapshot id) must not be mistaken for "reused".
+  const planIds = ontology ? new Set((ontology.features || []).map(ontologyFeatureId)) : null;
+  const reusedFeatureIds = [...priorFeatureIds].filter((fid) => !dirty.has(fid) && (!planIds || planIds.has(fid)));
 
-  return { ontology, dirtyFeatureIds: dirty, reusedFeatureIds, llmCalled, ontologyReusedCount };
+  return { ontology, dirtyFeatureIds: dirty, reusedFeatureIds, llmCalled, ontologyReusedCount, lead };
 }
 
 // ---------- shared with map/src/index.js's full-map path ----------
@@ -205,14 +227,13 @@ export async function planIncrementalRemap({
 // cluster, evidence-validate the response. Used both for an actual full map and whenever the
 // incremental path is ineligible or self-check-mismatched — i.e. exactly today's pre-Phase-C
 // behavior. `readSnapshotFile` is a (rel) => text reader bound to the run's frozen source.
-export async function deriveFreshOntology(engine, clusters, model, effort, readSnapshotFile) {
-  if (!engine || engine === 'rules') return { ontology: null, llmCalled: false };
+// `ctx` ({cwd, profile, inventories, onEvent, checkpointDir}) enables the agentic Lead (recon/lead.js)
+// when the engine's adapter can explore; without it (or for a one-shot adapter) this is the
+// pre-existing planClusters() path. Either way the same evidence validation gates the result.
+export async function deriveFreshOntology(engine, clusters, model, effort, readSnapshotFile, ctx = {}) {
+  if (!engine || engine === 'rules') return { ontology: null, llmCalled: false, lead: null };
   const adapter = getAdapter(engine);
-  const raw = await planClusters(clusters, adapter, { model, effort });
-  if (!raw) return { ontology: null, llmCalled: true };
-  const verifier = makeEvidenceVerifier({ readSource: readSnapshotFile });
-  const { ontology: validated, accepted } = validateOntology(raw, verifier);
-  return { ontology: accepted.features > 0 ? validated : null, llmCalled: true };
+  return deriveOntology({ engine, adapter, clusters, inventories: ctx.inventories, profile: ctx.profile, model, effort, cwd: ctx.cwd, readSnapshotFile, onEvent: ctx.onEvent, checkpointDir: ctx.checkpointDir });
 }
 
 // Additive field on snapshot.json (guard #2: has the deterministicSemanticPlan clustering MODE —
@@ -259,7 +280,7 @@ export async function checkIncrementalEligibility(store, projectId, incremental)
 // anything itself — map/src/index.js still owns writing the graph/snapshot once this returns.
 export async function remapGraph({
   store, projectId, snapshotId, manifest, eligibility, featureRowCount,
-  clusters, inventories, legacyRows, project, engine, model, effort, readSnapshotFile,
+  clusters, inventories, legacyRows, project, engine, model, effort, readSnapshotFile, ctx = {},
 } = {}) {
   let attemptIncremental = eligibility.attempt;
   let remapReason = eligibility.reason;
@@ -274,15 +295,15 @@ export async function remapGraph({
     }
   }
 
-  let ontology, llmCalled, ontologyReusedCount = 0, reusedFeatureIds = [];
+  let ontology, llmCalled, lead = null, ontologyReusedCount = 0, reusedFeatureIds = [];
   if (attemptIncremental) {
-    ({ ontology, llmCalled, ontologyReusedCount, reusedFeatureIds } = await planIncrementalRemap({
+    ({ ontology, llmCalled, ontologyReusedCount, reusedFeatureIds, lead } = await planIncrementalRemap({
       store, projectId, priorSnapshotId: eligibility.priorSnapshotId, priorReconRows: eligibility.priorReconRows,
       diff, currentClusters: clusters, engine, adapter: engine && engine !== 'rules' ? getAdapter(engine) : null,
-      model, effort, readSnapshotFile,
+      model, effort, readSnapshotFile, ctx,
     }));
   } else {
-    ({ ontology, llmCalled } = await deriveFreshOntology(engine, clusters, model, effort, readSnapshotFile));
+    ({ ontology, llmCalled, lead } = await deriveFreshOntology(engine, clusters, model, effort, readSnapshotFile, ctx));
   }
 
   let graph = buildGraph({ inventories, clusters, ontology, legacyRows, project, snapshotId });
@@ -294,10 +315,10 @@ export async function remapGraph({
     } catch (err) {
       if (!(err instanceof IncrementalMismatchError)) throw err;
       incrementalUsed = false; remapReason = 'mismatch-fallback'; reusedFeatureIds = [];
-      ({ ontology, llmCalled } = await deriveFreshOntology(engine, clusters, model, effort, readSnapshotFile));
+      ({ ontology, llmCalled, lead } = await deriveFreshOntology(engine, clusters, model, effort, readSnapshotFile, ctx));
       graph = buildGraph({ inventories, clusters, ontology, legacyRows, project, snapshotId });
     }
   }
 
-  return { graph, ontology, incrementalUsed, remapReason, reusedFeatureIds, llmCalled, ontologyReusedCount, diff };
+  return { graph, ontology, incrementalUsed, remapReason, reusedFeatureIds, llmCalled, ontologyReusedCount, diff, lead };
 }

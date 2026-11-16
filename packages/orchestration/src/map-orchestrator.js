@@ -111,6 +111,9 @@ async function consolidateOne(cluster, adapter, { model, effort } = {}) {
 export function makeConsolidator(stats, { concurrency = 4 } = {}) {
   return async function onClusters(rawClusters, { engine, model, effort } = {}) {
     const adapter = getAdapter(engine);
+    // An agentic engine's Lead reads the snapshot and merges/splits clusters itself (recon/lead.js);
+    // a one-shot pre-split here would only spend a long call on work the Lead redoes with more context.
+    if (adapter && adapter.agentic) return rawClusters;
     const lumped = (rawClusters || []).filter((c) => isLumpedCluster(c));
     if (!lumped.length || !adapter) return rawClusters;
 
@@ -147,9 +150,25 @@ export async function runMapOrchestration({ store, mgr, projectId, sessionId, so
 
   const stats = { consolidated: 0 };
   const onClusters = makeConsolidator(stats);
-  const onProgress = ({ phase, pct }) => {
-    recordSequential({ stage: phase, pct }); // best-effort, order-preserving; never blocks mapProject
-    bus.emit(sessionId, { name: 'map', stage: phase, pct });
+  // Lead events (mapProject's `lead` field on a 'semantic' progress tick) become a human label on the
+  // phase record + the live stream, so the UI can show "Lead reading the snapshot" instead of a bare %.
+  const leadLabel = (e) => {
+    if (!e) return null;
+    switch (e.kind) {
+      case 'lead_started': return e.label || 'Lead reading the snapshot';
+      case 'lead_workstreams': return e.label;
+      case 'lead_workstream_done': return `Lead workstream ${e.done}/${e.total}${e.resumed ? ' (resumed)' : ''}`;
+      case 'lead_planned': return `Lead derived ${e.features} feature(s)${e.turns != null ? ` in ${e.turns} turns` : ''}`;
+      case 'lead_validated': return `evidence-validated: ${e.accepted?.features ?? 0} features · ${e.accepted?.roles ?? 0} roles · ${e.rejected} rejected`;
+      case 'lead_failed': return `Lead failed: ${e.error}`;
+      case 'lead_unparsed': return 'Lead reply was not a usable plan';
+      default: return null;
+    }
+  };
+  const onProgress = ({ phase, pct, lead }) => {
+    const label = leadLabel(lead);
+    recordSequential(label ? { stage: phase, pct, label } : { stage: phase, pct }); // best-effort, order-preserving; never blocks mapProject
+    bus.emit(sessionId, label ? { name: 'map', stage: phase, pct, label } : { name: 'map', stage: phase, pct });
   };
 
   try {
@@ -161,7 +180,7 @@ export async function runMapOrchestration({ store, mgr, projectId, sessionId, so
     }
     const summary = {
       features: result.features.length, coverage: result.coverage, nodeCount: result.nodeCount,
-      incremental: result.incremental, aiSemantic: result.aiSemantic, consolidated: stats.consolidated,
+      incremental: result.incremental, aiSemantic: result.aiSemantic, consolidated: stats.consolidated, lead: result.lead || null,
     };
     await recordSequential({ stage: 'done', pct: 100, result: summary });
     bus.emit(sessionId, { name: 'map', stage: 'done', pct: 100, result: summary });

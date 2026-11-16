@@ -383,3 +383,32 @@ describe('Phase A: source freezing + reconciliation ledger (real mapProject run)
     assert.equal(after, before, 'frozen source is unaffected by a live-tree mutation');
   });
 });
+
+// The phase1-maps bundle is written for every successful map (a pure projection of the graph).
+describe('mapProject() writes the phase1-maps bundle', () => {
+  test('result.maps points at a rendered bundle with the 13-section feature docs and a manifest', async () => {
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const { Store } = await import('@secforge/store');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'secforge-maps-'));
+    const src = path.join(root, 'src'); fs.mkdirSync(path.join(src, 'app', 'controllers'), { recursive: true });
+    fs.writeFileSync(path.join(src, 'app', 'controllers', 'orders_controller.rb'), "class OrdersController < ApplicationController\n  before_action :authenticate_user!\n  def show\n    authorize @order\n  end\nend\n");
+    fs.mkdirSync(path.join(src, 'config'), { recursive: true });
+    fs.writeFileSync(path.join(src, 'config', 'routes.rb'), "Rails.application.routes.draw do\n  resources :orders, only: [:show]\nend\n");
+    const store = new Store(path.join(root, 'data'));
+    const project = await store.openProject({ sourceRoot: src });
+    const result = await mapProject({ sourceRoot: src, store, projectId: project.id });
+    assert.equal(result.status, 'MAPPED');
+    assert.ok(result.maps && result.maps.files > 0, 'bundle rendered');
+    const bundle = path.join(store.projectDir(project.id), 'snapshots', result.snapshotId, 'phase1-maps');
+    assert.equal(result.maps.root, bundle);
+    const manifest = JSON.parse(fs.readFileSync(path.join(bundle, 'manifest.json'), 'utf8'));
+    assert.ok(manifest.files.includes('AI_CONTEXT.md') && manifest.files.includes('consolidated/00_INDEX.md'));
+    const featureDocs = fs.readdirSync(path.join(bundle, 'features'));
+    assert.ok(featureDocs.length >= 1);
+    const doc = fs.readFileSync(path.join(bundle, 'features', featureDocs[0]), 'utf8');
+    for (let n = 1; n <= 13; n++) assert.ok(doc.includes(`## ${n}. `), `section ${n} present`);
+    assert.ok(!manifest.files.some((f) => /phase2_review_queue/.test(f)), 'no review queue — the Assess tab owns findings');
+  });
+});

@@ -516,3 +516,55 @@ describe('Phase D: orchestration wiring', () => {
     }
   });
 });
+
+describe('GET /api/projects/:id/maps — the phase1-maps bundle', () => {
+  test('index lists the rendered files; a file is served read-only; traversal is refused; feature doc has 13 sections', async () => {
+    const tmp = path.join(os.tmpdir(), 'sf-maps-route-' + crypto.randomBytes(4).toString('hex'));
+    await fsp.mkdir(path.join(tmp, 'app', 'controllers'), { recursive: true });
+    await fsp.writeFile(path.join(tmp, 'app', 'controllers', 'orders_controller.rb'), "class OrdersController < ApplicationController\n  before_action :authenticate_user!\n  def show\n  end\nend\n");
+    await fsp.mkdir(path.join(tmp, 'config'), { recursive: true });
+    await fsp.writeFile(path.join(tmp, 'config', 'routes.rb'), "Rails.application.routes.draw do\n  resources :orders, only: [:show]\nend\n");
+    const openRes = mockRes();
+    await handleApi(mockReq('POST', { sourceRoot: tmp }), openRes, new URL('http://x/api/projects'));
+    const pid = openRes.body.project.id;
+    try {
+      const before = mockRes();
+      await handleApi(mockReq('GET', {}), before, new URL('http://x/api/projects/' + pid + '/maps'));
+      assert.equal(before.code, 200); assert.deepEqual(before.body.files, []); // unmapped → empty, not an error
+
+      const mapRes = mockRes();
+      await handleApi(mockReq('POST', {}), mapRes, new URL('http://x/api/projects/' + pid + '/map'));
+      assert.equal(mapRes.code, 200, JSON.stringify(mapRes.body));
+      assert.ok(mapRes.body.maps && mapRes.body.maps.files > 0);
+
+      const idx = mockRes();
+      await handleApi(mockReq('GET', {}), idx, new URL('http://x/api/projects/' + pid + '/maps'));
+      assert.equal(idx.code, 200);
+      assert.ok(idx.body.files.includes('AI_CONTEXT.md'));
+      assert.ok(idx.body.root && idx.body.root.endsWith('phase1-maps'));
+
+      const file = mockRes();
+      await handleApi(mockReq('GET', {}), file, new URL('http://x/api/projects/' + pid + '/maps/consolidated/00_INDEX.md'));
+      assert.equal(file.code, 200);
+      assert.match(file.headers['content-type'], /text\/markdown/);
+      assert.ok(String(file.text).includes('# Phase 1 Artifact Index'));
+
+      const bad = mockRes();
+      await handleApi(mockReq('GET', {}), bad, new URL('http://x/api/projects/' + pid + '/maps/..%2F..%2Fproject.json'));
+      assert.ok(bad.code === 400 || bad.code === 404, 'traversal refused');
+      assert.ok(!String(bad.text || '').includes('"sourceRoot"'), 'project.json must never be served through the bundle route');
+
+      const fid = idx.body.files.find((f) => /^features\/.+\.md$/.test(f)).replace(/^features\//, 'feature:').replace(/\.md$/, '');
+      const doc = mockRes();
+      await handleApi(mockReq('GET', {}), doc, new URL('http://x/api/projects/' + pid + '/features/' + encodeURIComponent(fid) + '/map'));
+      assert.equal(doc.code, 200);
+      for (let n = 1; n <= 13; n++) assert.ok(String(doc.text).includes(`## ${n}. `), `section ${n}`);
+      const gap = mockRes();
+      await handleApi(mockReq('GET', {}), gap, new URL('http://x/api/projects/' + pid + '/features/' + encodeURIComponent('feature:nope') + '/map'));
+      assert.equal(gap.code, 200); assert.match(String(gap.text), /Coverage gap/);
+    } finally {
+      await handleApi(mockReq('DELETE', {}), mockRes(), new URL('http://x/api/projects/' + pid));
+      await fsp.rm(tmp, { recursive: true, force: true });
+    }
+  });
+});

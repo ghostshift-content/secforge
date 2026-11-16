@@ -65,7 +65,7 @@ export async function runScanOrchestration({ store, mgr, projectId, sessionId, f
   const recordSequential = (patch) => { chain = chain.then(() => mgr.recordPhase(projectId, sessionId, patch)).catch(() => {}); return chain; };
 
   const roleProgress = makeRoleProgress();
-  const scanScope = { mode: 'feature', method: scope?.method || 'pattern', feature: featureId, patterns: scope?.patterns };
+  const scanScope = { mode: 'feature', method: scope?.method || 'pattern', feature: featureId, patterns: scope?.patterns, prompt: scope?.prompt }; // prompt rides along so a feature-scoped "test X" still focuses the LLM pass
   try {
     const result = await withRetry(() => runAssessment({
       store, projectId, scope: scanScope, engine, model, effort,

@@ -311,6 +311,27 @@ describe('mapProject() — Phase C AI-plan reuse (counting fake adapter)', () =>
   });
   after(async () => { await fs.rm(tmpRoot, { recursive: true, force: true }); });
 
+  test('re-mapping an UNCHANGED tree is incremental: ontology fully reused, no ask() call, same snapshot id', async () => {
+    const first = await mapProject({ sourceRoot: src, store, projectId: pid, engine: 'fake-counting-incremental' });
+    const callsAfterFirst = calls;
+    const again = await mapProject({ sourceRoot: src, store, projectId: pid, engine: 'fake-counting-incremental' });
+    assert.equal(again.snapshotId, first.snapshotId);
+    assert.equal(again.incremental, true, `expected incremental reuse, got remapReason=${again.remapReason}`);
+    assert.equal(again.llmCalled, false);
+    assert.equal(calls, callsAfterFirst, 'no new LLM call for an unchanged tree');
+    assert.equal(again.ontologyReusedCount > 0, true);
+  });
+  test('a rules-only re-map of an UNCHANGED tree keeps the prior AI ontology (store is truth; no LLM call)', async () => {
+    const ai = await mapProject({ sourceRoot: src, store, projectId: pid, engine: 'fake-counting-incremental' });
+    assert.equal(ai.aiSemantic, true);
+    const callsAfter = calls;
+    const rules = await mapProject({ sourceRoot: src, store, projectId: pid, engine: 'rules' });
+    assert.equal(rules.incremental, true, rules.remapReason);
+    assert.equal(rules.llmCalled, false);
+    assert.equal(calls, callsAfter);
+    assert.equal(rules.aiSemantic, true, 'AI-derived features survive a rules-only reopen');
+    assert.deepEqual(rules.features.map((f) => f.slug).sort(), ai.features.map((f) => f.slug).sort());
+  });
   test('full AI map: one ask() call names both features', async () => {
     const result = await mapProject({ sourceRoot: src, store, projectId: pid, engine: 'fake-counting-incremental' });
     assert.equal(result.status, 'MAPPED');

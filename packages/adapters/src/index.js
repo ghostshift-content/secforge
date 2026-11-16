@@ -1,7 +1,7 @@
 // @secforge/adapters — engine backends behind one interface. The only external "engine".
 // Every backend normalises to the same job/result envelope so the pipeline is provider-agnostic.
 // Node stdlib + global fetch only. No SDKs — every provider is called over its plain HTTP API.
-import { existsSync, readFileSync, unlinkSync } from 'node:fs';
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
 import { spawnSync, spawn } from 'node:child_process';
@@ -225,6 +225,8 @@ const codex = {
   model: codexModels()[0] || null, analysis: 'llm',
   async available() { return (await checkConnection('codex')).connected; },
   async listModels() { return codexModels(); },
+  agentic: true,
+  async explore(opts = {}) { try { return await codexExploreRaw({ ...opts, model: opts.model || this.model }); } catch (err) { return { ok: false, error: errMsg(err) }; } },
   async ask(prompt, opts = {}) {
     try { return await codexAskRaw(prompt, opts.model || this.model); }
     catch (err) { return JSON.stringify({ ok: false, error: errMsg(err) }); }
@@ -266,11 +268,73 @@ function claudeAskRaw(prompt, model) {
     cp.stdin.end();
   });
 }
+// --- agentic, READ-ONLY exploration (the mapping Lead) ---------------------------------------
+// explore({prompt, cwd, model, maxTurns, schema}) runs the CLI with ONLY Read/Glob/Grep enabled, cwd
+// pinned to the directory the caller passes (SecForge passes the FROZEN snapshot's source dir), a
+// turn cap, and a JSON schema the final answer must satisfy. Returns {ok, structured, text,
+// sessionId, turns, cost} or {ok:false, error}. Never throws. This is the only place an engine may
+// read files; it still cannot write, run, or reach the network from inside the sandboxed tree.
+const LEAD_TIMEOUT_MS = Math.max(60_000, Number(process.env.SECFORGE_LEAD_TIMEOUT_MS) || 900_000);
+function claudeExploreRaw({ prompt, cwd, model, maxTurns = 28, schema = null }) {
+  return new Promise((resolve) => {
+    const args = ['-p', '--output-format', 'json', '--tools', 'Read,Glob,Grep', '--allowedTools', 'Read', 'Glob', 'Grep',
+      '--disallowedTools', 'Write', 'Edit', 'Bash', 'NotebookEdit', 'Agent', 'WebFetch', 'WebSearch',
+      '--permission-mode', 'default', '--max-turns', String(maxTurns), '--strict-mcp-config', '--setting-sources', '',
+      '--model', model || CLAUDE_DEFAULT_MODEL];
+    if (schema) args.push('--json-schema', JSON.stringify(schema));
+    let out = '', err = '', done = false;
+    const finish = (v) => { if (done) return; done = true; clearTimeout(timer); resolve(v); };
+    let cp;
+    try { cp = spawn('claude', args, { cwd: cwd || tmpdir(), stdio: ['pipe', 'pipe', 'pipe'] }); }
+    catch (e) { return finish({ ok: false, error: errMsg(e) }); }
+    const timer = setTimeout(() => { try { cp.kill('SIGKILL'); } catch { /* ignore */ } finish({ ok: false, error: 'claude explore timed out' }); }, LEAD_TIMEOUT_MS);
+    cp.stdout.on('data', (d) => { out += d; });
+    cp.stderr.on('data', (d) => { err += d; });
+    cp.on('error', (e) => finish({ ok: false, error: errMsg(e) }));
+    cp.on('exit', (code) => {
+      let j = null; try { j = JSON.parse(out); } catch { /* not json */ }
+      if (code !== 0 || !j) return finish({ ok: false, error: `claude explore exited ${code}: ${(err || out).slice(0, 300)}` });
+      if (j.is_error) return finish({ ok: false, error: `claude explore error: ${String(j.result || j.subtype).slice(0, 300)}` });
+      finish({ ok: true, structured: j.structured_output ?? null, text: typeof j.result === 'string' ? j.result : '', sessionId: j.session_id || null, turns: j.num_turns ?? null, cost: j.total_cost_usd ?? null });
+    });
+    cp.stdin.write(String(prompt));
+    cp.stdin.end();
+  });
+}
+// Codex parity: read-only sandbox, cwd pinned, schema-enforced last message written to a temp file.
+function codexExploreRaw({ prompt, cwd, model, schema = null }) {
+  return new Promise((resolve) => {
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const out = join(tmpdir(), `secforge-codex-explore-${stamp}.txt`);
+    const schemaFile = join(tmpdir(), `secforge-codex-schema-${stamp}.json`);
+    const args = ['exec', '-s', 'read-only', '--skip-git-repo-check', '--ephemeral', '-o', out];
+    if (schema) { try { writeFileSync(schemaFile, JSON.stringify(schema)); args.push('--output-schema', schemaFile); } catch { /* best effort */ } }
+    if (model) args.push('-m', model);
+    args.push(String(prompt));
+    let done = false;
+    const cleanup = () => { for (const f of [out, schemaFile]) { try { unlinkSync(f); } catch { /* best effort */ } } };
+    const finish = (v) => { if (done) return; done = true; clearTimeout(timer); cleanup(); resolve(v); };
+    let cp;
+    try { cp = spawn('codex', args, { cwd: cwd || tmpdir(), stdio: 'ignore' }); }
+    catch (e) { return finish({ ok: false, error: errMsg(e) }); }
+    const timer = setTimeout(() => { try { cp.kill('SIGKILL'); } catch { /* ignore */ } finish({ ok: false, error: 'codex explore timed out' }); }, LEAD_TIMEOUT_MS);
+    cp.on('error', (e) => finish({ ok: false, error: errMsg(e) }));
+    cp.on('exit', (code) => {
+      let text = ''; try { text = readFileSync(out, 'utf8'); } catch { /* no output */ }
+      if (code !== 0) return finish({ ok: false, error: `codex explore exited ${code}` });
+      let structured = null; try { structured = JSON.parse(text); } catch { /* prose */ }
+      finish({ ok: true, structured, text, sessionId: null, turns: null, cost: null });
+    });
+  });
+}
+
 const claudeCode = {
   id: 'claude-code', label: 'Claude Code', provider: 'claude-code',
   model: CLAUDE_DEFAULT_MODEL, analysis: 'llm',
   async available() { return (await checkConnection('claude-code')).connected; },
   async listModels() { return CLAUDE_KNOWN_MODELS; },
+  agentic: true,
+  async explore(opts = {}) { try { return await claudeExploreRaw({ ...opts, model: opts.model || this.model }); } catch (err) { return { ok: false, error: errMsg(err) }; } },
   async ask(prompt, opts = {}) {
     try { return await claudeAskRaw(prompt, opts.model || this.model); }
     catch (err) { return JSON.stringify({ ok: false, error: errMsg(err) }); }
@@ -401,7 +465,7 @@ export async function listEngines() {
     let r;
     try { r = await c.check(); } catch { r = { connected: false, detail: '' }; }
     const models = (r.models && r.models.length) ? r.models : c.models;
-    out.push({ id, label: c.label, provider: id, connected: !!r.connected, analysis: c.analysis, howToConnect: c.howToConnect, models, model: models[0] || null });
+    out.push({ id, label: c.label, provider: id, connected: !!r.connected, analysis: c.analysis, agentic: !!(REGISTRY.get(id) && REGISTRY.get(id).agentic), howToConnect: c.howToConnect, models, model: models[0] || null });
   }
   const pref = process.env.SECFORGE_DEFAULT_ENGINE;
   const defaultId = (pref && out.some((e) => e.id === pref && e.connected)) ? pref : 'rules';

@@ -5,7 +5,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const INDEX = readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+const INDEX_ONLY = readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+// The Map tab's graph code lives in its own module (map-graph.js, loaded by index.html); the UI
+// guards below apply to the UI as served, so both sources are checked together.
+const GRAPH = readFileSync(path.join(__dirname, '..', 'public', 'map-graph.js'), 'utf8');
+const INDEX = INDEX_ONLY + '\n' + GRAPH;
 
 // S5-1b: a cheap guard against the fabrication class ever coming back. The live app must never
 // ship sample findings/evidence that could be mistaken for a real assessment. These are the
@@ -45,44 +49,50 @@ describe('Phase 3 self-learning UI never fabricates a metric', () => {
 // panel's existing Graph subtab: overview swimlanes + honesty rings/chips + in-place feature
 // drill-down + hand-rolled zoom/pan, vanilla JS + SVG only, no external library.
 describe('Phase E: system graph overview + drill-down', () => {
-  test('overview model + deterministic packing (no force sim) are present', () => {
+  test('overview model + deterministic tree/flow layouts (no force sim) are present', () => {
     assert.match(INDEX, /function overviewModel\(/);
-    assert.match(INDEX, /function packRow\(/);
-    assert.match(INDEX, /function bubbleWidth\(/);
+    assert.match(INDEX, /function treeLayout\(/);
+    assert.match(INDEX, /function flowLayout\(/);
+    assert.match(INDEX_ONLY, /<script src="\/map-graph\.js"><\/script>/);
   });
   test('overview groups by the real DOMAIN--CONTAINS-->FEATURE / FEATURE--EXPOSES-->ENDPOINT edges', () => {
-    assert.match(INDEX, /type==='CONTAINS'/);
-    assert.match(INDEX, /outOfType\(f\.id, \['EXPOSES'\]\)/);
+    assert.match(INDEX, /type\s*===\s*'CONTAINS'/);
+    assert.match(INDEX, /outOfType\(f\.id,\s*\['EXPOSES'\]\)/);
   });
-  test('ARCH_CLUSTER is rendered as a distinct, always-collapsed-by-default swimlane', () => {
+  test('ARCH_CLUSTER is rendered as a distinct dashed outer ring, never as a feature', () => {
     assert.match(INDEX, /ARCH_CLUSTER/);
     assert.match(INDEX, /garch-chip/);
+    assert.match(INDEX, /Unconfirmed \/ architecture/);
   });
   test('honesty rings: authenticated-but-not-authorized (red) vs no-authn (amber)', () => {
     assert.match(INDEX, /gbubble-gap/);
     assert.match(INDEX, /gbubble-warn/);
-    assert.match(INDEX, /AUTHORIZED_BY','GUARDED_BY'/);
+    assert.match(INDEX, /AUTHORIZED_BY',\s*'GUARDED_BY'/);
   });
   test('reconciliation is fetched and surfaced as a coverage strip, 0 gaps shows no gap chip', () => {
     assert.match(INDEX, /\/reconciliation'/);
-    assert.match(INDEX, /function renderCoverageStrip\(/);
-    assert.match(INDEX, /if\(gapN>0\) chips\.push/);
+    assert.match(INDEX, /renderCoverageStrip\s*=\s*function\s*\(/);
+    assert.match(INDEX, /if\s*\(gapN\s*>\s*0\)\s*chips\.push/);
   });
   test('feature drill-down fetches the per-feature context dossier and renders authn\\/authz badges', () => {
-    assert.match(INDEX, /enterFeatureDossier = function\(/);
-    assert.match(INDEX, /\/features\/'\+encodeURIComponent\(id\)\+'\/context/);
+    assert.match(INDEX, /enterFeatureDossier = function\s*\(/);
+    assert.match(INDEX, /\/features\/'\s*\+\s*encodeURIComponent\(id\)\s*\+\s*'\/context/);
     assert.match(INDEX, /no authn/);
     assert.match(INDEX, /no authz/);
   });
   test('citations render file:line + excerpt, depth footer carries the capped honesty chip', () => {
-    assert.match(INDEX, /showCitationFor = function\(/);
+    assert.match(INDEX, /showCitationFor = function\s*\(/);
     assert.match(INDEX, /no cited excerpt for this node/);
     assert.match(INDEX, /depth walk capped at 300 nodes/);
   });
-  test('hand-rolled zoom/pan via viewBox, no charting/graph library', () => {
-    assert.match(INDEX, /function wireZoomPan\(/);
-    assert.match(INDEX, /function applyZoom\(/);
-    assert.match(INDEX, /setAttribute\('viewBox'/);
+  test('hand-rolled zoom/pan via a camera transform, no charting/graph library', () => {
+    assert.match(INDEX, /function camera\(/);
+    assert.match(INDEX, /addEventListener\('wheel'/);
+    assert.match(INDEX, /translate\(' \+ cam\.x/);
+  });
+  test('feature flow truncates labels to fit and keeps the full text in a <title>', () => {
+    assert.match(INDEX, /function fit\(/);
+    assert.match(INDEX, /<title>' \+ esc\(tag/);
   });
   test('empty/unmapped project reuses the existing honest empty-state helper', () => {
     assert.match(INDEX, /No graph yet\. Nothing has been mapped for this project\./);

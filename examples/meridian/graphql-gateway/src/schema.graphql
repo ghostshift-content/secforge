@@ -1,0 +1,147 @@
+scalar DateTime
+
+enum Role {
+  ADMIN
+  MANAGER
+  MEMBER
+  AUDITOR
+}
+
+enum ExpenseStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  REIMBURSED
+}
+
+enum InvoiceStatus {
+  PENDING
+  MATCHED
+  PAID
+  DISPUTED
+}
+
+type Organization {
+  id: ID!
+  name: String!
+  plan: String!
+  teams: [Team!]!
+  createdAt: DateTime!
+}
+
+type Team {
+  id: ID!
+  name: String!
+  organization: Organization!
+  members: [User!]!
+  expenses(status: ExpenseStatus): [Expense!]!
+}
+
+type User {
+  id: ID!
+  email: String!
+  fullName: String!
+  role: Role!
+  team: Team
+  ssnLast4: String
+  payoutAccount: String
+  createdAt: DateTime!
+}
+
+type Receipt {
+  id: ID!
+  url: String!
+  ocrAmount: Float
+  ocrVendor: String
+  uploadedAt: DateTime!
+}
+
+type Approval {
+  id: ID!
+  expense: Expense!
+  approver: User!
+  decision: String!
+  note: String
+  decidedAt: DateTime!
+}
+
+type Reimbursement {
+  id: ID!
+  expense: Expense!
+  amountCents: Int!
+  method: String!
+  status: String!
+  processedAt: DateTime
+}
+
+type Invoice {
+  id: ID!
+  vendor: String!
+  amountCents: Int!
+  status: InvoiceStatus!
+  sourceUrl: String
+  importedAt: DateTime!
+}
+
+type Report {
+  id: ID!
+  title: String!
+  team: Team!
+  totalCents: Int!
+  generatedAt: DateTime!
+  lineItems: [Expense!]!
+}
+
+type Expense {
+  id: ID!
+  team: Team!
+  submitter: User!
+  amountCents: Int!
+  currency: String!
+  category: String!
+  merchant: String!
+  status: ExpenseStatus!
+  receipt: Receipt
+  approvals: [Approval!]!
+  submittedAt: DateTime!
+}
+
+input ExpenseFilter {
+  merchant: String
+  category: String
+  minAmountCents: Int
+  maxAmountCents: Int
+  status: String
+}
+
+input UpdateProfileInput {
+  fullName: String
+  payoutAccount: String
+}
+
+type Query {
+  me: User
+  expense(id: ID!): Expense
+  expenses(teamId: ID!, status: ExpenseStatus): [Expense!]!
+  searchExpenses(filter: ExpenseFilter!): [Expense!]!
+  team(id: ID!): Team
+  report(id: ID!): Report
+}
+
+type Mutation {
+  submitExpense(
+    teamId: ID!
+    amountCents: Int!
+    currency: String!
+    category: String!
+    merchant: String!
+    receiptUrl: String
+  ): Expense!
+
+  approveExpense(expenseId: ID!, decision: String!, note: String): Approval!
+
+  importInvoiceFromUrl(url: String!): Invoice!
+
+  updateProfile(input: UpdateProfileInput!): User!
+}

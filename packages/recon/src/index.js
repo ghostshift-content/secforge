@@ -6,3 +6,5 @@ export { deterministicSemanticPlan, validateLeadPlan, summarizeClusters } from '
 export { buildGraph } from './graph.js';
 export { makeEvidenceVerifier, validateOntology } from './evidence-validator.js';
 export { planClusters } from './ai-semantic.js';
+export { planLead, deriveOntology, buildLeadPrompt, PLAN_SCHEMA, LEAD_TURNS, leadTurns } from './lead.js';
+export { METHODOLOGY } from './lead-methodology.js';

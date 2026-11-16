@@ -491,3 +491,50 @@ describe('FAMILIES.ACX.cwe regression guard', () => {
     }
   });
 });
+
+// "Test X": a free-text prompt is resolved through the snapshot's retrieval store, so the rule pass
+// only looks where the map says X lives — and the run reports exactly where it looked.
+describe('runAssessment() — prompt → locate() narrows the scope', () => {
+  let tmpRoot, store, pid;
+  const ep2 = (id, route, file) => ({ id, type: 'ENDPOINT', name: `GET ${route}`, data: { method: 'GET', route, file, line: 7 }, claims: [{ file, line: 7 }] });
+  before(async () => {
+    tmpRoot = path.join(os.tmpdir(), 'sf-assess-locate-' + crypto.randomBytes(4).toString('hex'));
+    store = new Store(tmpRoot);
+    await fs.mkdir(path.join(tmpRoot, 'src'), { recursive: true });
+    ({ id: pid } = await store.openProject({ sourceRoot: path.join(tmpRoot, 'src'), name: 'LOCATE' }));
+    const snapshotId = 'snap-locate';
+    await writeNodes(store, pid, [
+      { ...feature('f:invoices', 'Invoice download'), data: { purpose: 'Customers download invoice PDFs by id.' } },
+      { ...feature('f:orders', 'Order history'), data: { purpose: 'Customers list and view past orders.' } },
+      ep2('ep-inv', '/invoices/:id/pdf', 'app/invoices.js'), ep2('ep-ord', '/orders/:id', 'app/orders.js'), authNode('ac:authn', 'authentication'),
+    ], { snapshotId });
+    await writeEdges(store, pid, [
+      edge('EXPOSES', 'f:invoices', 'ep-inv'), edge('EXPOSES', 'f:orders', 'ep-ord'),
+      edge('AUTHENTICATED_BY', 'ep-inv', 'ac:authn'), edge('AUTHENTICATED_BY', 'ep-ord', 'ac:authn'),
+    ], { snapshotId });
+  });
+  after(async () => { await fs.rm(tmpRoot, { recursive: true, force: true }); });
+
+  test('mode:all + prompt "invoice pdf download" → only the invoice feature is assessed; result.located says where', async () => {
+    const r = await runAssessment({ store, projectId: pid, scope: { mode: 'all', method: 'prompt', prompt: 'test the invoice pdf download for IDOR' }, engine: 'rules' });
+    assert.deepEqual(r.candidates.map((c) => c.featureId), ['f:invoices']);
+    assert.equal(r.located.ok, true);
+    assert.equal(r.located.features[0].id, 'f:invoices');
+    assert.deepEqual(r.located.scope, { mode: 'pick', features: ['f:invoices'] });
+    assert.equal(r.located.endpoints[0].id, 'ep-inv');
+    assert.ok(r.located.endpoints[0].files.includes('app/invoices.js:7'));
+  });
+  test('an explicit feature scope wins over the located one; a non-prompt run has located:null', async () => {
+    const r = await runAssessment({ store, projectId: pid, scope: { mode: 'feature', feature: 'f:orders', method: 'prompt', prompt: 'invoice pdf' }, engine: 'rules' });
+    assert.deepEqual(r.candidates.map((c) => c.featureId), ['f:orders']);
+    assert.deepEqual(r.located.scope, { mode: 'feature', features: null });
+    const plain = await runAssessment({ store, projectId: pid, scope: {}, engine: 'rules' });
+    assert.equal(plain.located, null);
+    assert.equal(plain.candidates.length, 2);
+  });
+  test('a prompt nothing matches → coverage gap reported, scope left as-is (whole project assessed)', async () => {
+    const r = await runAssessment({ store, projectId: pid, scope: { mode: 'all', method: 'prompt', prompt: 'zzqvt kwyjibo' }, engine: 'rules' });
+    assert.equal(r.located.coverageGap, true);
+    assert.equal(r.candidates.length, 2);
+  });
+});

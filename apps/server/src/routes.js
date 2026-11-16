@@ -6,11 +6,11 @@ import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import { SessionManager } from '@secforge/session';
 import { Store, readGraph, readReconciliation, reconciliationCounts } from '@secforge/store';
-import { buildFeedForward, answer } from '@secforge/retrieval';
-import { runAssessment, computeCoverage, buildReport, renderFeatureMap } from '@secforge/assess';
+import { buildFeedForward, answer, locate } from '@secforge/retrieval';
+import { runAssessment, computeCoverage, buildReport } from '@secforge/assess';
 import { runMapOrchestration, runScanOrchestration, subscribe as subscribePhase } from '@secforge/orchestration';
 import { FAMILIES, loadCanonicalCards, cweCatalog, importCustomFolder } from '@secforge/patterns';
-import { mapProject } from '@secforge/map';
+import { mapProject, renderFeatureDoc } from '@secforge/map';
 import { learn, recall, crossProjectRecall, stats, listLearned, recordVerdict, annotatePriorFeedback, minePatterns, consolidate } from '@secforge/memory';
 import { registerTarget, getTarget, validateFinding } from '@secforge/env';
 import { listEngines, checkConnection, EFFORT_BUDGETS } from '@secforge/adapters';
@@ -146,11 +146,15 @@ export async function handleApi(req, res, url) {
         return json(res, 200, {
           counts: await reconciliationCounts(store, pid),
           gaps: rows.filter((r) => r.status !== 'MAPPED_TO_FEATURE' && r.status !== 'SHARED_INFRASTRUCTURE'),
+          rows, // the full ledger (kind/file/line/status/feature_id) — backs the Coverage view's feature × kind matrix
         }), true;
       }
       // Phase A: model-free, fully-cited answer over the feature-context store. coverageGap:true
       // when nothing matches — never a guessed answer.
       if (sub === 'answer') return json(res, 200, await answer(store, pid, url.searchParams.get('q') || '')), true;
+      // GET /api/projects/:id/locate?q=<what to test> → where X lives: ranked features, entry points
+      // and file:line pointers from the snapshot's rag/ store. coverageGap:true when nothing matches.
+      if (sub === 'locate') return json(res, 200, await locate(store, pid, url.searchParams.get('q') || '')), true;
       // GET /api/projects/:id/inventory → the full heuristic inventory.jsonl from the current
       // snapshot, grouped by kind. Same graph/current.json → snapshot resolution as
       // packages/assess/src/decorate.js's loadManifest() — not a new pointer mechanism.
@@ -176,15 +180,43 @@ export async function handleApi(req, res, url) {
       return json(res, 200, await buildFeedForward(store, parts[1], fid)), true;
     }
 
-    // GET /api/projects/:id/features/:fid/map → the rendered per-feature security map (markdown),
-    // built from the same dossier /context already returns, plus the graph's trust-boundary/
-    // shared-implementation edges. Additive sibling of /context — same coverage-gap convention.
+    // GET /api/projects/:id/features/:fid/map → the feature's 13-section map (markdown), the same
+    // document the phase1-maps bundle holds, rendered live from the current graph + reconciliation
+    // ledger so it never lags a re-map. Coverage gap → an honest one-line document, never a 404.
     if (parts[0] === 'projects' && parts.length === 5 && parts[2] === 'features' && parts[4] === 'map' && method === 'GET') {
       const pid = parts[1], fid = decodeURIComponent(parts[3]);
-      const [ctx, graph] = await Promise.all([buildFeedForward(store, pid, fid), readGraph(store, pid)]);
-      const body = ctx.ok ? renderFeatureMap(ctx, graph) : `# Coverage gap\n\n${ctx.reason}\n`;
+      let body;
+      try {
+        const [graph, recon] = await Promise.all([readGraph(store, pid), readReconciliation(store, pid)]);
+        const node = graph.nodes.find((n) => n.type === 'FEATURE' && n.id === fid);
+        body = node ? renderFeatureDoc(graph, node, recon) : `# Coverage gap\n\ncoverage gap: feature not found (${fid})\n`;
+      } catch (e) { body = `# Coverage gap\n\n${e.message}\n`; }
       res.writeHead(200, { 'content-type': 'text/markdown; charset=utf-8' });
       res.end(body);
+      return true;
+    }
+
+    // GET /api/projects/:id/maps → the phase1-maps bundle index for the CURRENT snapshot
+    // (manifest.json's file list + where it lives on disk); {files:[]} when not rendered yet.
+    // GET /api/projects/:id/maps/<path> → one bundle file, served read-only from inside that
+    // directory only (resolved path must stay under the bundle root — no traversal).
+    if (parts[0] === 'projects' && parts.length >= 3 && parts[2] === 'maps' && method === 'GET') {
+      const pid = parts[1];
+      let sid = null; try { sid = JSON.parse(await fsp.readFile(path.join(store.projectDir(pid), 'graph', 'current.json'), 'utf8')).snapshotId; } catch { /* unmapped */ }
+      const root = sid ? path.join(store.projectDir(pid), 'snapshots', sid, 'phase1-maps') : null;
+      if (parts.length === 3) {
+        let manifest = null; if (root) { try { manifest = JSON.parse(await fsp.readFile(path.join(root, 'manifest.json'), 'utf8')); } catch { /* not rendered */ } }
+        return json(res, 200, { root: manifest ? root : null, snapshotId: sid, files: manifest ? manifest.files : [], gate: manifest ? manifest.gate : null }), true;
+      }
+      if (!root) return json(res, 404, { error: 'no bundle for this project yet' }), true;
+      const rel = parts.slice(3).map((x) => decodeURIComponent(x)).join('/');
+      const abs = path.resolve(root, rel);
+      if (abs !== root && !abs.startsWith(root + path.sep)) return json(res, 400, { error: 'invalid path' }), true;
+      let data; try { data = await fsp.readFile(abs); } catch { return json(res, 404, { error: 'no such bundle file' }), true; }
+      const ext = path.extname(abs).toLowerCase();
+      const type = ext === '.md' ? 'text/markdown; charset=utf-8' : ext === '.json' ? 'application/json' : ext === '.jsonl' ? 'application/x-ndjson' : 'text/plain; charset=utf-8';
+      res.writeHead(200, { 'content-type': type });
+      res.end(data);
       return true;
     }
 

@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { deterministicSemanticPlan, summarizeClusters, validateLeadPlan, inventoryRows } from '../src/semantic-planner.js';
+import { deterministicSemanticPlan, summarizeClusters, validateLeadPlan, inventoryRows, INVENTORY_KEYS } from '../src/semantic-planner.js';
 
 function inv(overrides = {}) {
   return {
@@ -87,5 +87,40 @@ describe('validateLeadPlan()', () => {
     const result = validateLeadPlan(plan, inventories);
     assert.equal(result.features[0].rows.length, 1);
     assert.equal(result.features[0].rows[0].row.file, 'app/controllers/expenses_controller.rb');
+  });
+});
+
+describe('deterministicSemanticPlan() — module clusters are split by noun (rules-only precision)', () => {
+  test('a >40-row module cluster becomes per-noun sub-features; singleton nouns pool into "· Other"', async () => {
+    const { INVENTORY_KEYS } = await import('../src/semantic-planner.js');
+    const inventories = Object.fromEntries(INVENTORY_KEYS.map((k) => [k, []]));
+    const nouns = ['expenses', 'approvals', 'invoices', 'teams'];
+    let line = 1;
+    for (const n of nouns) for (let i = 0; i < 20; i++) inventories.routes_endpoints.push({ file: `rails-api/app/controllers/${n}_controller.rb`, line: line++, entry: `GET '/${n}/${i}'`, method: 'GET', path: `/${n}/${i}` });
+    inventories.routes_endpoints.push({ file: 'rails-api/app/controllers/health_controller.rb', line: 999, entry: "GET '/healthz'", method: 'GET', path: '/healthz' });
+    inventories.processes_ipc.push({ file: 'Dockerfile', line: 1, entry: 'Dockerfile', detail: 'process' });
+    const clusters = deterministicSemanticPlan(inventories);
+    assert.ok(clusters.length >= 5, `expected per-noun split, got ${clusters.map((c) => c.slug).join(',')}`);
+    for (const n of ['expense', 'approval', 'invoice', 'team']) {
+      const c = clusters.find((x) => x.slug.endsWith('-' + n));
+      assert.ok(c, `missing noun cluster ${n}`);
+      assert.equal(c.rows.length, 20);
+      assert.equal(c.planning_method, 'module-noun-cohesion');
+      assert.match(c.name, / · /);
+    }
+    const other = clusters.find((x) => x.slug.endsWith('-other'));
+    assert.ok(other && other.rows.length === 1, 'the lone healthz row pools into · Other, never a 1-row feature');
+    assert.equal(clusters.reduce((s, c) => s + c.rows.length, 0), 81, 'no row lost or duplicated by the split');
+  });
+  test('a module cluster at or under the split threshold is left as one module feature', () => {
+    const inventories = Object.fromEntries(INVENTORY_KEYS.map((k) => [k, []]));
+    for (let i = 0; i < 40; i++) inventories.routes_endpoints.push({ file: `svc/app/controllers/a_controller.rb`, line: i + 1, entry: `GET '/a/${i}'` });
+    for (let i = 0; i < 45; i++) inventories.workers_jobs.push({ file: `svc/app/jobs/j${i}.rb`, line: 1, entry: `J${i}` });
+    const clusters = deterministicSemanticPlan(inventories);
+    // 85 rows → module mode; module "svc" has 85 rows → split by noun; module "svc" alone would stay if ≤ 40.
+    assert.ok(clusters.every((c) => c.rows.length <= 85));
+    const small = deterministicSemanticPlan(inventories, { splitThreshold: 1000 });
+    assert.equal(small.length, 1);
+    assert.equal(small[0].planning_method, 'module-cohesion');
   });
 });
